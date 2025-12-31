@@ -1,0 +1,32 @@
+{
+  "name": "sg-portal-v3",
+  "version": "1.0.0",
+  "private": true,
+  "description": "S&G Portal V3 - Enterprise Management System",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:frontend": "npm run dev --workspace=@sg-portal/frontend",
+    "dev:backend": "npm run dev --workspace=@sg-portal/backend",
+    "build": "npm run build --workspaces",
+    "build:frontend": "npm run build --workspace=@sg-portal/frontend",
+    "build:backend": "npm run build --workspace=@sg-portal/backend",
+    "lint": "npm run lint --workspaces",
+    "test": "npm run test --workspaces",
+    "clean": "rimraf packages/*/dist packages/*/node_modules node_modules",
+    "typecheck": "npm run typecheck --workspaces"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "rimraf": "^5.0.5",
+    "typescript": "^5.4.5"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
+  "author": "S&G Business Solutions",
+  "license": "UNLICENSED"
+}
