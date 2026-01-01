@@ -17,7 +17,7 @@ import {
   Filter,
 } from 'lucide-react';
 import { Page } from '@/components/layout';
-import { Card, CardContent, Button, Input } from '@/components/common';
+import { Card, CardContent, Button, Input, ConfirmModal } from '@/components/common';
 import {
   useProjects,
   useCreateProject,
@@ -29,7 +29,8 @@ import {
   type ProjectStatus,
   type ProjectPriority,
 } from '@/services/api';
-import { AIAssistant } from '@/components/ai/AIAssistant';
+import { useToast } from '@/contexts';
+// import { AIAssistant } from '@/components/ai/AIAssistant';
 
 const STATUS_COLORS: Record<ProjectStatus, string> = {
   planning: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
@@ -398,6 +399,8 @@ export function ProjectsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+  const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
+  const toast = useToast();
 
   const { data, isLoading, error, refetch } = useProjects({
     page,
@@ -425,23 +428,33 @@ export function ProjectsPage() {
     try {
       if (editingProject) {
         await updateMutation.mutateAsync({ id: editingProject.id, data: input });
+        toast.success('Updated', `${formData.name} has been updated`);
       } else {
         await createMutation.mutateAsync(input);
+        toast.success('Created', `${formData.name} has been created`);
       }
       setIsModalOpen(false);
       setEditingProject(null);
     } catch (err) {
       console.error('Failed to save project:', err);
+      toast.error('Error', 'Failed to save project');
     }
   };
 
-  const handleDelete = async (project: Project) => {
-    if (window.confirm(`Are you sure you want to delete "${project.name}"?`)) {
+  const handleDelete = (project: Project) => {
+    setProjectToDelete(project);
+  };
+
+  const confirmDelete = async () => {
+    if (projectToDelete) {
       try {
-        await deleteMutation.mutateAsync(project.id);
+        await deleteMutation.mutateAsync(projectToDelete.id);
+        toast.success('Deleted', `${projectToDelete.name} has been removed`);
       } catch (err) {
         console.error('Failed to delete project:', err);
+        toast.error('Error', 'Failed to delete project');
       }
+      setProjectToDelete(null);
     }
   };
 
@@ -607,7 +620,7 @@ export function ProjectsPage() {
         </>
       )}
 
-      {/* Modal */}
+      {/* Project Modal */}
       <ProjectModal
         isOpen={isModalOpen}
         onClose={() => { setIsModalOpen(false); setEditingProject(null); }}
@@ -616,11 +629,24 @@ export function ProjectsPage() {
         isLoading={createMutation.isPending || updateMutation.isPending}
       />
 
-      {/* AI Assistant */}
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        isOpen={!!projectToDelete}
+        onClose={() => setProjectToDelete(null)}
+        onConfirm={confirmDelete}
+        title="Delete Project"
+        message={`Are you sure you want to delete "${projectToDelete?.name}"? This action cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="danger"
+      />
+
+      {/* AI Assistant - TODO: Enable when AI is set up
       <AIAssistant
         context={{ type: 'project', entityId: editingProject?.id }}
         entityName={editingProject?.name}
       />
+      */}
     </Page>
   );
 }

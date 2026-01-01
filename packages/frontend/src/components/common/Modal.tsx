@@ -1,4 +1,4 @@
-import { useEffect, useCallback, type ReactNode } from 'react';
+import { useEffect, useCallback, useState, useRef, type ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { clsx } from 'clsx';
 import { X } from 'lucide-react';
@@ -17,6 +17,9 @@ interface ModalProps {
   closeOnEscape?: boolean;
   children: ReactNode;
   footer?: ReactNode;
+  hasUnsavedChanges?: boolean;
+  onSaveChanges?: () => void;
+  onDiscardChanges?: () => void;
 }
 
 const sizeStyles: Record<ModalSize, string> = {
@@ -25,6 +28,16 @@ const sizeStyles: Record<ModalSize, string> = {
   lg: 'max-w-lg',
   xl: 'max-w-2xl',
   full: 'max-w-4xl',
+};
+
+// Get all focusable elements within a container
+const getFocusableElements = (container: HTMLElement): HTMLElement[] => {
+  const elements = container.querySelectorAll<HTMLElement>(
+    'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+  );
+  return Array.from(elements).filter(
+    (el) => !el.hasAttribute('disabled') && el.getAttribute('tabindex') !== '-1'
+  );
 };
 
 export function Modal({
@@ -38,33 +51,131 @@ export function Modal({
   closeOnEscape = true,
   children,
   footer,
+  hasUnsavedChanges = false,
+  onSaveChanges,
+  onDiscardChanges,
 }: ModalProps) {
-  // Handle escape key
-  const handleEscape = useCallback(
+  const [showUnsavedWarning, setShowUnsavedWarning] = useState(false);
+  const modalRef = useRef<HTMLDivElement>(null);
+  const previousActiveElement = useRef<HTMLElement | null>(null);
+
+  // Handle close with unsaved changes check
+  const handleClose = useCallback(() => {
+    if (hasUnsavedChanges) {
+      setShowUnsavedWarning(true);
+    } else {
+      onClose();
+    }
+  }, [hasUnsavedChanges, onClose]);
+
+  // Handle save and close
+  const handleSaveAndClose = useCallback(() => {
+    setShowUnsavedWarning(false);
+    onSaveChanges?.();
+  }, [onSaveChanges]);
+
+  // Handle discard and close
+  const handleDiscardAndClose = useCallback(() => {
+    setShowUnsavedWarning(false);
+    onDiscardChanges?.();
+    onClose();
+  }, [onDiscardChanges, onClose]);
+
+  // Handle cancel (go back to form)
+  const handleCancelClose = useCallback(() => {
+    setShowUnsavedWarning(false);
+  }, []);
+
+ // Handle escape key
+  const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && closeOnEscape) {
-        onClose();
+      if (e.key === 'Escape' && closeOnEscape && !showUnsavedWarning) {
+        e.preventDefault();
+        handleClose();
+      }
+
+      // Focus trap - Tab key handling
+      if (e.key === 'Tab' && modalRef.current) {
+        const focusableElements = getFocusableElements(modalRef.current);
+        
+        if (focusableElements.length === 0) {
+          e.preventDefault();
+          return;
+        }
+
+        const firstElement = focusableElements[0];
+        const lastElement = focusableElements[focusableElements.length - 1];
+
+        // Safety check - should always have elements at this point but TypeScript needs this
+        if (!firstElement || !lastElement) {
+          e.preventDefault();
+          return;
+        }
+
+        if (e.shiftKey) {
+          // Shift + Tab: go to previous element
+          if (document.activeElement === firstElement) {
+            e.preventDefault();
+            lastElement.focus();
+          }
+        } else {
+          // Tab: go to next element
+          if (document.activeElement === lastElement) {
+            e.preventDefault();
+            firstElement.focus();
+          }
+        }
       }
     },
-    [onClose, closeOnEscape]
+    [closeOnEscape, handleClose, showUnsavedWarning]
   );
 
+  // Set up event listeners and focus management
   useEffect(() => {
     if (isOpen) {
-      document.addEventListener('keydown', handleEscape);
+      // Store the previously focused element
+      previousActiveElement.current = document.activeElement as HTMLElement;
+      
+      // Add keydown listener
+      document.addEventListener('keydown', handleKeyDown);
       document.body.style.overflow = 'hidden';
+
+      // Focus the first focusable element in the modal
+      setTimeout(() => {
+        if (modalRef.current) {
+          const focusableElements = getFocusableElements(modalRef.current);
+          const firstElement = focusableElements[0];
+          if (firstElement) {
+            firstElement.focus();
+          } else {
+            modalRef.current.focus();
+          }
+        }
+      }, 50);
     }
 
     return () => {
-      document.removeEventListener('keydown', handleEscape);
+      document.removeEventListener('keydown', handleKeyDown);
       document.body.style.overflow = '';
+      
+      // Restore focus to the previously focused element
+      if (previousActiveElement.current && !isOpen) {
+        previousActiveElement.current.focus();
+      }
     };
-  }, [isOpen, handleEscape]);
+  }, [isOpen, handleKeyDown]);
+
+  // Reset unsaved warning when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      setShowUnsavedWarning(false);
+    }
+  }, [isOpen]);
 
   const content = (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-100 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           {/* Overlay */}
           <motion.div
             initial={{ opacity: 0 }}
@@ -72,12 +183,14 @@ export function Modal({
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
             className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-            onClick={closeOnOverlayClick ? onClose : undefined}
+            onClick={closeOnOverlayClick ? handleClose : undefined}
             aria-hidden="true"
           />
 
           {/* Modal */}
           <motion.div
+            ref={modalRef}
+            tabIndex={-1}
             initial={{ opacity: 0, scale: 0.95, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 10 }}
@@ -89,7 +202,8 @@ export function Modal({
               'rounded-xl shadow-2xl',
               'border border-slate-200 dark:border-slate-700',
               'max-h-[calc(100vh-2rem)] overflow-hidden',
-              'flex flex-col'
+              'flex flex-col',
+              'outline-none'
             )}
             role="dialog"
             aria-modal="true"
@@ -120,7 +234,7 @@ export function Modal({
 
                 {showCloseButton && (
                   <button
-                    onClick={onClose}
+                    onClick={handleClose}
                     className={clsx(
                       'flex-shrink-0 rounded-lg p-2',
                       'text-slate-400 hover:text-slate-600',
@@ -153,12 +267,167 @@ export function Modal({
               </div>
             )}
           </motion.div>
+
+          {/* Unsaved Changes Warning Dialog */}
+          <AnimatePresence>
+            {showUnsavedWarning && (
+              <UnsavedChangesWarning
+                onSave={onSaveChanges ? handleSaveAndClose : undefined}
+                onDiscard={handleDiscardAndClose}
+                onCancel={handleCancelClose}
+              />
+            )}
+          </AnimatePresence>
         </div>
       )}
     </AnimatePresence>
   );
 
   return createPortal(content, document.body);
+}
+
+// Unsaved Changes Warning Dialog
+interface UnsavedChangesWarningProps {
+  onSave?: () => void;
+  onDiscard: () => void;
+  onCancel: () => void;
+}
+
+function UnsavedChangesWarning({ onSave, onDiscard, onCancel }: UnsavedChangesWarningProps) {
+  const warningRef = useRef<HTMLDivElement>(null);
+
+  // Handle ESC to cancel and focus trap for warning dialog
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        e.preventDefault();
+        onCancel();
+      }
+
+      // Focus trap for warning dialog
+      if (e.key === 'Tab' && warningRef.current) {
+        const focusableElements = getFocusableElements(warningRef.current);
+        
+        if (focusableElements.length === 0) {
+          e.preventDefault();
+          return;
+        }
+
+        const firstElement = focusableElements[0];
+        const lastElement = focusableElements[focusableElements.length - 1];
+
+        // Safety check
+        if (!firstElement || !lastElement) {
+          e.preventDefault();
+          return;
+        }
+
+        if (e.shiftKey) {
+          if (document.activeElement === firstElement) {
+            e.preventDefault();
+            lastElement.focus();
+          }
+        } else {
+          if (document.activeElement === lastElement) {
+            e.preventDefault();
+            firstElement.focus();
+          }
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown, true);
+    
+    // Focus the first button in the warning dialog
+    setTimeout(() => {
+      if (warningRef.current) {
+        const focusableElements = getFocusableElements(warningRef.current);
+        const firstElement = focusableElements[0];
+        if (firstElement) {
+          firstElement.focus();
+        }
+      }
+    }, 50);
+
+    return () => document.removeEventListener('keydown', handleKeyDown, true);
+  }, [onCancel]);
+
+  return (
+    <>
+      {/* Overlay for warning dialog */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="absolute inset-0 bg-black/30 z-10"
+        onClick={onCancel}
+      />
+
+      {/* Warning Dialog */}
+      <motion.div
+        ref={warningRef}
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        className="absolute z-20 bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 max-w-md w-full p-6"
+        onClick={(e) => e.stopPropagation()}
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="unsaved-changes-title"
+        aria-describedby="unsaved-changes-description"
+      >
+        <h3 
+          id="unsaved-changes-title"
+          className="text-lg font-semibold text-slate-900 dark:text-white"
+        >
+          Unsaved Changes
+        </h3>
+        <p 
+          id="unsaved-changes-description"
+          className="mt-2 text-sm text-slate-500 dark:text-slate-400"
+        >
+          You have unsaved changes. What would you like to do?
+        </p>
+        <div className="mt-6 flex justify-end gap-3">
+          <button
+            onClick={onDiscard}
+            className={clsx(
+              'px-4 py-2 text-sm font-medium rounded-lg',
+              'text-danger-600 hover:bg-danger-50 dark:hover:bg-danger-900/20',
+              'transition-colors'
+            )}
+          >
+            Discard
+          </button>
+          <button
+            onClick={onCancel}
+            className={clsx(
+              'px-4 py-2 text-sm font-medium rounded-lg',
+              'text-slate-700 dark:text-slate-300',
+              'bg-slate-100 dark:bg-slate-800',
+              'hover:bg-slate-200 dark:hover:bg-slate-700',
+              'transition-colors'
+            )}
+          >
+            Keep Editing
+          </button>
+          {onSave && (
+            <button
+              onClick={onSave}
+              className={clsx(
+                'px-4 py-2 text-sm font-medium rounded-lg',
+                'text-white bg-brand-500 hover:bg-brand-600',
+                'transition-colors'
+              )}
+            >
+              Save Changes
+            </button>
+          )}
+        </div>
+      </motion.div>
+    </>
+  );
 }
 
 // Convenience component for confirmation dialogs

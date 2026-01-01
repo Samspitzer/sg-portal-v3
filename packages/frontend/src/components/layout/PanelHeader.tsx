@@ -13,7 +13,7 @@ import {
   Bell,
   Settings,
 } from 'lucide-react';
-import { useAuthStore, useUIStore, useToast, useUnsavedChangesStore, useCompanyStore } from '@/contexts';
+import { useAuthStore, useUIStore, useToast, useCompanyStore } from '@/contexts';
 import { PANELS } from '@/config/panels';
 
 export function PanelHeader() {
@@ -21,7 +21,6 @@ export function PanelHeader() {
   const location = useLocation();
   const { user, logout } = useAuthStore();
   const { theme, setTheme, toggleCommandPalette } = useUIStore();
-  const { hasUnsavedChanges, showUnsavedModal } = useUnsavedChangesStore();
   const { company } = useCompanyStore();
   const toast = useToast();
 
@@ -35,14 +34,6 @@ export function PanelHeader() {
   const themeMenuRef = useRef<HTMLDivElement>(null);
   const notificationRef = useRef<HTMLDivElement>(null);
 
-  // Custom navigation that checks for unsaved changes
-  const safeNavigate = (path: string) => {
-    if (hasUnsavedChanges) {
-      showUnsavedModal(path);
-    } else {
-      navigate(path);
-    }
-  };
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -100,14 +91,14 @@ export function PanelHeader() {
       <div className="h-full flex items-center justify-between px-4">
         {/* Left - Logo & Navigation */}
         <div className="flex items-center gap-1">
-          {/* Logo */}
+         {/* Logo */}
           <button
-  onClick={() => safeNavigate('/')}
-  className={clsx(
-    'flex items-center gap-3 px-3 py-2 rounded-lg',
-    'transition-colors'
-  )}
->
+            onClick={() => navigate('/')}
+            className={clsx(
+              'flex items-center gap-3 px-2 py-1 rounded-xl',
+              'transition-colors'
+            )}
+          >
   {company.logo ? (
     <img 
       src={company.logo} 
@@ -140,7 +131,7 @@ export function PanelHeader() {
                 {/* Panel Name - Clickable to navigate */}
                 <button
                   onClick={() => {
-                    safeNavigate(panel.basePath);
+                    navigate(panel.basePath);
                     setOpenDropdown(null);
                   }}
                   className={clsx(
@@ -191,7 +182,7 @@ export function PanelHeader() {
                         <button
                           key={tile.path}
                           onClick={() => {
-                            safeNavigate(tile.path);
+                            navigate(tile.path);
                             setOpenDropdown(null);
                           }}
                           className={clsx(
@@ -387,7 +378,7 @@ export function PanelHeader() {
                   <div className="py-1">
                     <button
                       onClick={() => {
-                        safeNavigate('/profile');
+                        navigate('/profile');
                         setShowUserMenu(false);
                       }}
                       className={clsx(
@@ -402,7 +393,7 @@ export function PanelHeader() {
                     </button>
                     <button
                       onClick={() => {
-                        safeNavigate('/settings');
+                        navigate('/settings');
                         setShowUserMenu(false);
                       }}
                       className={clsx(

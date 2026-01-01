@@ -20,7 +20,7 @@ import {
   Filter,
 } from 'lucide-react';
 import { Page } from '@/components/layout';
-import { Card, CardContent, Button, Input } from '@/components/common';
+import { Card, CardContent, Button, Input, ConfirmModal } from '@/components/common';
 import {
   useInvoices,
   useCreateInvoice,
@@ -32,7 +32,8 @@ import {
   type CreateInvoiceInput,
   type InvoiceStatus,
 } from '@/services/api';
-import { AIAssistant } from '@/components/ai/AIAssistant';
+import { useToast } from '@/contexts';
+// import { AIAssistant } from '@/components/ai/AIAssistant';
 
 const STATUS_COLORS: Record<InvoiceStatus, string> = {
   draft: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
@@ -502,6 +503,9 @@ export function InvoicesPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+  const [invoiceToDelete, setInvoiceToDelete] = useState<Invoice | null>(null);
+  const [invoiceToMarkPaid, setInvoiceToMarkPaid] = useState<Invoice | null>(null);
+  const toast = useToast();
 
   const { data, isLoading, error, refetch } = useInvoices({
     page,
@@ -532,33 +536,50 @@ export function InvoicesPage() {
     try {
       if (editingInvoice) {
         await updateMutation.mutateAsync({ id: editingInvoice.id, data: input });
+        toast.success('Updated', `Invoice has been updated`);
       } else {
         await createMutation.mutateAsync(input);
+        toast.success('Created', `Invoice has been created`);
       }
       setIsModalOpen(false);
       setEditingInvoice(null);
     } catch (err) {
       console.error('Failed to save invoice:', err);
+      toast.error('Error', 'Failed to save invoice');
     }
   };
 
-  const handleDelete = async (invoice: Invoice) => {
-    if (window.confirm(`Are you sure you want to delete invoice "${invoice.invoiceNumber}"?`)) {
+  const handleDelete = (invoice: Invoice) => {
+    setInvoiceToDelete(invoice);
+  };
+
+  const confirmDelete = async () => {
+    if (invoiceToDelete) {
       try {
-        await deleteMutation.mutateAsync(invoice.id);
+        await deleteMutation.mutateAsync(invoiceToDelete.id);
+        toast.success('Deleted', `Invoice ${invoiceToDelete.invoiceNumber} has been removed`);
       } catch (err) {
         console.error('Failed to delete invoice:', err);
+        toast.error('Error', 'Failed to delete invoice');
       }
+      setInvoiceToDelete(null);
     }
   };
 
-  const handleMarkPaid = async (invoice: Invoice) => {
-    if (window.confirm(`Mark invoice "${invoice.invoiceNumber}" as paid?`)) {
+  const handleMarkPaid = (invoice: Invoice) => {
+    setInvoiceToMarkPaid(invoice);
+  };
+
+  const confirmMarkPaid = async () => {
+    if (invoiceToMarkPaid) {
       try {
-        await markPaidMutation.mutateAsync({ id: invoice.id });
+        await markPaidMutation.mutateAsync({ id: invoiceToMarkPaid.id });
+        toast.success('Marked as Paid', `Invoice ${invoiceToMarkPaid.invoiceNumber} has been marked as paid`);
       } catch (err) {
         console.error('Failed to mark invoice as paid:', err);
+        toast.error('Error', 'Failed to mark invoice as paid');
       }
+      setInvoiceToMarkPaid(null);
     }
   };
 
@@ -727,7 +748,7 @@ export function InvoicesPage() {
         </>
       )}
 
-      {/* Modal */}
+      {/* Invoice Modal */}
       <InvoiceModal
         isOpen={isModalOpen}
         onClose={() => { setIsModalOpen(false); setEditingInvoice(null); }}
@@ -736,11 +757,36 @@ export function InvoicesPage() {
         isLoading={createMutation.isPending || updateMutation.isPending}
       />
 
-      {/* AI Assistant */}
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        isOpen={!!invoiceToDelete}
+        onClose={() => setInvoiceToDelete(null)}
+        onConfirm={confirmDelete}
+        title="Delete Invoice"
+        message={`Are you sure you want to delete invoice "${invoiceToDelete?.invoiceNumber}"? This action cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="danger"
+      />
+
+      {/* Mark as Paid Confirmation Modal */}
+      <ConfirmModal
+        isOpen={!!invoiceToMarkPaid}
+        onClose={() => setInvoiceToMarkPaid(null)}
+        onConfirm={confirmMarkPaid}
+        title="Mark as Paid"
+        message={`Mark invoice "${invoiceToMarkPaid?.invoiceNumber}" as paid? This will record today's date as the payment date.`}
+        confirmText="Mark as Paid"
+        cancelText="Cancel"
+        variant="primary"
+      />
+
+      {/* AI Assistant - TODO: Enable when AI is set up
       <AIAssistant
         context={{ type: 'invoice', entityId: editingInvoice?.id }}
         entityName={editingInvoice ? `Invoice ${editingInvoice.invoiceNumber}` : undefined}
       />
+      */}
     </Page>
   );
 }

@@ -17,7 +17,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { Page } from '@/components/layout';
-import { Card, CardContent, Button, Input } from '@/components/common';
+import { Card, CardContent, Button, Input, ConfirmModal } from '@/components/common';
 import {
   useClients,
   useCreateClient,
@@ -26,7 +26,7 @@ import {
   type Client,
   type CreateClientInput,
 } from '@/services/api';
-import { AIAssistant } from '@/components/ai/AIAssistant';
+import { useToast } from '@/contexts';
 
 interface ClientFormData {
   companyName: string;
@@ -314,6 +314,8 @@ export function ClientsPage() {
   const [page, setPage] = useState(1);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
+  const [clientToDelete, setClientToDelete] = useState<Client | null>(null);
+  const toast = useToast();
 
   const { data, isLoading, error, refetch } = useClients({
     page,
@@ -353,13 +355,20 @@ export function ClientsPage() {
     }
   };
 
-  const handleDelete = async (client: Client) => {
-    if (window.confirm(`Are you sure you want to delete "${client.companyName}"?`)) {
+  const handleDelete = (client: Client) => {
+    setClientToDelete(client);
+  };
+
+  const confirmDelete = async () => {
+    if (clientToDelete) {
       try {
-        await deleteMutation.mutateAsync(client.id);
+        await deleteMutation.mutateAsync(clientToDelete.id);
+        toast.success('Deleted', `${clientToDelete.companyName} has been removed`);
       } catch (err) {
         console.error('Failed to delete client:', err);
+        toast.error('Error', 'Failed to delete client');
       }
+      setClientToDelete(null);
     }
   };
 
@@ -503,10 +512,23 @@ export function ClientsPage() {
         isLoading={createMutation.isPending || updateMutation.isPending}
       />
 
-      {/* AI Assistant */}
+      {/* AI Assistant - TODO: Enable when AI is set up
       <AIAssistant
         context={{ type: 'client', entityId: editingClient?.id }}
         entityName={editingClient?.companyName}
+      />
+      */}
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        isOpen={!!clientToDelete}
+        onClose={() => setClientToDelete(null)}
+        onConfirm={confirmDelete}
+        title="Delete Client"
+        message={`Are you sure you want to delete "${clientToDelete?.companyName}"? This action cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="danger"
       />
     </Page>
   );

@@ -21,7 +21,7 @@ import {
   Filter,
 } from 'lucide-react';
 import { Page } from '@/components/layout';
-import { Card, CardContent, Button, Input } from '@/components/common';
+import { Card, CardContent, Button, Input, ConfirmModal } from '@/components/common';
 import {
   useEstimates,
   useCreateEstimate,
@@ -33,7 +33,8 @@ import {
   type CreateEstimateInput,
   type EstimateStatus,
 } from '@/services/api';
-import { AIAssistant } from '@/components/ai/AIAssistant';
+import { useToast } from '@/contexts';
+// import { AIAssistant } from '@/components/ai/AIAssistant';
 
 const STATUS_COLORS: Record<EstimateStatus, string> = {
   draft: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
@@ -470,6 +471,9 @@ export function EstimatesPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingEstimate, setEditingEstimate] = useState<Estimate | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+  const [estimateToDelete, setEstimateToDelete] = useState<Estimate | null>(null);
+  const [estimateToConvert, setEstimateToConvert] = useState<Estimate | null>(null);
+  const toast = useToast();
 
   const { data, isLoading, error, refetch } = useEstimates({
     page,
@@ -499,33 +503,50 @@ export function EstimatesPage() {
     try {
       if (editingEstimate) {
         await updateMutation.mutateAsync({ id: editingEstimate.id, data: input });
+        toast.success('Updated', `Estimate has been updated`);
       } else {
         await createMutation.mutateAsync(input);
+        toast.success('Created', `Estimate has been created`);
       }
       setIsModalOpen(false);
       setEditingEstimate(null);
     } catch (err) {
       console.error('Failed to save estimate:', err);
+      toast.error('Error', 'Failed to save estimate');
     }
   };
 
-  const handleDelete = async (estimate: Estimate) => {
-    if (window.confirm(`Are you sure you want to delete estimate "${estimate.estimateNumber}"?`)) {
+  const handleDelete = (estimate: Estimate) => {
+    setEstimateToDelete(estimate);
+  };
+
+  const confirmDelete = async () => {
+    if (estimateToDelete) {
       try {
-        await deleteMutation.mutateAsync(estimate.id);
+        await deleteMutation.mutateAsync(estimateToDelete.id);
+        toast.success('Deleted', `Estimate ${estimateToDelete.estimateNumber} has been removed`);
       } catch (err) {
         console.error('Failed to delete estimate:', err);
+        toast.error('Error', 'Failed to delete estimate');
       }
+      setEstimateToDelete(null);
     }
   };
 
-  const handleConvert = async (estimate: Estimate) => {
-    if (window.confirm(`Convert estimate "${estimate.estimateNumber}" to an invoice?`)) {
+  const handleConvert = (estimate: Estimate) => {
+    setEstimateToConvert(estimate);
+  };
+
+  const confirmConvert = async () => {
+    if (estimateToConvert) {
       try {
-        await convertMutation.mutateAsync(estimate.id);
+        await convertMutation.mutateAsync(estimateToConvert.id);
+        toast.success('Converted', `Estimate ${estimateToConvert.estimateNumber} has been converted to an invoice`);
       } catch (err) {
         console.error('Failed to convert estimate:', err);
+        toast.error('Error', 'Failed to convert estimate to invoice');
       }
+      setEstimateToConvert(null);
     }
   };
 
@@ -694,7 +715,7 @@ export function EstimatesPage() {
         </>
       )}
 
-      {/* Modal */}
+      {/* Estimate Modal */}
       <EstimateModal
         isOpen={isModalOpen}
         onClose={() => { setIsModalOpen(false); setEditingEstimate(null); }}
@@ -703,11 +724,36 @@ export function EstimatesPage() {
         isLoading={createMutation.isPending || updateMutation.isPending}
       />
 
-      {/* AI Assistant */}
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        isOpen={!!estimateToDelete}
+        onClose={() => setEstimateToDelete(null)}
+        onConfirm={confirmDelete}
+        title="Delete Estimate"
+        message={`Are you sure you want to delete estimate "${estimateToDelete?.estimateNumber}"? This action cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="danger"
+      />
+
+      {/* Convert to Invoice Confirmation Modal */}
+      <ConfirmModal
+        isOpen={!!estimateToConvert}
+        onClose={() => setEstimateToConvert(null)}
+        onConfirm={confirmConvert}
+        title="Convert to Invoice"
+        message={`Convert estimate "${estimateToConvert?.estimateNumber}" to an invoice? This will create a new invoice with the same line items.`}
+        confirmText="Convert"
+        cancelText="Cancel"
+        variant="primary"
+      />
+
+      {/* AI Assistant - TODO: Enable when AI is set up
       <AIAssistant
         context={{ type: 'estimate', entityId: editingEstimate?.id }}
         entityName={editingEstimate ? `Estimate ${editingEstimate.estimateNumber}` : undefined}
       />
+      */}
     </Page>
   );
 }

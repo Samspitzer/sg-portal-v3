@@ -1,11 +1,4 @@
-import {
-  Receipt,
-  LayoutDashboard,
-  FileText,
-  Mail,
-  TrendingUp,
-  CheckCircle,
-} from 'lucide-react';
+import { Receipt } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 export interface PanelTile {

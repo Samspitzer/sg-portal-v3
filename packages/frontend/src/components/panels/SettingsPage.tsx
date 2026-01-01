@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { clsx } from 'clsx';
 import {
   Sun,
@@ -9,49 +8,27 @@ import {
   Mail,
   Check,
   ChevronRight,
-  X,
 } from 'lucide-react';
-import { useUIStore, useToast, useUnsavedChangesStore } from '@/contexts';
+import { useUIStore, useToast } from '@/contexts';
+import { Modal } from '@/components/common';
+
+type ThemeOption = 'light' | 'dark' | 'system';
+
+interface SettingsFormData {
+  theme: ThemeOption;
+}
 
 export function SettingsPage() {
-  const navigate = useNavigate();
   const { theme, setTheme } = useUIStore();
   const toast = useToast();
-  const { setHasUnsavedChanges, setCallbacks, reset } = useUnsavedChangesStore();
-  
+
   const [emailModalOpen, setEmailModalOpen] = useState(false);
   
-  // Track original and draft theme separately
-  const [originalTheme] = useState(theme);
-  const [draftTheme, setDraftTheme] = useState(theme);
-  const hasChanges = draftTheme !== originalTheme;
-
-  // Update global unsaved changes state
-  useEffect(() => {
-    setHasUnsavedChanges(hasChanges);
-  }, [hasChanges, setHasUnsavedChanges]);
-
-  // Set up save/discard callbacks for the global modal
-  useEffect(() => {
-    setCallbacks(
-      // onSave
-      () => {
-        // Theme is already applied from preview
-      },
-      // onDiscard
-      () => {
-        setTheme(originalTheme);
-        setDraftTheme(originalTheme);
-      }
-    );
-  }, [originalTheme, setTheme, setCallbacks]);
-
-  // Clean up on unmount
-  useEffect(() => {
-    return () => {
-      reset();
-    };
-  }, [reset]);
+  // Track original and current settings
+  const [originalSettings] = useState<SettingsFormData>({ theme });
+  const [currentSettings, setCurrentSettings] = useState<SettingsFormData>({ theme });
+  
+  const hasChanges = currentSettings.theme !== originalSettings.theme;
 
   // Warn on browser close/refresh
   useEffect(() => {
@@ -66,24 +43,21 @@ export function SettingsPage() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [hasChanges]);
 
-  const handleThemeSelect = (newTheme: 'light' | 'dark' | 'system') => {
-    setDraftTheme(newTheme);
+  const handleThemeSelect = (newTheme: ThemeOption) => {
+    setCurrentSettings({ ...currentSettings, theme: newTheme });
     // Preview the theme immediately
     setTheme(newTheme);
   };
 
   const handleSave = () => {
+    // Theme is already applied via preview
     toast.success('Settings saved', 'Your preferences have been updated');
-    reset();
-    navigate('/');
   };
 
   const handleDiscard = () => {
-    setTheme(originalTheme);
-    setDraftTheme(originalTheme);
+    setTheme(originalSettings.theme);
+    setCurrentSettings(originalSettings);
     toast.info('Changes discarded', 'Your changes were not saved');
-    reset();
-    navigate('/');
   };
 
   const themeOptions = [
@@ -138,7 +112,7 @@ export function SettingsPage() {
               Appearance
             </h3>
           </div>
-          
+
           <div className="p-6">
             <div className="grid grid-cols-3 gap-4">
               {themeOptions.map((option) => (
@@ -147,13 +121,13 @@ export function SettingsPage() {
                   onClick={() => handleThemeSelect(option.id)}
                   className={clsx(
                     'relative flex flex-col items-center gap-3 p-5 rounded-xl border-2 transition-all',
-                    draftTheme === option.id
-                      ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                    currentSettings.theme === option.id
+                      ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20'
                       : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
                   )}
                 >
-                  {draftTheme === option.id && (
-                    <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-primary-500 flex items-center justify-center">
+                  {currentSettings.theme === option.id && (
+                    <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-brand-500 flex items-center justify-center">
                       <Check className="w-3 h-3 text-white" />
                     </div>
                   )}
@@ -206,7 +180,7 @@ export function SettingsPage() {
                 </p>
               </div>
             </div>
-            
+
             <ChevronRight className="w-5 h-5 text-slate-400" />
           </button>
         </motion.div>
@@ -228,7 +202,13 @@ export function SettingsPage() {
           )}
           <button
             onClick={handleSave}
-            className="px-6 py-2.5 bg-slate-800 dark:bg-primary-600 hover:bg-slate-700 dark:hover:bg-primary-700 text-white font-semibold rounded-xl transition-colors"
+            disabled={!hasChanges}
+            className={clsx(
+              'px-6 py-2.5 font-semibold rounded-xl transition-colors',
+              hasChanges
+                ? 'bg-brand-600 hover:bg-brand-700 text-white'
+                : 'bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed'
+            )}
           >
             Save Changes
           </button>
@@ -236,84 +216,42 @@ export function SettingsPage() {
       </div>
 
       {/* Email Notifications Modal */}
-      <AnimatePresence>
-        {emailModalOpen && (
+      <Modal
+        isOpen={emailModalOpen}
+        onClose={() => setEmailModalOpen(false)}
+        title="Email Notifications"
+        description="Configure your notification preferences"
+        size="lg"
+        footer={
           <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+            <button
               onClick={() => setEmailModalOpen(false)}
-              className="fixed inset-0 bg-black/50 z-50"
-            />
-            
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="fixed inset-0 z-50 flex items-center justify-center p-4"
+              className="px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
             >
-              <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700 w-full max-w-lg max-h-[80vh] overflow-hidden">
-                <div className="flex items-center justify-between p-6 border-b border-slate-200 dark:border-slate-700">
-                  <div className="flex items-center gap-3">
-                    <div className={clsx(
-                      'w-10 h-10 rounded-lg flex items-center justify-center',
-                      'bg-slate-100 dark:bg-slate-700',
-                      'text-slate-500 dark:text-slate-400'
-                    )}>
-                      <Mail className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
-                        Email Notifications
-                      </h2>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
-                        Configure your notification preferences
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setEmailModalOpen(false)}
-                    className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-                  >
-                    <X className="w-5 h-5 text-slate-500" />
-                  </button>
-                </div>
-                
-                <div className="p-6 overflow-y-auto max-h-[60vh]">
-                  <div className="p-6 rounded-xl bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-700 text-center">
-                    <Mail className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
-                    <p className="text-sm text-slate-500 dark:text-slate-400">
-                      Email notification settings will be configured here.
-                    </p>
-                    <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-                      Schedule times, notification types, recipients, etc.
-                    </p>
-                  </div>
-                </div>
-                
-                <div className="flex items-center justify-end gap-3 p-6 border-t border-slate-200 dark:border-slate-700">
-                  <button
-                    onClick={() => setEmailModalOpen(false)}
-                    className="px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={() => {
-                      setEmailModalOpen(false);
-                      toast.success('Saved', 'Notification settings updated');
-                    }}
-                    className="px-4 py-2 text-sm font-medium text-white bg-slate-800 dark:bg-primary-600 hover:bg-slate-700 dark:hover:bg-primary-700 rounded-lg transition-colors"
-                  >
-                    Save Changes
-                  </button>
-                </div>
-              </div>
-            </motion.div>
+              Cancel
+            </button>
+            <button
+              onClick={() => {
+                setEmailModalOpen(false);
+                toast.success('Saved', 'Notification settings updated');
+              }}
+              className="px-4 py-2 text-sm font-medium text-white bg-brand-600 hover:bg-brand-700 rounded-lg transition-colors"
+            >
+              Save Changes
+            </button>
           </>
-        )}
-      </AnimatePresence>
+        }
+      >
+        <div className="p-6 rounded-xl bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-700 text-center">
+          <Mail className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            Email notification settings will be configured here.
+          </p>
+          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+            Schedule times, notification types, recipients, etc.
+          </p>
+        </div>
+      </Modal>
     </div>
   );
 }

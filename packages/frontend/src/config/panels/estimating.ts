@@ -1,10 +1,4 @@
-import {
-  Calculator,
-  LayoutDashboard,
-  Users,
-  FileStack,
-  Send,
-} from 'lucide-react';
+import { Calculator } from 'lucide-react';
 import type { PanelTile } from './accounting';
 
 export const ESTIMATING_PANEL = {

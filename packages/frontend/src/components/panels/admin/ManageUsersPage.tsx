@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
 import { clsx } from 'clsx';
 import {
   Plus,
@@ -8,7 +8,6 @@ import {
   MoreHorizontal,
   Edit,
   Trash2,
-  X,
   Check,
   Loader2,
   Mail,
@@ -18,7 +17,9 @@ import {
   UserX,
 } from 'lucide-react';
 import { Page } from '@/components/layout';
-import { Card, CardContent, Button, Input } from '@/components/common';
+import { Card, CardContent, Button, Input, Modal, ConfirmModal } from '@/components/common';
+import { useToast } from '@/contexts';
+import { useFormChanges } from '@/hooks';
 
 // Types
 interface User {
@@ -87,195 +88,194 @@ function UserModal({
   onSave: (data: UserFormData) => void;
   isLoading: boolean;
 }) {
-  const [formData, setFormData] = useState<UserFormData>(
-    user
-      ? {
-          name: user.name,
-          email: user.email,
-          phone: user.phone,
-          department: user.department,
-          position: user.position,
-          isActive: user.isActive,
-        }
-      : initialFormData
-  );
+  const toast = useToast();
+  
+  const getInitialData = (): UserFormData => {
+    if (user) {
+      return {
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        department: user.department,
+        position: user.position,
+        isActive: user.isActive,
+      };
+    }
+    return initialFormData;
+  };
 
-  if (!isOpen) return null;
+  const { formData, setFormData, hasChanges, resetForm, initializeForm } = useFormChanges<UserFormData>(getInitialData());
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  // Reset form when user changes or modal opens
+  useEffect(() => {
+    if (isOpen) {
+      initializeForm(getInitialData());
+    }
+  }, [isOpen, user]);
+
+  const handleSubmit = async () => {
     onSave(formData);
+    toast.success('Saved', user ? 'User updated successfully' : 'User added successfully');
+  };
+
+  const handleDiscard = () => {
+    resetForm();
   };
 
   return (
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-        onClick={onClose}
-      >
-        <motion.div
-          initial={{ scale: 0.95, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          exit={{ scale: 0.95, opacity: 0 }}
-          className="bg-white dark:bg-slate-900 rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-            <h2 className="text-xl font-semibold text-slate-900 dark:text-white">
-              {user ? 'Edit User' : 'Add New User'}
-            </h2>
-            <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
-              <X className="w-5 h-5" />
-            </button>
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={user ? 'Edit User' : 'Add New User'}
+      size="xl"
+      hasUnsavedChanges={hasChanges}
+      onSaveChanges={handleSubmit}
+      onDiscardChanges={handleDiscard}
+      footer={
+        <>
+          <Button type="button" variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button 
+            type="button" 
+            variant="primary" 
+            onClick={handleSubmit}
+            disabled={isLoading || !formData.name || !formData.email}
+          >
+            {isLoading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Check className="w-4 h-4 mr-2" />
+                {user ? 'Update User' : 'Add User'}
+              </>
+            )}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-6">
+        {/* Basic Information */}
+        <div>
+          <h3 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-4">
+            Basic Information
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Input
+              label="Full Name *"
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              placeholder="John Smith"
+            />
+            <Input
+              label="Email *"
+              type="email"
+              value={formData.email}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              placeholder="john@sgbsny.com"
+            />
+            <Input
+              label="Phone"
+              type="tel"
+              value={formData.phone}
+              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+              placeholder="(555) 123-4567"
+            />
+          </div>
+        </div>
+
+        {/* Account Settings */}
+        <div>
+          <h3 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-4">
+            Account Settings
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                Department
+              </label>
+              <select
+                value={formData.department}
+                onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg
+                  bg-white dark:bg-slate-800 text-slate-900 dark:text-white
+                  focus:outline-none focus:ring-2 focus:ring-brand-500"
+              >
+                <option value="">Select Department</option>
+                {DEPARTMENTS.map((dept) => (
+                  <option key={dept} value={dept}>{dept}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                Position
+              </label>
+              <select
+                value={formData.position}
+                onChange={(e) => setFormData({ ...formData, position: e.target.value })}
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg
+                  bg-white dark:bg-slate-800 text-slate-900 dark:text-white
+                  focus:outline-none focus:ring-2 focus:ring-brand-500"
+              >
+                <option value="">Select Position</option>
+                {POSITIONS.map((pos) => (
+                  <option key={pos} value={pos}>{pos}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
-          <form onSubmit={handleSubmit} className="p-6 space-y-6">
-            {/* Basic Information */}
-            <div>
-              <h3 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-4">
-                Basic Information
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Input
-                  label="Full Name *"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="John Smith"
-                  required
-                />
-                <Input
-                  label="Email *"
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  placeholder="john@sgbsny.com"
-                  required
-                />
-                <Input
-                  label="Phone"
-                  type="tel"
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  placeholder="(555) 123-4567"
-                />
-              </div>
-            </div>
-
-            {/* Account Settings */}
-            <div>
-              <h3 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-4">
-                Account Settings
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                    Department
-                  </label>
-                  <select
-                    value={formData.department}
-                    onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg
-                      bg-white dark:bg-slate-800 text-slate-900 dark:text-white
-                      focus:outline-none focus:ring-2 focus:ring-brand-500"
-                  >
-                    <option value="">Select Department</option>
-                    {DEPARTMENTS.map((dept) => (
-                      <option key={dept} value={dept}>{dept}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                    Position
-                  </label>
-                  <select
-                    value={formData.position}
-                    onChange={(e) => setFormData({ ...formData, position: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg
-                      bg-white dark:bg-slate-800 text-slate-900 dark:text-white
-                      focus:outline-none focus:ring-2 focus:ring-brand-500"
-                  >
-                    <option value="">Select Position</option>
-                    {POSITIONS.map((pos) => (
-                      <option key={pos} value={pos}>{pos}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Active Toggle */}
-              <div className="mt-4">
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <div
-                    className={clsx(
-                      'w-11 h-6 rounded-full transition-colors relative',
-                      formData.isActive ? 'bg-brand-500' : 'bg-slate-300 dark:bg-slate-600'
-                    )}
-                    onClick={() => setFormData({ ...formData, isActive: !formData.isActive })}
-                  >
-                    <div
-                      className={clsx(
-                        'absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform',
-                        formData.isActive ? 'translate-x-5.5 left-0.5' : 'left-0.5'
-                      )}
-                      style={{ transform: formData.isActive ? 'translateX(22px)' : 'translateX(0)' }}
-                    />
-                  </div>
-                  <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                    {formData.isActive ? 'Active' : 'Inactive'}
-                  </span>
-                </label>
-              </div>
-            </div>
-
-            {/* Permission Overrides - Placeholder */}
-            <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-dashed border-slate-300 dark:border-slate-700">
-              <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
-                <Shield className="w-4 h-4" />
-                <span className="text-sm font-medium">Permission Overrides</span>
-              </div>
-              <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-                Coming soon - Configure user-specific permission overrides
-              </p>
-            </div>
-
-            {/* Temporary Access - Placeholder */}
-            <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-dashed border-slate-300 dark:border-slate-700">
-              <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
-                <UserCheck className="w-4 h-4" />
-                <span className="text-sm font-medium">Temporary Access</span>
-              </div>
-              <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-                Coming soon - Grant temporary access with expiration dates
-              </p>
-            </div>
-
-            {/* Actions */}
-            <div className="flex justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
-              <Button type="button" variant="secondary" onClick={onClose}>
-                Cancel
-              </Button>
-              <Button type="submit" variant="primary" disabled={isLoading}>
-                {isLoading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <Check className="w-4 h-4 mr-2" />
-                    {user ? 'Update User' : 'Add User'}
-                  </>
+          {/* Active Toggle */}
+          <div className="mt-4">
+            <label className="flex items-center gap-3 cursor-pointer">
+              <div
+                className={clsx(
+                  'w-11 h-6 rounded-full transition-colors relative cursor-pointer',
+                  formData.isActive ? 'bg-brand-500' : 'bg-slate-300 dark:bg-slate-600'
                 )}
-              </Button>
-            </div>
-          </form>
-        </motion.div>
-      </motion.div>
-    </AnimatePresence>
+                onClick={() => setFormData({ ...formData, isActive: !formData.isActive })}
+              >
+                <div
+                  className={clsx(
+                    'absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform left-0.5',
+                    formData.isActive && 'translate-x-[22px]'
+                  )}
+                />
+              </div>
+              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                {formData.isActive ? 'Active' : 'Inactive'}
+              </span>
+            </label>
+          </div>
+        </div>
+
+        {/* Permission Overrides - Placeholder */}
+        <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-dashed border-slate-300 dark:border-slate-700">
+          <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+            <Shield className="w-4 h-4" />
+            <span className="text-sm font-medium">Permission Overrides</span>
+          </div>
+          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+            Coming soon - Configure user-specific permission overrides
+          </p>
+        </div>
+
+        {/* Temporary Access - Placeholder */}
+        <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-dashed border-slate-300 dark:border-slate-700">
+          <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+            <UserCheck className="w-4 h-4" />
+            <span className="text-sm font-medium">Temporary Access</span>
+          </div>
+          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+            Coming soon - Grant temporary access with expiration dates
+          </p>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
@@ -418,6 +418,8 @@ export function ManageUsersPage() {
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [users, setUsers] = useState<User[]>(mockUsers);
   const [isLoading, setIsLoading] = useState(false);
+const [userToDelete, setUserToDelete] = useState<User | null>(null);
+const toast = useToast();
 
   // Filter users
   const filteredUsers = users.filter((user) => {
@@ -451,13 +453,23 @@ export function ManageUsersPage() {
   };
 
   const handleDelete = (user: User) => {
-    if (window.confirm(`Are you sure you want to delete "${user.name}"?`)) {
-      setUsers(users.filter(u => u.id !== user.id));
-    }
-  };
+  setUserToDelete(user);
+};
+
+const confirmDelete = () => {
+  if (userToDelete) {
+    setUsers(users.filter(u => u.id !== userToDelete.id));
+    toast.success('Deleted', `${userToDelete.name} has been removed`);
+    setUserToDelete(null);
+  }
+};
 
   const handleToggleActive = (user: User) => {
     setUsers(users.map(u => u.id === user.id ? { ...u, isActive: !u.isActive } : u));
+    toast.success(
+      user.isActive ? 'Deactivated' : 'Activated',
+      `${user.name} has been ${user.isActive ? 'deactivated' : 'activated'}`
+    );
   };
 
   return (
@@ -554,13 +566,25 @@ export function ManageUsersPage() {
         </motion.div>
       )}
 
-      {/* Modal */}
+      {/* User Modal */}
       <UserModal
         isOpen={isModalOpen}
         onClose={() => { setIsModalOpen(false); setEditingUser(null); }}
         user={editingUser}
         onSave={handleSave}
         isLoading={isLoading}
+      />
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        isOpen={!!userToDelete}
+        onClose={() => setUserToDelete(null)}
+        onConfirm={confirmDelete}
+        title="Delete User"
+        message={`Are you sure you want to delete "${userToDelete?.name}"? This action cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="danger"
       />
     </Page>
   );

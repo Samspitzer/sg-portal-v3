@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { clsx } from 'clsx';
 import {
   Building2,
@@ -12,30 +12,51 @@ import {
 } from 'lucide-react';
 import { Page } from '@/components/layout';
 import { Card, CardContent, Button, Input } from '@/components/common';
-import { useCompanyStore } from '@/contexts';
-import { useToast } from '@/contexts';
+import { useCompanyStore, useToast } from '@/contexts';
 
 export function CompanySettingsPage() {
-  const { company, setCompany, } = useCompanyStore();
+  const { company, setCompany } = useCompanyStore();
   const toast = useToast();
   const [isLoading, setIsLoading] = useState(false);
-  const [isSaved, setIsSaved] = useState(false);
-  
-  // Local form state
+
+  // Track original and current form data
+  const [originalData, setOriginalData] = useState(company);
   const [formData, setFormData] = useState(company);
+
+  // Check if there are unsaved changes
+  const hasChanges = JSON.stringify(originalData) !== JSON.stringify(formData);
+
+  // Warn on browser close/refresh
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasChanges) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasChanges]);
 
   const handleSave = async () => {
     setIsLoading(true);
     // Simulate API call
     await new Promise((resolve) => setTimeout(resolve, 500));
-    
+
     // Update the global store
     setCompany(formData);
-    
+
+    // Update original data to match saved data
+    setOriginalData(formData);
+
     setIsLoading(false);
-    setIsSaved(true);
     toast.success('Settings saved', 'Company information has been updated');
-    setTimeout(() => setIsSaved(false), 3000);
+  };
+
+  const handleDiscard = () => {
+    setFormData(originalData);
+    toast.info('Changes discarded', 'Your changes were not saved');
   };
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -59,28 +80,35 @@ export function CompanySettingsPage() {
       title="Company Settings"
       description="Manage your company information and branding."
       actions={
-        <Button
-          variant="primary"
-          onClick={handleSave}
-          disabled={isLoading}
-        >
-          {isLoading ? (
-            <>
-              <Loader2 className="w-4 h-4 animate-spin mr-2" />
-              Saving...
-            </>
-          ) : isSaved ? (
-            <>
-              <Check className="w-4 h-4 mr-2" />
-              Saved!
-            </>
-          ) : (
-            <>
-              <Check className="w-4 h-4 mr-2" />
-              Save Changes
-            </>
+        <div className="flex items-center gap-3">
+          {hasChanges && (
+            <span className="text-xs font-medium text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30 px-2 py-1 rounded-full mr-2">
+              Unsaved changes
+            </span>
           )}
-        </Button>
+          {hasChanges && (
+            <Button variant="secondary" onClick={handleDiscard}>
+              Discard
+            </Button>
+          )}
+          <Button
+            variant="primary"
+            onClick={handleSave}
+            disabled={isLoading || !hasChanges}
+          >
+            {isLoading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Check className="w-4 h-4 mr-2" />
+                Save Changes
+              </>
+            )}
+          </Button>
+        </div>
       }
     >
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
