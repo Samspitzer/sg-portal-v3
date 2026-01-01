@@ -13,12 +13,13 @@ import {
   Settings,
   ChevronDown,
 } from 'lucide-react';
-import { useAuthStore, useUIStore, useToast } from '@/contexts';
+import { useAuthStore, useUIStore, useToast, useCompanyStore } from '@/contexts';
 
 export function Header({ }: { fullWidth?: boolean }) {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
   const { theme, setTheme, toggleCommandPalette } = useUIStore();
+  const { company } = useCompanyStore();
   const toast = useToast();
   
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -63,6 +64,14 @@ export function Header({ }: { fullWidth?: boolean }) {
 
   const CurrentThemeIcon = theme === 'dark' ? Moon : theme === 'light' ? Sun : Monitor;
 
+  // Get initials from company name (up to 3 characters)
+  const companyInitials = company.name
+    .split(' ')
+    .map(w => w[0])
+    .join('')
+    .slice(0, 3)
+    .toUpperCase();
+
   return (
     <header
       style={{ height: 'var(--header-height)' }}
@@ -79,20 +88,27 @@ export function Header({ }: { fullWidth?: boolean }) {
           <button
             onClick={() => navigate('/')}
             className={clsx(
-              'flex items-center gap-3 px-3 py-2 rounded-lg',
-              'hover:bg-slate-100 dark:hover:bg-slate-800',
+              'flex items-center gap-3 px-2 py-1 rounded-lg',
               'transition-colors'
             )}
           >
-            {/* Logo placeholder */}
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center">
-              <span className="text-white font-bold text-xs">S&G</span>
-            </div>
-            <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 hidden sm:block">
-              Portal
-            </span>
-          </button>
-        </div>
+            {/* Company Logo */}
+            {company.logo ? (
+  <div className="bg-white rounded-xl">
+    <img 
+      src={company.logo} 
+      alt={company.name} 
+      className="h-12 w-auto max-w-[180px] object-contain"
+    />
+  </div>
+) : (
+  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center">
+    <span className="text-white font-bold text-xs">{companyInitials}</span>
+  </div>
+)}
+
+</button>
+</div>
 
         {/* Center - Search */}
         <div className="flex-1 max-w-xl mx-4">
@@ -163,7 +179,7 @@ export function Header({ }: { fullWidth?: boolean }) {
                         'px-3 py-2 text-sm',
                         'hover:bg-slate-100 dark:hover:bg-slate-700',
                         theme === option.value
-                          ? 'text-primary-600 dark:text-primary-400'
+                          ? 'text-brand-600 dark:text-brand-400'
                           : 'text-slate-700 dark:text-slate-300'
                       )}
                     >
@@ -233,9 +249,9 @@ export function Header({ }: { fullWidth?: boolean }) {
               <div
                 className={clsx(
                   'w-8 h-8 rounded-full',
-                  'bg-primary-100 dark:bg-primary-900',
+                  'bg-brand-100 dark:bg-brand-900',
                   'flex items-center justify-center',
-                  'text-primary-600 dark:text-primary-400 font-medium text-sm'
+                  'text-brand-600 dark:text-brand-400 font-medium text-sm'
                 )}
               >
                 {user?.firstName?.[0]}{user?.lastName?.[0]}

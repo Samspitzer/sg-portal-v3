@@ -2,9 +2,6 @@ import { useState } from 'react';
 import { clsx } from 'clsx';
 import {
   Building2,
-  Globe,
-  Mail,
-  Phone,
   MapPin,
   Upload,
   Image,
@@ -15,48 +12,29 @@ import {
 } from 'lucide-react';
 import { Page } from '@/components/layout';
 import { Card, CardContent, Button, Input } from '@/components/common';
-
-interface CompanyInfo {
-  name: string;
-  website: string;
-  email: string;
-  phone: string;
-  address: {
-    street: string;
-    city: string;
-    state: string;
-    zip: string;
-    country: string;
-  };
-  logo: string | null;
-}
-
-const initialCompanyInfo: CompanyInfo = {
-  name: 'Spades & Ghosts Design LLC',
-  website: 'https://sgbsny.com',
-  email: 'info@sgbsny.com',
-  phone: '(555) 123-4567',
-  address: {
-    street: '123 Main Street',
-    city: 'New York',
-    state: 'NY',
-    zip: '10001',
-    country: 'United States',
-  },
-  logo: null,
-};
+import { useCompanyStore } from '@/contexts';
+import { useToast } from '@/contexts';
 
 export function CompanySettingsPage() {
-  const [companyInfo, setCompanyInfo] = useState<CompanyInfo>(initialCompanyInfo);
+  const { company, setCompany, } = useCompanyStore();
+  const toast = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
+  
+  // Local form state
+  const [formData, setFormData] = useState(company);
 
   const handleSave = async () => {
     setIsLoading(true);
     // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    
+    // Update the global store
+    setCompany(formData);
+    
     setIsLoading(false);
     setIsSaved(true);
+    toast.success('Settings saved', 'Company information has been updated');
     setTimeout(() => setIsSaved(false), 3000);
   };
 
@@ -65,14 +43,15 @@ export function CompanySettingsPage() {
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        setCompanyInfo({ ...companyInfo, logo: reader.result as string });
+        const logoData = reader.result as string;
+        setFormData({ ...formData, logo: logoData });
       };
       reader.readAsDataURL(file);
     }
   };
 
   const handleRemoveLogo = () => {
-    setCompanyInfo({ ...companyInfo, logo: null });
+    setFormData({ ...formData, logo: null });
   };
 
   return (
@@ -121,30 +100,30 @@ export function CompanySettingsPage() {
             <div className="space-y-4">
               <Input
                 label="Company Name"
-                value={companyInfo.name}
-                onChange={(e) => setCompanyInfo({ ...companyInfo, name: e.target.value })}
-                leftIcon={<Building2 className="w-4 h-4" />}
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="Enter company name"
               />
               <Input
                 label="Website"
                 type="url"
-                value={companyInfo.website}
-                onChange={(e) => setCompanyInfo({ ...companyInfo, website: e.target.value })}
-                leftIcon={<Globe className="w-4 h-4" />}
+                value={formData.website}
+                onChange={(e) => setFormData({ ...formData, website: e.target.value })}
+                placeholder="https://example.com"
               />
               <Input
                 label="Main Email"
                 type="email"
-                value={companyInfo.email}
-                onChange={(e) => setCompanyInfo({ ...companyInfo, email: e.target.value })}
-                leftIcon={<Mail className="w-4 h-4" />}
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                placeholder="info@example.com"
               />
               <Input
                 label="Phone"
                 type="tel"
-                value={companyInfo.phone}
-                onChange={(e) => setCompanyInfo({ ...companyInfo, phone: e.target.value })}
-                leftIcon={<Phone className="w-4 h-4" />}
+                value={formData.phone}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                placeholder="(555) 123-4567"
               />
             </div>
           </CardContent>
@@ -166,46 +145,51 @@ export function CompanySettingsPage() {
             <div className="space-y-4">
               <Input
                 label="Street Address"
-                value={companyInfo.address.street}
-                onChange={(e) => setCompanyInfo({
-                  ...companyInfo,
-                  address: { ...companyInfo.address, street: e.target.value }
+                value={formData.address.street}
+                onChange={(e) => setFormData({
+                  ...formData,
+                  address: { ...formData.address, street: e.target.value }
                 })}
+                placeholder="123 Main Street"
               />
               <div className="grid grid-cols-2 gap-4">
                 <Input
                   label="City"
-                  value={companyInfo.address.city}
-                  onChange={(e) => setCompanyInfo({
-                    ...companyInfo,
-                    address: { ...companyInfo.address, city: e.target.value }
+                  value={formData.address.city}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    address: { ...formData.address, city: e.target.value }
                   })}
+                  placeholder="New York"
                 />
                 <Input
                   label="State"
-                  value={companyInfo.address.state}
-                  onChange={(e) => setCompanyInfo({
-                    ...companyInfo,
-                    address: { ...companyInfo.address, state: e.target.value }
+                  value={formData.address.state}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    address: { ...formData.address, state: e.target.value }
                   })}
+                  placeholder="NY"
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <Input
                   label="ZIP Code"
-                  value={companyInfo.address.zip}
-                  onChange={(e) => setCompanyInfo({
-                    ...companyInfo,
-                    address: { ...companyInfo.address, zip: e.target.value }
+                  value={formData.address.zip}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    address: { ...formData.address, zip: e.target.value }
                   })}
+                  placeholder="10001"
                 />
                 <Input
                   label="Country"
-                  value={companyInfo.address.country}
-                  onChange={(e) => setCompanyInfo({
-                    ...companyInfo,
-                    address: { ...companyInfo.address, country: e.target.value }
+                  value={formData.address.country}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    address: { ...formData.address, country: e.target.value }
                   })}
+                  placeholder="United States"
                 />
               </div>
             </div>
@@ -229,13 +213,13 @@ export function CompanySettingsPage() {
               {/* Logo Preview */}
               <div className={clsx(
                 'w-32 h-32 rounded-xl border-2 border-dashed flex items-center justify-center',
-                companyInfo.logo
+                formData.logo
                   ? 'border-transparent'
                   : 'border-slate-300 dark:border-slate-700'
               )}>
-                {companyInfo.logo ? (
+                {formData.logo ? (
                   <img
-                    src={companyInfo.logo}
+                    src={formData.logo}
                     alt="Company Logo"
                     className="w-full h-full object-contain rounded-xl"
                   />
@@ -266,7 +250,7 @@ export function CompanySettingsPage() {
                       <span className="text-sm font-medium">Upload Logo</span>
                     </div>
                   </label>
-                  {companyInfo.logo && (
+                  {formData.logo && (
                     <Button variant="secondary" size="sm" onClick={handleRemoveLogo}>
                       <X className="w-4 h-4 mr-2" />
                       Remove Logo

@@ -11,7 +11,7 @@ import {
   Code,
   ArrowRight,
 } from 'lucide-react';
-import { useAuthStore } from '@/contexts/authStore';
+import { useAuthStore, useCompanyStore } from '@/contexts';
 import { Header } from '@/components/layout';
 
 interface ModuleCard {
@@ -84,6 +84,7 @@ const modules: ModuleCard[] = [
 export function LandingPage() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
+  const { company } = useCompanyStore();
 
   const firstName = user?.firstName || user?.displayName?.split(' ')[0] || 'there';
 
@@ -119,7 +120,7 @@ export function LandingPage() {
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={() => navigate('/dashboard')}
-                className="inline-flex items-center gap-2 px-6 py-2.5 bg-slate-800 dark:bg-primary-600 hover:bg-slate-700 dark:hover:bg-primary-700 text-white font-semibold rounded-xl transition-colors"
+                className="inline-flex items-center gap-2 px-6 py-2.5 bg-slate-800 dark:bg-brand-600 hover:bg-slate-700 dark:hover:bg-brand-700 text-white font-semibold rounded-xl transition-colors"
               >
                 <LayoutDashboard className="w-4 h-4" />
                 Open My Dashboard
@@ -168,7 +169,7 @@ export function LandingPage() {
                   
                   {/* Link at bottom */}
                   <div className="mt-auto pt-4">
-                    <span className="inline-flex items-center gap-1 text-xs font-medium text-primary-600 dark:text-primary-400">
+                    <span className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 dark:text-brand-400">
                       Open module
                       <ArrowRight className="w-3 h-3 group-hover:translate-x-1 transition-transform" />
                     </span>
@@ -182,7 +183,7 @@ export function LandingPage() {
         {/* Footer */}
         <footer className="flex-shrink-0 py-2 text-center border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
           <p className="text-xs text-slate-400 dark:text-slate-500">
-            © {new Date().getFullYear()} S&G Builders Supply
+            © {new Date().getFullYear()} {company.name || 'S&G Portal'}
           </p>
         </footer>
       </main>

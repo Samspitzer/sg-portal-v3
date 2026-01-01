@@ -13,7 +13,7 @@ import {
   Bell,
   Settings,
 } from 'lucide-react';
-import { useAuthStore, useUIStore, useToast, useUnsavedChangesStore } from '@/contexts';
+import { useAuthStore, useUIStore, useToast, useUnsavedChangesStore, useCompanyStore } from '@/contexts';
 import { PANELS } from '@/config/panels';
 
 export function PanelHeader() {
@@ -22,6 +22,7 @@ export function PanelHeader() {
   const { user, logout } = useAuthStore();
   const { theme, setTheme, toggleCommandPalette } = useUIStore();
   const { hasUnsavedChanges, showUnsavedModal } = useUnsavedChangesStore();
+  const { company } = useCompanyStore();
   const toast = useToast();
 
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
@@ -101,20 +102,27 @@ export function PanelHeader() {
         <div className="flex items-center gap-1">
           {/* Logo */}
           <button
-            onClick={() => safeNavigate('/')}
-            className={clsx(
-              'flex items-center gap-3 px-3 py-2 rounded-lg mr-2',
-              'hover:bg-slate-100 dark:hover:bg-slate-800',
-              'transition-colors'
-            )}
-          >
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center">
-              <span className="text-white font-bold text-xs">S&G</span>
-            </div>
-            <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 hidden sm:block">
-              Portal
-            </span>
-          </button>
+  onClick={() => safeNavigate('/')}
+  className={clsx(
+    'flex items-center gap-3 px-3 py-2 rounded-lg',
+    'transition-colors'
+  )}
+>
+  {company.logo ? (
+    <img 
+      src={company.logo} 
+      alt={company.name} 
+      className="h-12 w-auto max-w-[180px] object-contain"
+    />
+  ) : (
+    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center">
+      <span className="text-white font-bold text-xs">
+        {company.name.split(' ').map(w => w[0]).join('').slice(0, 3)}
+      </span>
+    </div>
+  )}
+  
+</button>
 
           {/* Divider */}
           <div className="h-6 w-px bg-slate-200 dark:bg-slate-700 mx-2" />

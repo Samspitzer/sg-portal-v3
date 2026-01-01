@@ -50,39 +50,8 @@ const initialFormData: UserFormData = {
   isActive: true,
 };
 
-// Mock data - replace with API calls later
-const mockUsers: User[] = [
-  {
-    id: '1',
-    name: 'John Smith',
-    email: 'john@sgbsny.com',
-    phone: '(555) 123-4567',
-    department: 'Operations',
-    position: 'Manager',
-    isActive: true,
-    createdAt: '2024-01-15',
-  },
-  {
-    id: '2',
-    name: 'Sarah Johnson',
-    email: 'sarah@sgbsny.com',
-    phone: '(555) 234-5678',
-    department: 'Accounting',
-    position: 'Accountant',
-    isActive: true,
-    createdAt: '2024-02-20',
-  },
-  {
-    id: '3',
-    name: 'Mike Williams',
-    email: 'mike@sgbsny.com',
-    phone: '(555) 345-6789',
-    department: 'Projects',
-    position: 'Project Manager',
-    isActive: false,
-    createdAt: '2024-03-10',
-  },
-];
+// Empty - will be populated from API later
+const mockUsers: User[] = [];
 
 const DEPARTMENTS = [
   'Operations',
