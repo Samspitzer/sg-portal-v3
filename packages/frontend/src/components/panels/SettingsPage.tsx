@@ -108,7 +108,7 @@ export function SettingsPage() {
   ];
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-4xl mx-auto p-6 pt-8">
       {/* Page Header */}
       <div className="mb-6 pb-4 border-b border-slate-200 dark:border-slate-700">
         <div className="flex items-center justify-between">

@@ -70,7 +70,7 @@ export function Header({ }: { fullWidth?: boolean }) {
         'fixed top-0 left-0 right-0 z-40',
         'bg-white dark:bg-slate-900',
         'border-b border-slate-200 dark:border-slate-800',
-        'shadow-sm'
+        'shadow-md shadow-slate-300/50 dark:shadow-slate-900/50'
       )}
     >
       <div className="h-full flex items-center justify-between px-4">

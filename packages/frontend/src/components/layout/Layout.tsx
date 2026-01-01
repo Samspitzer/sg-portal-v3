@@ -17,7 +17,7 @@ export function Layout({ children }: LayoutProps) {
         style={{ paddingTop: 'var(--header-height)' }}
         className="min-h-screen"
       >
-        <div className="p-6">{children}</div>
+        {children}
       </main>
     </div>
   );
@@ -25,6 +25,7 @@ export function Layout({ children }: LayoutProps) {
 
 /**
  * Page wrapper component for consistent page layout
+ * Use this for pages WITHOUT a SideRibbon (like Profile, Settings)
  */
 interface PageProps {
   title: string;
@@ -36,7 +37,7 @@ interface PageProps {
 
 export function Page({ title, description, actions, children, className }: PageProps) {
   return (
-    <div className={clsx('space-y-6', className)}>
+    <div className={clsx('p-6 space-y-6', className)}>
       {/* Page header */}
       <div className="flex items-start justify-between gap-4">
         <div>

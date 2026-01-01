@@ -2,7 +2,15 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { MsalProvider } from '@azure/msal-react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { msalInstance } from '@/services/auth';
-import { Layout, AuthGuard } from '@/components/layout';
+import { 
+  Layout, 
+  AuthGuard,
+  AccountingLayout,
+  ProjectsLayout,
+  EstimatingLayout,
+  CustomersLayout,
+  AdminLayout,
+} from '@/components/layout';
 import { ToastContainer } from '@/components/common';
 import { UnsavedChangesModal } from '@/components/ui/UnsavedChangesModal';
 import { NavigationBlocker } from '@/components/ui/NavigationBlocker';
@@ -55,66 +63,92 @@ function AppRoutes() {
             </AuthGuard>
           }
         />
+        
+        {/* Customers Panel */}
         <Route
           path="/clients/*"
           element={
             <AuthGuard requiredPermission="customers:view">
               <Layout>
-                <ClientsPage />
+                <CustomersLayout>
+                  <ClientsPage />
+                </CustomersLayout>
               </Layout>
             </AuthGuard>
           }
         />
+        
+        {/* Projects Panel */}
         <Route
           path="/projects/*"
           element={
             <AuthGuard requiredPermission="projects:view">
               <Layout>
-                <ProjectsPage />
+                <ProjectsLayout>
+                  <ProjectsPage />
+                </ProjectsLayout>
               </Layout>
             </AuthGuard>
           }
         />
+        
+        {/* Estimating Panel */}
         <Route
           path="/estimates/*"
           element={
             <AuthGuard requiredPermission="estimating:view">
               <Layout>
-                <EstimatesPage />
+                <EstimatingLayout>
+                  <EstimatesPage />
+                </EstimatingLayout>
               </Layout>
             </AuthGuard>
           }
         />
+        
+        {/* Accounting Panel - Invoices */}
         <Route
           path="/invoices/*"
           element={
             <AuthGuard requiredPermission="accounting:view">
               <Layout>
-                <InvoicesPage />
+                <AccountingLayout>
+                  <InvoicesPage />
+                </AccountingLayout>
               </Layout>
             </AuthGuard>
           }
         />
+        
+        {/* Accounting Panel - Main */}
         <Route
           path="/accounting/*"
           element={
             <AuthGuard requiredPermission="accounting:view">
               <Layout>
-                <AccountingPage />
+                <AccountingLayout>
+                  <AccountingPage />
+                </AccountingLayout>
               </Layout>
             </AuthGuard>
           }
         />
+        
+        {/* Admin Panel */}
         <Route
           path="/admin/*"
           element={
             <AuthGuard requiredPermission="admin:view">
               <Layout>
-                <AdminPage />
+                <AdminLayout>
+                  <AdminPage />
+                </AdminLayout>
               </Layout>
             </AuthGuard>
           }
         />
+        
+        {/* Developer - no side ribbon for now */}
         <Route
           path="/developer/*"
           element={
@@ -125,6 +159,8 @@ function AppRoutes() {
             </AuthGuard>
           }
         />
+        
+        {/* Profile - no side ribbon */}
         <Route
           path="/profile"
           element={
@@ -135,6 +171,8 @@ function AppRoutes() {
             </AuthGuard>
           }
         />
+        
+        {/* Settings - no side ribbon */}
         <Route
           path="/settings"
           element={
@@ -145,6 +183,7 @@ function AppRoutes() {
             </AuthGuard>
           }
         />
+        
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </>

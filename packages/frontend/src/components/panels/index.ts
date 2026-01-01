@@ -5,10 +5,10 @@ export { ClientsPage } from './ClientsPage';
 export { ProjectsPage } from './ProjectsPage';
 export { EstimatesPage } from './EstimatesPage';
 export { InvoicesPage } from './InvoicesPage';
+export { AdminPage } from './AdminPage';
 export { ProfilePage } from './ProfilePage';
 export { SettingsPage } from './SettingsPage';
 export {
   AccountingPage,
-  AdminPage,
   DeveloperPage,
 } from './PlaceholderPages';

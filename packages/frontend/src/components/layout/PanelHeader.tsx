@@ -14,7 +14,7 @@ import {
   Settings,
 } from 'lucide-react';
 import { useAuthStore, useUIStore, useToast, useUnsavedChangesStore } from '@/contexts';
-import { panelNavigation } from '@/config/navigation';
+import { PANELS } from '@/config/panels';
 
 export function PanelHeader() {
   const navigate = useNavigate();
@@ -83,6 +83,9 @@ export function PanelHeader() {
 
   const CurrentThemeIcon = theme === 'dark' ? Moon : theme === 'light' ? Sun : Monitor;
 
+  // Convert PANELS object to array for mapping
+  const panels = Object.values(PANELS);
+
   return (
     <header
       style={{ height: 'var(--header-height)' }}
@@ -90,7 +93,7 @@ export function PanelHeader() {
         'fixed top-0 left-0 right-0 z-40',
         'bg-white dark:bg-slate-900',
         'border-b border-slate-200 dark:border-slate-800',
-        'shadow-sm'
+        'shadow-md shadow-slate-300/50 dark:shadow-slate-900/50'
       )}
     >
       <div className="h-full flex items-center justify-between px-4">
@@ -117,85 +120,89 @@ export function PanelHeader() {
           <div className="h-6 w-px bg-slate-200 dark:bg-slate-700 mx-2" />
 
           {/* Navigation Items */}
-          {panelNavigation.map((item) => (
-            <div
-              key={item.id}
-              ref={(el) => (dropdownRefs.current[item.id] = el)}
-              className="relative flex items-center"
-            >
-              {/* Panel Name - Clickable to navigate */}
-              <button
-                onClick={() => {
-                  safeNavigate(item.path);
-                  setOpenDropdown(null);
-                }}
-                className={clsx(
-                  'flex items-center gap-2 pl-3 py-2 rounded-lg text-sm font-medium transition-colors',
-                  item.items.length > 0 ? 'pr-1 rounded-r-none' : 'pr-3',
-                  location.pathname.startsWith(item.path)
-                    ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
-                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-                )}
+          {panels.map((panel) => {
+            const PanelIcon = panel.icon;
+            
+            return (
+              <div
+                key={panel.id}
+                ref={(el) => (dropdownRefs.current[panel.id] = el)}
+                className="relative flex items-center"
               >
-                <item.icon className="w-4 h-4" />
-                <span className="hidden md:inline">{item.name}</span>
-              </button>
-
-              {/* Dropdown Arrow - Only shows if panel has sidebar items */}
-              {item.items.length > 0 && (
+                {/* Panel Name - Clickable to navigate */}
                 <button
-                  onClick={() => setOpenDropdown(openDropdown === item.id ? null : item.id)}
+                  onClick={() => {
+                    safeNavigate(panel.basePath);
+                    setOpenDropdown(null);
+                  }}
                   className={clsx(
-                    'flex items-center px-1 py-2 rounded-r-lg transition-colors',
-                    location.pathname.startsWith(item.path)
-                      ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/50'
+                    'flex items-center gap-2 pl-3 py-2 rounded-lg text-sm font-medium transition-colors',
+                    panel.tiles.length > 0 ? 'pr-1 rounded-r-none' : 'pr-3',
+                    location.pathname.startsWith(panel.basePath)
+                      ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
                       : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                   )}
                 >
-                  <ChevronDown className={clsx(
-                    'w-4 h-4 transition-transform',
-                    openDropdown === item.id && 'rotate-180'
-                  )} />
+                  <PanelIcon className="w-4 h-4" />
+                  <span className="hidden md:inline">{panel.name}</span>
                 </button>
-              )}
 
-              <AnimatePresence>
-                {openDropdown === item.id && item.items.length > 0 && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 10 }}
+                {/* Dropdown Arrow - Only shows if panel has tiles */}
+                {panel.tiles.length > 0 && (
+                  <button
+                    onClick={() => setOpenDropdown(openDropdown === panel.id ? null : panel.id)}
                     className={clsx(
-                      'absolute left-0 top-full mt-1',
-                      'w-56 py-2',
-                      'bg-white dark:bg-slate-800',
-                      'rounded-lg shadow-lg',
-                      'border border-slate-200 dark:border-slate-700'
+                      'flex items-center px-1 py-2 rounded-r-lg transition-colors',
+                      location.pathname.startsWith(panel.basePath)
+                        ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/50'
+                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                     )}
                   >
-                    {item.items.map((subItem) => (
-                      <button
-                        key={subItem.path}
-                        onClick={() => {
-                          safeNavigate(subItem.path);
-                          setOpenDropdown(null);
-                        }}
-                        className={clsx(
-                          'w-full flex items-center gap-3 px-4 py-2 text-sm',
-                          'text-slate-700 dark:text-slate-300',
-                          'hover:bg-slate-100 dark:hover:bg-slate-700',
-                          location.pathname === subItem.path && 'bg-slate-100 dark:bg-slate-700'
-                        )}
-                      >
-                        <subItem.icon className="w-4 h-4" />
-                        {subItem.name}
-                      </button>
-                    ))}
-                  </motion.div>
+                    <ChevronDown className={clsx(
+                      'w-4 h-4 transition-transform',
+                      openDropdown === panel.id && 'rotate-180'
+                    )} />
+                  </button>
                 )}
-              </AnimatePresence>
-            </div>
-          ))}
+
+                <AnimatePresence>
+                  {openDropdown === panel.id && panel.tiles.length > 0 && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 10 }}
+                      className={clsx(
+                        'absolute left-0 top-full mt-1',
+                        'w-56 py-2',
+                        'bg-white dark:bg-slate-800',
+                        'rounded-lg shadow-lg',
+                        'border border-slate-200 dark:border-slate-700'
+                      )}
+                    >
+                      {panel.tiles.map((tile) => (
+                        <button
+                          key={tile.path}
+                          onClick={() => {
+                            safeNavigate(tile.path);
+                            setOpenDropdown(null);
+                          }}
+                          className={clsx(
+                            'w-full flex items-center gap-3 px-4 py-2 text-sm',
+                            'text-slate-700 dark:text-slate-300',
+                            'hover:bg-slate-100 dark:hover:bg-slate-700',
+                            location.pathname === tile.path && 'bg-slate-100 dark:bg-slate-700'
+                          )}
+                        >
+                          <tile.icon className="w-4 h-4" />
+                          {tile.name}
+                        </button>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            );
+          })}
         </div>
 
         {/* Right - Search, Theme, Notifications, User */}
