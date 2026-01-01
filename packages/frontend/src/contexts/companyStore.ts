@@ -14,12 +14,14 @@ export interface CompanySettings {
     country: string;
   };
   logo: string | null;
+  letterhead: string | null; // Base64 image/PDF
 }
 
 interface CompanyStore {
   company: CompanySettings;
   setCompany: (company: Partial<CompanySettings>) => void;
   setLogo: (logo: string | null) => void;
+  setLetterhead: (letterhead: string | null) => void;
   resetCompany: () => void;
 }
 
@@ -36,6 +38,7 @@ const defaultCompany: CompanySettings = {
     country: '',
   },
   logo: null,
+  letterhead: null,
 };
 
 export const useCompanyStore = create<CompanyStore>()(
@@ -49,6 +52,10 @@ export const useCompanyStore = create<CompanyStore>()(
       setLogo: (logo) =>
         set((state) => ({
           company: { ...state.company, logo },
+        })),
+      setLetterhead: (letterhead) =>
+        set((state) => ({
+          company: { ...state.company, letterhead },
         })),
       resetCompany: () => set({ company: defaultCompany }),
     }),
