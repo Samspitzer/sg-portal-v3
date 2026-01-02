@@ -50,7 +50,7 @@ export function LoginPage() {
         <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl p-8 border border-slate-200 dark:border-slate-700">
           {/* Logo */}
           <div className="text-center mb-8">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center mx-auto mb-4 shadow-lg">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center mx-auto mb-4 shadow-lg">
               <span className="text-white font-bold text-2xl">S&G</span>
             </div>
             <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
@@ -58,6 +58,13 @@ export function LoginPage() {
             </h1>
             <p className="text-slate-500 dark:text-slate-400 mt-1">
               Enterprise Management System
+            </p>
+          </div>
+
+          {/* Dev Mode Notice */}
+          <div className="mb-6 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+            <p className="text-xs text-amber-700 dark:text-amber-400 text-center">
+              🔧 Development Mode - No password required
             </p>
           </div>
 
@@ -70,8 +77,7 @@ export function LoginPage() {
             className={clsx(
               'w-full flex items-center justify-center gap-3',
               'px-6 py-4 rounded-xl',
-              'bg-slate-900 dark:bg-primary-600',
-              'hover:bg-slate-800 dark:hover:bg-primary-700',
+              'bg-brand-600 hover:bg-brand-700',
               'text-white font-semibold',
               'transition-colors',
               'disabled:opacity-50 disabled:cursor-not-allowed',
@@ -86,7 +92,7 @@ export function LoginPage() {
             ) : (
               <>
                 <LogIn className="w-5 h-5" />
-                Sign in with Microsoft
+                Sign in as Admin
               </>
             )}
           </motion.button>
@@ -94,7 +100,7 @@ export function LoginPage() {
           {/* Security note */}
           <div className="mt-6 flex items-center justify-center gap-2 text-xs text-slate-400 dark:text-slate-500">
             <Shield className="w-4 h-4" />
-            <span>Secured with Azure Active Directory</span>
+            <span>SSO will be enabled for production</span>
           </div>
         </div>
 

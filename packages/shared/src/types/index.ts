@@ -28,27 +28,41 @@ export type UserRole =
   | 'viewer';
 
 export type Permission =
+  // Dashboard
   | 'dashboard:view'
   | 'dashboard:edit'
-  | 'accounting:view'
-  | 'accounting:edit'
-  | 'accounting:approve'
-  | 'projects:view'
-  | 'projects:create'
-  | 'projects:edit'
-  | 'projects:delete'
-  | 'estimating:view'
-  | 'estimating:create'
-  | 'estimating:edit'
+  // Customers
   | 'customers:view'
   | 'customers:create'
   | 'customers:edit'
   | 'customers:delete'
+  // Projects
+  | 'projects:view'
+  | 'projects:create'
+  | 'projects:edit'
+  | 'projects:delete'
+  // Estimating
+  | 'estimating:view'
+  | 'estimating:create'
+  | 'estimating:edit'
+  | 'estimating:delete'
+  | 'estimating:approve'
+  // Accounting
+  | 'accounting:view'
+  | 'accounting:create'
+  | 'accounting:edit'
+  | 'accounting:delete'
+  | 'accounting:approve'
+  | 'accounting:payments'
+  // Admin
   | 'admin:view'
-  | 'admin:manage_users'
-  | 'admin:manage_settings'
+  | 'admin:users'
+  | 'admin:roles'
+  | 'admin:departments'
+  | 'admin:company'
+  // Developer
   | 'developer:view'
-  | 'developer:manage';
+  | 'developer:manage';;
 
 export interface AuthState {
   user: User | null;
