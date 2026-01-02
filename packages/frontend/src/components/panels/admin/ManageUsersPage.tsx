@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { Page } from '@/components/layout';
 import { Card, CardContent, Button, Input, Modal, ConfirmModal } from '@/components/common';
-import { useToast } from '@/contexts';
+import { useToast, useDepartmentsStore } from '@/contexts';
 import { useFormChanges } from '@/hooks';
 
 // Types
@@ -27,8 +27,8 @@ interface User {
   name: string;
   email: string;
   phone: string;
-  department: string;
-  position: string;
+  departmentId: string;
+  positionId: string;
   isActive: boolean;
   createdAt: string;
 }
@@ -37,8 +37,8 @@ interface UserFormData {
   name: string;
   email: string;
   phone: string;
-  department: string;
-  position: string;
+  departmentId: string;
+  positionId: string;
   isActive: boolean;
 }
 
@@ -46,33 +46,13 @@ const initialFormData: UserFormData = {
   name: '',
   email: '',
   phone: '',
-  department: '',
-  position: '',
+  departmentId: '',
+  positionId: '',
   isActive: true,
 };
 
 // Empty - will be populated from API later
 const mockUsers: User[] = [];
-
-const DEPARTMENTS = [
-  'Operations',
-  'Accounting',
-  'Projects',
-  'Estimating',
-  'Sales',
-  'Administration',
-];
-
-const POSITIONS = [
-  'Manager',
-  'Supervisor',
-  'Accountant',
-  'Project Manager',
-  'Estimator',
-  'Sales Representative',
-  'Administrator',
-  'Assistant',
-];
 
 // User Modal Component
 function UserModal({
@@ -89,15 +69,16 @@ function UserModal({
   isLoading: boolean;
 }) {
   const toast = useToast();
-  
-  const getInitialData = (): UserFormData => {
+  const { departments } = useDepartmentsStore();
+
+ const getInitialData = (): UserFormData => {
     if (user) {
       return {
         name: user.name,
         email: user.email,
         phone: user.phone,
-        department: user.department,
-        position: user.position,
+        departmentId: user.departmentId,
+        positionId: user.positionId,
         isActive: user.isActive,
       };
     }
@@ -106,6 +87,10 @@ function UserModal({
 
   const { formData, setFormData, hasChanges, resetForm, initializeForm } = useFormChanges<UserFormData>(getInitialData());
 
+  // Get positions for selected department
+  const selectedDepartment = departments.find(d => d.id === formData.departmentId);
+  const availablePositions = selectedDepartment?.positions || [];
+
   // Reset form when user changes or modal opens
   useEffect(() => {
     if (isOpen) {
@@ -113,13 +98,32 @@ function UserModal({
     }
   }, [isOpen, user]);
 
+  // Reset position when department changes (if position not in new department)
+  useEffect(() => {
+    if (formData.departmentId && formData.positionId) {
+      const positionExists = availablePositions.some(p => p.id === formData.positionId);
+      if (!positionExists) {
+        setFormData({ ...formData, positionId: '' });
+      }
+    }
+  }, [formData.departmentId]);
+
   const handleSubmit = async () => {
+    if (!formData.name || !formData.email) {
+      toast.error('Error', 'Name and email are required');
+      return;
+    }
     onSave(formData);
     toast.success('Saved', user ? 'User updated successfully' : 'User added successfully');
   };
 
   const handleDiscard = () => {
     resetForm();
+  };
+
+  const handleDepartmentChange = (deptId: string) => {
+    // Reset position when department changes
+    setFormData({ ...formData, departmentId: deptId, positionId: '' });
   };
 
   return (
@@ -136,9 +140,9 @@ function UserModal({
           <Button type="button" variant="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button 
-            type="button" 
-            variant="primary" 
+          <Button
+            type="button"
+            variant="primary"
             onClick={handleSubmit}
             disabled={isLoading || !formData.name || !formData.email}
           >
@@ -187,10 +191,10 @@ function UserModal({
           </div>
         </div>
 
-        {/* Account Settings */}
+        {/* Department & Position */}
         <div>
           <h3 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-4">
-            Account Settings
+            Department & Position
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -198,59 +202,78 @@ function UserModal({
                 Department
               </label>
               <select
-                value={formData.department}
-                onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                value={formData.departmentId}
+                onChange={(e) => handleDepartmentChange(e.target.value)}
                 className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg
                   bg-white dark:bg-slate-800 text-slate-900 dark:text-white
                   focus:outline-none focus:ring-2 focus:ring-brand-500"
               >
                 <option value="">Select Department</option>
-                {DEPARTMENTS.map((dept) => (
-                  <option key={dept} value={dept}>{dept}</option>
+                {departments.map((dept) => (
+                  <option key={dept.id} value={dept.id}>{dept.name}</option>
                 ))}
               </select>
+              {departments.length === 0 && (
+                <p className="text-xs text-slate-400 mt-1">
+                  No departments available. <a href="/admin/departments" className="text-brand-500 hover:underline">Add departments</a>
+                </p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                 Position
               </label>
               <select
-                value={formData.position}
-                onChange={(e) => setFormData({ ...formData, position: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg
-                  bg-white dark:bg-slate-800 text-slate-900 dark:text-white
-                  focus:outline-none focus:ring-2 focus:ring-brand-500"
+                value={formData.positionId}
+                onChange={(e) => setFormData({ ...formData, positionId: e.target.value })}
+                disabled={!formData.departmentId}
+                className={clsx(
+                  "w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg",
+                  "bg-white dark:bg-slate-800 text-slate-900 dark:text-white",
+                  "focus:outline-none focus:ring-2 focus:ring-brand-500",
+                  !formData.departmentId && "opacity-50 cursor-not-allowed"
+                )}
               >
-                <option value="">Select Position</option>
-                {POSITIONS.map((pos) => (
-                  <option key={pos} value={pos}>{pos}</option>
+                <option value="">
+                  {formData.departmentId ? 'Select Position' : 'Select a department first'}
+                </option>
+                {availablePositions.map((pos) => (
+                  <option key={pos.id} value={pos.id}>{pos.name}</option>
                 ))}
               </select>
+              {formData.departmentId && availablePositions.length === 0 && (
+                <p className="text-xs text-slate-400 mt-1">
+                  No positions in this department. <a href="/admin/departments" className="text-brand-500 hover:underline">Add positions</a>
+                </p>
+              )}
             </div>
           </div>
+        </div>
 
-          {/* Active Toggle */}
-          <div className="mt-4">
-            <label className="flex items-center gap-3 cursor-pointer">
+       {/* Status */}
+        <div>
+          <h3 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-4">
+            Status
+          </h3>
+          <label className="flex items-center gap-3 cursor-pointer">
+            <div
+              className={clsx(
+                'w-11 h-6 rounded-full transition-colors relative cursor-pointer',
+                formData.isActive ? 'bg-brand-500' : 'bg-slate-300 dark:bg-slate-600'
+              )}
+              onClick={() => setFormData({ ...formData, isActive: !formData.isActive })}
+            >
               <div
                 className={clsx(
-                  'w-11 h-6 rounded-full transition-colors relative cursor-pointer',
-                  formData.isActive ? 'bg-brand-500' : 'bg-slate-300 dark:bg-slate-600'
+                  'absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform left-0.5',
+                  formData.isActive && 'translate-x-[22px]'
                 )}
-                onClick={() => setFormData({ ...formData, isActive: !formData.isActive })}
-              >
-                <div
-                  className={clsx(
-                    'absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform left-0.5',
-                    formData.isActive && 'translate-x-[22px]'
-                  )}
-                />
-              </div>
-              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                {formData.isActive ? 'Active' : 'Inactive'}
-              </span>
-            </label>
-          </div>
+              />
+            </div>
+            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+              {formData.isActive ? 'Active' : 'Inactive'}
+            </span>
+          </label>
         </div>
 
         {/* Permission Overrides - Placeholder */}
@@ -292,7 +315,14 @@ function UserCard({
   onToggleActive: () => void;
 }) {
   const [showMenu, setShowMenu] = useState(false);
+  const { departments } = useDepartmentsStore();
 
+  // Get display names
+  const department = departments.find(d => d.id === user.departmentId);
+  const position = department?.positions.find(p => p.id === user.positionId);
+
+  const displayPosition = position?.name || 'No Position';
+  const displayDepartment = department?.name || 'No Department';
   return (
     <Card hover className="relative">
       <CardContent className="p-5">
@@ -311,7 +341,7 @@ function UserCard({
                 {user.name}
               </h3>
               <p className="text-sm text-slate-500 dark:text-slate-400">
-                {user.position} • {user.department}
+                {displayPosition} • {displayDepartment}
               </p>
             </div>
           </div>
@@ -418,8 +448,8 @@ export function ManageUsersPage() {
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [users, setUsers] = useState<User[]>(mockUsers);
   const [isLoading, setIsLoading] = useState(false);
-const [userToDelete, setUserToDelete] = useState<User | null>(null);
-const toast = useToast();
+  const [userToDelete, setUserToDelete] = useState<User | null>(null);
+  const toast = useToast();
 
   // Filter users
   const filteredUsers = users.filter((user) => {
@@ -453,16 +483,16 @@ const toast = useToast();
   };
 
   const handleDelete = (user: User) => {
-  setUserToDelete(user);
-};
+    setUserToDelete(user);
+  };
 
-const confirmDelete = () => {
-  if (userToDelete) {
-    setUsers(users.filter(u => u.id !== userToDelete.id));
-    toast.success('Deleted', `${userToDelete.name} has been removed`);
-    setUserToDelete(null);
-  }
-};
+  const confirmDelete = () => {
+    if (userToDelete) {
+      setUsers(users.filter(u => u.id !== userToDelete.id));
+      toast.success('Deleted', `${userToDelete.name} has been removed`);
+      setUserToDelete(null);
+    }
+  };
 
   const handleToggleActive = (user: User) => {
     setUsers(users.map(u => u.id === user.id ? { ...u, isActive: !u.isActive } : u));

@@ -130,15 +130,28 @@ export function Modal({
     [closeOnEscape, handleClose, showUnsavedWarning]
   );
 
-  // Set up event listeners and focus management
+  // Track if modal was just opened (for initial focus)
+  const justOpened = useRef(false);
+
+  // Set up event listeners
   useEffect(() => {
     if (isOpen) {
-      // Store the previously focused element
-      previousActiveElement.current = document.activeElement as HTMLElement;
-      
-      // Add keydown listener
       document.addEventListener('keydown', handleKeyDown);
       document.body.style.overflow = 'hidden';
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = '';
+    };
+  }, [isOpen, handleKeyDown]);
+
+  // Handle initial focus only when modal opens (not on every re-render)
+  useEffect(() => {
+    if (isOpen && !justOpened.current) {
+      justOpened.current = true;
+      // Store the previously focused element
+      previousActiveElement.current = document.activeElement as HTMLElement;
 
       // Focus the first focusable element in the modal
       setTimeout(() => {
@@ -153,17 +166,15 @@ export function Modal({
         }
       }, 50);
     }
-
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-      document.body.style.overflow = '';
-      
+    
+    if (!isOpen) {
+      justOpened.current = false;
       // Restore focus to the previously focused element
-      if (previousActiveElement.current && !isOpen) {
+      if (previousActiveElement.current) {
         previousActiveElement.current.focus();
       }
-    };
-  }, [isOpen, handleKeyDown]);
+    }
+  }, [isOpen]);
 
   // Reset unsaved warning when modal closes
   useEffect(() => {
