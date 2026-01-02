@@ -3,3 +3,4 @@ export { Input } from './Input';
 export { Card, CardHeader, CardContent, CardFooter } from './Card';
 export { Modal, ConfirmModal } from './Modal';
 export { ToastContainer } from './Toast';
+export { PageNavigationGuard } from './PageNavigationGuard';

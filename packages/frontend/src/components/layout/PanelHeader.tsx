@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
+import { useSafeNavigate } from '@/hooks';
 import { motion, AnimatePresence } from 'framer-motion';
 import { clsx } from 'clsx';
 import {
@@ -17,7 +18,7 @@ import { useAuthStore, useUIStore, useToast, useCompanyStore } from '@/contexts'
 import { PANELS } from '@/config/panels';
 
 export function PanelHeader() {
-  const navigate = useNavigate();
+  const navigate = useSafeNavigate(); 
   const location = useLocation();
   const { user, logout } = useAuthStore();
   const { theme, setTheme, toggleCommandPalette } = useUIStore();

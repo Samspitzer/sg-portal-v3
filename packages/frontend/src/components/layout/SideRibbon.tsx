@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { clsx } from 'clsx';
 import { ChevronLeft, ChevronRight, LayoutDashboard } from 'lucide-react';
 import { getPanel } from '@/config/panels';
+import { useSafeNavigate } from '@/hooks';
 import type { LucideIcon } from 'lucide-react';
 
 interface SideRibbonProps {
@@ -103,13 +104,13 @@ export function SideRibbon({ panelId, className }: SideRibbonProps) {
       </nav>
 
       {/* Panel Info Footer */}
-{!isCollapsed && (
-  <div className="p-3 border-t border-slate-200 dark:border-slate-700">
-    <p className="text-xs font-medium text-slate-1000 dark:text-slate-400">
-      {panel.name} Panel
-    </p>
-  </div>
-)}
+      {!isCollapsed && (
+        <div className="p-3 border-t border-slate-200 dark:border-slate-700">
+          <p className="text-xs font-medium text-slate-1000 dark:text-slate-400">
+            {panel.name} Panel
+          </p>
+        </div>
+      )}
     </motion.aside>
   );
 }
@@ -123,13 +124,14 @@ interface SideRibbonItemProps {
 
 function SideRibbonItem({ tile, isCollapsed, isActive }: SideRibbonItemProps) {
   const Icon = tile.icon;
+  const navigate = useSafeNavigate();
 
   return (
     <li>
-      <NavLink
-        to={tile.path}
+      <button
+        onClick={() => navigate(tile.path)}
         className={clsx(
-          'flex items-center gap-3 px-3 py-2.5 rounded-lg',
+          'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg',
           'transition-all duration-150',
           isActive
             ? 'bg-brand-500 text-white shadow-md shadow-brand-500/25'
@@ -153,7 +155,7 @@ function SideRibbonItem({ tile, isCollapsed, isActive }: SideRibbonItemProps) {
             </motion.span>
           )}
         </AnimatePresence>
-      </NavLink>
+      </button>
     </li>
   );
 }

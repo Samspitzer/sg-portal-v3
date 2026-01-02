@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { clsx } from 'clsx';
 import {
@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { useUIStore, useToast } from '@/contexts';
 import { Modal } from '@/components/common';
+import { useNavigationGuard } from '@/hooks';
 
 type ThemeOption = 'light' | 'dark' | 'system';
 
@@ -30,19 +31,6 @@ export function SettingsPage() {
   
   const hasChanges = currentSettings.theme !== originalSettings.theme;
 
-  // Warn on browser close/refresh
-  useEffect(() => {
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (hasChanges) {
-        e.preventDefault();
-        e.returnValue = '';
-      }
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [hasChanges]);
-
   const handleThemeSelect = (newTheme: ThemeOption) => {
     setCurrentSettings({ ...currentSettings, theme: newTheme });
     // Preview the theme immediately
@@ -57,8 +45,14 @@ export function SettingsPage() {
   const handleDiscard = () => {
     setTheme(originalSettings.theme);
     setCurrentSettings(originalSettings);
-    toast.info('Changes discarded', 'Your changes were not saved');
   };
+
+  // Register navigation guard (it handles everything via the global store)
+  useNavigationGuard({
+    hasChanges,
+    onSave: handleSave,
+    onDiscard: handleDiscard,
+  });
 
   const themeOptions = [
     {

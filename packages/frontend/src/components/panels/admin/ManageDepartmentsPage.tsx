@@ -175,12 +175,12 @@ export function ManageDepartmentsPage() {
               transition={{ delay: index * 0.03 }}
             >
               <Card
-                hover
-                className="cursor-pointer"
-                onClick={() => openDeptModal(dept)}
+              hover
+              className="cursor-pointer h-full"
+              onClick={() => openDeptModal(dept)}
               >
-                <CardContent className="p-4">
-                  <div className="flex flex-col items-center text-center">
+  <CardContent className="p-4 h-full">
+    <div className="flex flex-col items-center text-center h-full justify-center min-h-[120px]">
                     <div className="w-12 h-12 rounded-xl bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center mb-3">
                       <Building2 className="w-6 h-6 text-brand-600 dark:text-brand-400" />
                     </div>
@@ -204,11 +204,11 @@ export function ManageDepartmentsPage() {
           >
             <Card
               hover
-              className="cursor-pointer border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-brand-400 dark:hover:border-brand-500"
+              className="cursor-pointer h-full border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-brand-400 dark:hover:border-brand-500"
               onClick={() => { setDeptNameValue(''); setShowAddDeptModal(true); }}
             >
-              <CardContent className="p-4">
-                <div className="flex flex-col items-center text-center">
+              <CardContent className="p-4 h-full">
+                <div className="flex flex-col items-center text-center h-full justify-center min-h-[120px]">
                   <div className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-3">
                     <Plus className="w-6 h-6 text-slate-400 dark:text-slate-500" />
                   </div>
@@ -413,6 +413,12 @@ export function ManageDepartmentsPage() {
         onClose={() => { setShowAddDeptModal(false); setDeptNameValue(''); }}
         title="Add Department"
         size="sm"
+        hasUnsavedChanges={deptNameValue.trim().length > 0}
+        onSaveChanges={handleAddDepartment}
+        onDiscardChanges={() => {
+          setDeptNameValue('');
+          setShowAddDeptModal(false);
+        }}
         footer={
           <>
             <Button variant="secondary" onClick={() => { setShowAddDeptModal(false); setDeptNameValue(''); }}>

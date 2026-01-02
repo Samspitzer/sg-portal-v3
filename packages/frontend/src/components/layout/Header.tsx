@@ -1,5 +1,4 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { clsx } from 'clsx';
 import {
@@ -14,9 +13,10 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { useAuthStore, useUIStore, useToast, useCompanyStore } from '@/contexts';
+import { useSafeNavigate } from '@/hooks';
 
 export function Header({ }: { fullWidth?: boolean }) {
-  const navigate = useNavigate();
+  const navigate = useSafeNavigate();
   const { user, logout } = useAuthStore();
   const { theme, setTheme, toggleCommandPalette } = useUIStore();
   const { company } = useCompanyStore();
@@ -94,21 +94,20 @@ export function Header({ }: { fullWidth?: boolean }) {
           >
             {/* Company Logo */}
             {company.logo ? (
-  <div className="bg-white rounded-xl">
-    <img 
-      src={company.logo} 
-      alt={company.name} 
-      className="h-12 w-auto max-w-[180px] object-contain"
-    />
-  </div>
-) : (
-  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center">
-    <span className="text-white font-bold text-xs">{companyInitials}</span>
-  </div>
-)}
-
-</button>
-</div>
+              <div className="bg-white rounded-xl">
+                <img 
+                  src={company.logo} 
+                  alt={company.name} 
+                  className="h-12 w-auto max-w-[180px] object-contain"
+                />
+              </div>
+            ) : (
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center">
+                <span className="text-white font-bold text-xs">{companyInitials}</span>
+              </div>
+            )}
+          </button>
+        </div>
 
         {/* Center - Search */}
         <div className="flex-1 max-w-xl mx-4">

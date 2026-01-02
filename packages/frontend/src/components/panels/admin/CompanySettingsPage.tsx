@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { clsx } from 'clsx';
 import {
   Building2,
@@ -14,6 +14,7 @@ import {
 import { Page } from '@/components/layout';
 import { Card, CardContent, Button, Input, Modal } from '@/components/common';
 import { useCompanyStore, useToast } from '@/contexts';
+import { useNavigationGuard } from '@/hooks';
 
 export function CompanySettingsPage() {
   const { company, setCompany } = useCompanyStore();
@@ -28,19 +29,6 @@ export function CompanySettingsPage() {
   // Check if there are unsaved changes
   const hasChanges = JSON.stringify(originalData) !== JSON.stringify(formData);
 
-  // Warn on browser close/refresh
-  useEffect(() => {
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (hasChanges) {
-        e.preventDefault();
-        e.returnValue = '';
-      }
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [hasChanges]);
-
   const handleSave = async () => {
     setIsLoading(true);
     await new Promise((resolve) => setTimeout(resolve, 500));
@@ -52,8 +40,14 @@ export function CompanySettingsPage() {
 
   const handleDiscard = () => {
     setFormData(originalData);
-    toast.info('Changes discarded', 'Your changes were not saved');
   };
+
+  // Navigation guard - handles both in-app navigation and browser refresh
+  useNavigationGuard({
+    hasChanges,
+    onSave: handleSave,
+    onDiscard: handleDiscard,
+  });
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -412,7 +406,7 @@ export function CompanySettingsPage() {
         </Card>
       </div>
 
-     {/* Letterhead Preview Modal */}
+      {/* Letterhead Preview Modal */}
       <Modal
         isOpen={showLetterheadPreview}
         onClose={() => setShowLetterheadPreview(false)}

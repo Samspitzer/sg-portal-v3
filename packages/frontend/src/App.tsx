@@ -11,7 +11,7 @@ import {
   CustomersLayout,
   AdminLayout,
 } from '@/components/layout';
-import { ToastContainer } from '@/components/common';
+import { ToastContainer, PageNavigationGuard } from '@/components/common';
 import {
   LoginPage,
   LandingPage,
@@ -191,6 +191,7 @@ export function App() {
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
           <AppRoutes />
+          <PageNavigationGuard />
           <ToastContainer />
         </BrowserRouter>
       </QueryClientProvider>
