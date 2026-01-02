@@ -12,3 +12,4 @@ export {
   AccountingPage,
   DeveloperPage,
 } from './PlaceholderPages';
+export { CompaniesPage, ContactsPage } from './customers';

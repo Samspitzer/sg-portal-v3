@@ -18,20 +18,8 @@ import {
 } from 'lucide-react';
 import { Page } from '@/components/layout';
 import { Card, CardContent, Button, Input, Modal, ConfirmModal } from '@/components/common';
-import { useToast, useDepartmentsStore } from '@/contexts';
+import { useToast, useDepartmentsStore, useUsersStore, type User } from '@/contexts';
 import { useFormChanges } from '@/hooks';
-
-// Types
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  phone: string;
-  departmentId: string;
-  positionId: string;
-  isActive: boolean;
-  createdAt: string;
-}
 
 interface UserFormData {
   name: string;
@@ -51,9 +39,6 @@ const initialFormData: UserFormData = {
   isActive: true,
 };
 
-// Empty - will be populated from API later
-const mockUsers: User[] = [];
-
 // User Modal Component
 function UserModal({
   isOpen,
@@ -71,7 +56,7 @@ function UserModal({
   const toast = useToast();
   const { departments } = useDepartmentsStore();
 
- const getInitialData = (): UserFormData => {
+  const getInitialData = (): UserFormData => {
     if (user) {
       return {
         name: user.name,
@@ -122,7 +107,6 @@ function UserModal({
   };
 
   const handleDepartmentChange = (deptId: string) => {
-    // Reset position when department changes
     setFormData({ ...formData, departmentId: deptId, positionId: '' });
   };
 
@@ -250,7 +234,7 @@ function UserModal({
           </div>
         </div>
 
-       {/* Status */}
+        {/* Status */}
         <div>
           <h3 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-4">
             Status
@@ -317,12 +301,12 @@ function UserCard({
   const [showMenu, setShowMenu] = useState(false);
   const { departments } = useDepartmentsStore();
 
-  // Get display names
   const department = departments.find(d => d.id === user.departmentId);
   const position = department?.positions.find(p => p.id === user.positionId);
 
   const displayPosition = position?.name || 'No Position';
   const displayDepartment = department?.name || 'No Department';
+
   return (
     <Card hover className="relative">
       <CardContent className="p-5">
@@ -446,10 +430,12 @@ export function ManageUsersPage() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [users, setUsers] = useState<User[]>(mockUsers);
   const [isLoading, setIsLoading] = useState(false);
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
   const toast = useToast();
+
+  // Use the shared store
+  const { users, addUser, updateUser, deleteUser, toggleUserActive } = useUsersStore();
 
   // Filter users
   const filteredUsers = users.filter((user) => {
@@ -463,18 +449,12 @@ export function ManageUsersPage() {
 
   const handleSave = async (formData: UserFormData) => {
     setIsLoading(true);
-    // Simulate API call
     await new Promise((resolve) => setTimeout(resolve, 500));
 
     if (editingUser) {
-      setUsers(users.map(u => u.id === editingUser.id ? { ...u, ...formData } : u));
+      updateUser(editingUser.id, formData);
     } else {
-      const newUser: User = {
-        id: Date.now().toString(),
-        ...formData,
-        createdAt: new Date().toISOString(),
-      };
-      setUsers([...users, newUser]);
+      addUser(formData);
     }
 
     setIsLoading(false);
@@ -488,14 +468,14 @@ export function ManageUsersPage() {
 
   const confirmDelete = () => {
     if (userToDelete) {
-      setUsers(users.filter(u => u.id !== userToDelete.id));
+      deleteUser(userToDelete.id);
       toast.success('Deleted', `${userToDelete.name} has been removed`);
       setUserToDelete(null);
     }
   };
 
   const handleToggleActive = (user: User) => {
-    setUsers(users.map(u => u.id === user.id ? { ...u, isActive: !u.isActive } : u));
+    toggleUserActive(user.id);
     toast.success(
       user.isActive ? 'Deactivated' : 'Activated',
       `${user.name} has been ${user.isActive ? 'deactivated' : 'activated'}`
