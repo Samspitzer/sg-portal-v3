@@ -33,25 +33,36 @@ interface PageProps {
   actions?: ReactNode;
   children: ReactNode;
   className?: string;
+  centered?: boolean;
 }
 
-export function Page({ title, description, actions, children, className }: PageProps) {
+export function Page({ title, description, actions, children, className, centered }: PageProps) {
   return (
     <div className={clsx('p-6 space-y-6', className)}>
       {/* Page header */}
-      <div className="flex items-start justify-between gap-4">
+      <div className={clsx(
+        centered ? 'text-center' : 'flex items-start justify-between gap-4'
+      )}>
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
             {title}
           </h1>
           {description && (
-            <p className="mt-1 text-slate-500 dark:text-slate-400">
+            <p className={clsx(
+              'mt-1 text-slate-500 dark:text-slate-400',
+              centered && 'text-brand-500 dark:text-brand-400'
+            )}>
               {description}
             </p>
           )}
         </div>
-        {actions && <div className="flex items-center gap-3">{actions}</div>}
+        {!centered && actions && (
+          <div className="flex items-center gap-3">{actions}</div>
+        )}
       </div>
+
+      {/* Gradient divider */}
+      <div className="h-px bg-gradient-to-r from-slate-200 via-slate-300 to-slate-200 dark:from-slate-800 dark:via-slate-700 dark:to-slate-800" />
 
       {/* Page content */}
       <div>{children}</div>

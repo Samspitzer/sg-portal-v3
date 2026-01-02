@@ -17,7 +17,6 @@ import {
   LandingPage,
   DashboardPage,
   ClientsPage,
-  CompaniesPage,
   ContactsPage,
   ProjectsPage,
   EstimatesPage,
@@ -63,30 +62,18 @@ function AppRoutes() {
       />
       
       {/* Customers Panel */}
-      <Route
-        path="/clients"
-        element={
-          <AuthGuard requiredPermission="customers:view">
-            <Layout>
-              <CustomersLayout>
-                <ClientsPage />
-              </CustomersLayout>
-            </Layout>
-          </AuthGuard>
-        }
-      />
-      <Route
-        path="/clients/companies"
-        element={
-          <AuthGuard requiredPermission="customers:view">
-            <Layout>
-              <CustomersLayout>
-                <CompaniesPage />
-              </CustomersLayout>
-            </Layout>
-          </AuthGuard>
-        }
-      />
+<Route
+  path="/clients/*"
+  element={
+    <AuthGuard requiredPermission="customers:view">
+      <Layout>
+        <CustomersLayout>
+          <ClientsPage />
+        </CustomersLayout>
+      </Layout>
+    </AuthGuard>
+  }
+/>
       <Route
         path="/clients/contacts"
         element={

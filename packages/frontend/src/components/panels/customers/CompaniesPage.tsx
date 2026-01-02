@@ -1,19 +1,15 @@
 import { useState, useMemo } from 'react';
-import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import {
   Plus,
   Building2,
-  Phone,
   Globe,
-  MapPin,
-  Edit,
-  Trash2,
-  Search,
-  User,
+  ChevronUp,
+  ChevronDown,
 } from 'lucide-react';
 import { Page } from '@/components/layout';
-import { Card, CardContent, Button, Input, Modal, ConfirmModal } from '@/components/common';
 import { useClientsStore, useUsersStore, useToast, type Company } from '@/contexts';
+import { Card, CardContent, Button, Input, Modal, SearchInput } from '@/components/common';
 
 interface CompanyFormData {
   name: string;
@@ -39,50 +35,99 @@ const initialFormData: CompanyFormData = {
   salesRepId: '',
 };
 
+type SortField = 'name' | 'location' | 'salesRep' | 'contacts';
+type SortDirection = 'asc' | 'desc';
+
 export function CompaniesPage() {
-  const { companies, contacts, addCompany, updateCompany, deleteCompany } = useClientsStore();
+  const navigate = useNavigate();
+  const { companies, contacts, addCompany } = useClientsStore();
   const { users } = useUsersStore();
   const toast = useToast();
 
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
-  const [editingCompany, setEditingCompany] = useState<Company | null>(null);
   const [formData, setFormData] = useState<CompanyFormData>(initialFormData);
-  const [deleteTarget, setDeleteTarget] = useState<Company | null>(null);
+  const [sortField, setSortField] = useState<SortField>('name');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
   const activeUsers = useMemo(() => users.filter((u) => u.isActive), [users]);
 
-  const filteredCompanies = useMemo(() => {
-    return companies.filter((company) =>
-      company.name.toLowerCase().includes(search.toLowerCase())
-    );
-  }, [companies, search]);
-
-  const openAddModal = () => {
-    setEditingCompany(null);
-    setFormData(initialFormData);
-    setShowModal(true);
+  const getSalesRepName = (salesRepId?: string) => {
+    if (!salesRepId) return '';
+    const user = users.find((u) => u.id === salesRepId);
+    return user?.name || '';
   };
 
-  const openEditModal = (company: Company) => {
-    setEditingCompany(company);
-    setFormData({
-      name: company.name,
-      phone: company.phone || '',
-      website: company.website || '',
-      street: company.address?.street || '',
-      city: company.address?.city || '',
-      state: company.address?.state || '',
-      zip: company.address?.zip || '',
-      notes: company.notes || '',
-      salesRepId: company.salesRepId || '',
+  const getContactCount = (companyId: string) => {
+    return contacts.filter((c) => c.companyId === companyId).length;
+  };
+
+  const getLocation = (company: Company) => {
+    if (!company.address?.city && !company.address?.state) return '';
+    return [company.address.city, company.address.state].filter(Boolean).join(', ');
+  };
+
+  const filteredAndSortedCompanies = useMemo(() => {
+    let result = companies.filter((company) =>
+      company.name.toLowerCase().includes(search.toLowerCase())
+    );
+
+    result = [...result].sort((a, b) => {
+      let aVal: string | number = '';
+      let bVal: string | number = '';
+
+      switch (sortField) {
+        case 'name':
+          aVal = a.name.toLowerCase();
+          bVal = b.name.toLowerCase();
+          break;
+        case 'location':
+          aVal = getLocation(a).toLowerCase();
+          bVal = getLocation(b).toLowerCase();
+          break;
+        case 'salesRep':
+          aVal = getSalesRepName(a.salesRepId).toLowerCase();
+          bVal = getSalesRepName(b.salesRepId).toLowerCase();
+          break;
+        case 'contacts':
+          aVal = getContactCount(a.id);
+          bVal = getContactCount(b.id);
+          break;
+      }
+
+      if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
     });
+
+    return result;
+  }, [companies, search, sortField, sortDirection, contacts, users]);
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortField !== field) return null;
+    return sortDirection === 'asc' ? (
+      <ChevronUp className="w-4 h-4" />
+    ) : (
+      <ChevronDown className="w-4 h-4" />
+    );
+  };
+
+  const openAddModal = () => {
+    setFormData(initialFormData);
     setShowModal(true);
   };
 
   const closeModal = () => {
     setShowModal(false);
-    setEditingCompany(null);
     setFormData(initialFormData);
   };
 
@@ -96,51 +141,22 @@ export function CompaniesPage() {
       name: formData.name.trim(),
       phone: formData.phone || undefined,
       website: formData.website || undefined,
-      address: formData.street || formData.city || formData.state || formData.zip
-        ? {
-            street: formData.street,
-            city: formData.city,
-            state: formData.state,
-            zip: formData.zip,
-          }
-        : undefined,
+      address:
+        formData.street || formData.city || formData.state || formData.zip
+          ? {
+              street: formData.street,
+              city: formData.city,
+              state: formData.state,
+              zip: formData.zip,
+            }
+          : undefined,
       notes: formData.notes || undefined,
       salesRepId: formData.salesRepId || undefined,
     };
 
-    if (editingCompany) {
-      updateCompany(editingCompany.id, companyData);
-      toast.success('Updated', `${formData.name} has been updated`);
-    } else {
-      addCompany(companyData);
-      toast.success('Created', `${formData.name} has been added`);
-    }
-
+    addCompany(companyData);
+    toast.success('Created', formData.name + ' has been added');
     closeModal();
-  };
-
-  const handleDelete = () => {
-    if (deleteTarget) {
-      const contactCount = contacts.filter((c) => c.companyId === deleteTarget.id).length;
-      deleteCompany(deleteTarget.id);
-      toast.success(
-        'Deleted',
-        contactCount > 0
-          ? `${deleteTarget.name} and ${contactCount} contact(s) have been removed`
-          : `${deleteTarget.name} has been removed`
-      );
-      setDeleteTarget(null);
-    }
-  };
-
-  const getSalesRepName = (salesRepId?: string) => {
-    if (!salesRepId) return null;
-    const user = users.find((u) => u.id === salesRepId);
-    return user?.name || null;
-  };
-
-  const getContactCount = (companyId: string) => {
-    return contacts.filter((c) => c.companyId === companyId).length;
   };
 
   const hasChanges =
@@ -166,19 +182,15 @@ export function CompaniesPage() {
       }
     >
       <div className="mb-6">
-        <div className="relative max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Search companies..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
-          />
-        </div>
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="Search companies..."
+          className="max-w-md"
+        />
       </div>
 
-      {filteredCompanies.length === 0 ? (
+      {filteredAndSortedCompanies.length === 0 ? (
         <Card>
           <CardContent className="p-12 text-center">
             <Building2 className="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600" />
@@ -197,92 +209,126 @@ export function CompaniesPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredCompanies.map((company, index) => (
-            <motion.div
-              key={company.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.05 }}
-            >
-              <Card hover className="h-full">
-                <CardContent className="p-5">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-start gap-4">
-                      <div className="w-12 h-12 rounded-xl bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center">
-                        <Building2 className="w-6 h-6 text-brand-600 dark:text-brand-400" />
-                      </div>
-                      <div>
-                        <h3 className="font-semibold text-slate-900 dark:text-white">
-                          {company.name}
-                        </h3>
-                        <p className="text-sm text-slate-500 dark:text-slate-400">
-                          {getContactCount(company.id)} contact{getContactCount(company.id) !== 1 ? 's' : ''}
-                        </p>
-                      </div>
-                    </div>
+        <Card>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-slate-200 dark:border-slate-700">
+                  <th
+                    className="text-left px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800"
+                    onClick={() => handleSort('name')}
+                  >
                     <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => openEditModal(company)}
-                        className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600"
-                      >
-                        <Edit className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => setDeleteTarget(company)}
-                        className="p-2 rounded-lg hover:bg-danger-50 dark:hover:bg-danger-900/20 text-slate-400 hover:text-danger-600"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      Company Name
+                      <SortIcon field="name" />
                     </div>
-                  </div>
+                  </th>
+                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300">
+                    Phone
+                  </th>
+                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300">
+                    Website
+                  </th>
+                  <th
+                    className="text-left px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800"
+                    onClick={() => handleSort('location')}
+                  >
+                    <div className="flex items-center gap-1">
+                      Location
+                      <SortIcon field="location" />
+                    </div>
+                  </th>
+                  <th
+                    className="text-left px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800"
+                    onClick={() => handleSort('salesRep')}
+                  >
+                    <div className="flex items-center gap-1">
+                      Sales Rep
+                      <SortIcon field="salesRep" />
+                    </div>
+                  </th>
+                  <th
+                    className="text-center px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800"
+                    onClick={() => handleSort('contacts')}
+                  >
+                    <div className="flex items-center justify-center gap-1">
+                      Contacts
+                      <SortIcon field="contacts" />
+                    </div>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredAndSortedCompanies.map((company) => {
+                  const websiteUrl = company.website
+                    ? company.website.startsWith('http')
+                      ? company.website
+                      : 'https://' + company.website
+                    : '';
+                  const websiteDisplay = company.website
+                    ? company.website.replace(/^https?:\/\//, '')
+                    : '';
 
-                  <div className="mt-4 space-y-2">
-                    {company.phone && (
-                      <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
-                        <Phone className="w-4 h-4 flex-shrink-0" />
-                        <span>{company.phone}</span>
-                      </div>
-                    )}
-                    {company.website && (
-                      <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
-                        <Globe className="w-4 h-4 flex-shrink-0" />
-                        
-                          <a href={company.website.startsWith('http') ? company.website : `https://${company.website}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="hover:text-brand-600 truncate"
+                  return (
+                    <tr
+                      key={company.id}
+                      className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+                    >
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={() => navigate('/clients/companies/' + company.id)}
+                          className="flex items-center gap-3 text-left hover:text-brand-600 dark:hover:text-brand-400 transition-colors"
                         >
-                          {company.website.replace(/^https?:\/\//, '')}
-                        </a>
-                      </div>
-                    )}
-                    {company.address?.city && (
-                      <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
-                        <MapPin className="w-4 h-4 flex-shrink-0" />
-                        <span>
-                          {[company.address.city, company.address.state].filter(Boolean).join(', ')}
-                        </span>
-                      </div>
-                    )}
-                    {getSalesRepName(company.salesRepId) && (
-                      <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
-                        <User className="w-4 h-4 flex-shrink-0" />
-                        <span>Rep: {getSalesRepName(company.salesRepId)}</span>
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-          ))}
-        </div>
+                          <div className="w-8 h-8 rounded-lg bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center flex-shrink-0">
+                            <Building2 className="w-4 h-4 text-brand-600 dark:text-brand-400" />
+                          </div>
+                          <span className="font-medium text-slate-900 dark:text-white hover:text-brand-600 dark:hover:text-brand-400">
+                            {company.name}
+                          </span>
+                        </button>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">
+                        {company.phone || '—'}
+                      </td>
+                      <td className="px-4 py-3 text-sm">
+                        {company.website ? (
+                          <a
+                            href={websiteUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-brand-600 dark:text-brand-400 hover:underline flex items-center gap-1"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <Globe className="w-3 h-3" />
+                            {websiteDisplay}
+                          </a>
+                        ) : (
+                          <span className="text-slate-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">
+                        {getLocation(company) || '—'}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">
+                        {getSalesRepName(company.salesRepId) || '—'}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-center text-slate-600 dark:text-slate-400">
+                        {getContactCount(company.id)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
       )}
 
+      {/* Add Company Modal */}
       <Modal
         isOpen={showModal}
         onClose={closeModal}
-        title={editingCompany ? 'Edit Company' : 'Add Company'}
+        title="Add Company"
         size="lg"
         hasUnsavedChanges={hasChanges}
         onSaveChanges={handleSave}
@@ -293,7 +339,7 @@ export function CompaniesPage() {
               Cancel
             </Button>
             <Button variant="primary" onClick={handleSave}>
-              {editingCompany ? 'Update Company' : 'Add Company'}
+              Add Company
             </Button>
           </>
         }
@@ -384,20 +430,6 @@ export function CompaniesPage() {
           </div>
         </div>
       </Modal>
-
-      <ConfirmModal
-        isOpen={!!deleteTarget}
-        onClose={() => setDeleteTarget(null)}
-        onConfirm={handleDelete}
-        title="Delete Company"
-        message={
-          getContactCount(deleteTarget?.id || '') > 0
-            ? `Are you sure you want to delete "${deleteTarget?.name}"? This will also remove ${getContactCount(deleteTarget?.id || '')} contact(s) associated with this company.`
-            : `Are you sure you want to delete "${deleteTarget?.name}"?`
-        }
-        confirmText="Delete"
-        variant="danger"
-      />
     </Page>
   );
 }

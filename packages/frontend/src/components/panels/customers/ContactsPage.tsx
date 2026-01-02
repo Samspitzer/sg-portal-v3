@@ -1,19 +1,18 @@
 import { useState, useMemo } from 'react';
-import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import {
   Plus,
   User,
   Phone,
   Mail,
   Building2,
-  Edit,
-  Trash2,
-  Search,
   Smartphone,
+  ChevronUp,
+  ChevronDown,
 } from 'lucide-react';
 import { Page } from '@/components/layout';
-import { Card, CardContent, Button, Input, Modal, ConfirmModal } from '@/components/common';
-import { useClientsStore, useUsersStore, useToast, CONTACT_ROLES, type Contact, type ContactRole } from '@/contexts';
+import { Card, CardContent, Button, Input, Modal, SearchInput } from '@/components/common';
+import { useClientsStore, useUsersStore, useToast, CONTACT_ROLES, type ContactRole } from '@/contexts';
 
 interface ContactFormData {
   companyId: string;
@@ -61,29 +60,38 @@ const initialCompanyFormData: CompanyFormData = {
   salesRepId: '',
 };
 
+type SortField = 'name' | 'role' | 'company' | 'email';
+type SortDirection = 'asc' | 'desc';
+
 export function ContactsPage() {
-  const { companies, contacts, addContact, updateContact, deleteContact, addCompany } = useClientsStore();
+  const navigate = useNavigate();
+  const { companies, contacts, addContact, addCompany } = useClientsStore();
   const { users } = useUsersStore();
   const toast = useToast();
 
   const [search, setSearch] = useState('');
   const [companyFilter, setCompanyFilter] = useState('');
   const [showModal, setShowModal] = useState(false);
-  const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [formData, setFormData] = useState<ContactFormData>(initialContactFormData);
-  const [deleteTarget, setDeleteTarget] = useState<Contact | null>(null);
   const [companySearch, setCompanySearch] = useState('');
   const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
+  const [sortField, setSortField] = useState<SortField>('name');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [filterCompanySearch, setFilterCompanySearch] = useState('');
+  const [showFilterDropdown, setShowFilterDropdown] = useState(false);
 
-  // Add Company Modal state
   const [showAddCompanyModal, setShowAddCompanyModal] = useState(false);
   const [companyFormData, setCompanyFormData] = useState<CompanyFormData>(initialCompanyFormData);
 
   const activeUsers = useMemo(() => users.filter((u) => u.isActive), [users]);
 
-  // Filter contacts
-  const filteredContacts = useMemo(() => {
-    return contacts.filter((contact) => {
+  const getCompanyName = (companyId: string) => {
+    const company = companies.find((c) => c.id === companyId);
+    return company?.name || 'Unknown Company';
+  };
+
+  const filteredAndSortedContacts = useMemo(() => {
+    let result = contacts.filter((contact) => {
       const matchesSearch =
         contact.firstName.toLowerCase().includes(search.toLowerCase()) ||
         contact.lastName.toLowerCase().includes(search.toLowerCase()) ||
@@ -91,9 +99,38 @@ export function ContactsPage() {
       const matchesCompany = !companyFilter || contact.companyId === companyFilter;
       return matchesSearch && matchesCompany;
     });
-  }, [contacts, search, companyFilter]);
 
-  // Filter companies for dropdown search
+    result = [...result].sort((a, b) => {
+      let aVal = '';
+      let bVal = '';
+
+      switch (sortField) {
+        case 'name':
+          aVal = (a.firstName + ' ' + a.lastName).toLowerCase();
+          bVal = (b.firstName + ' ' + b.lastName).toLowerCase();
+          break;
+        case 'role':
+          aVal = (a.role || '').toLowerCase();
+          bVal = (b.role || '').toLowerCase();
+          break;
+        case 'company':
+          aVal = getCompanyName(a.companyId).toLowerCase();
+          bVal = getCompanyName(b.companyId).toLowerCase();
+          break;
+        case 'email':
+          aVal = (a.email || '').toLowerCase();
+          bVal = (b.email || '').toLowerCase();
+          break;
+      }
+
+      if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    return result;
+  }, [contacts, search, companyFilter, sortField, sortDirection, companies]);
+
   const filteredCompanies = useMemo(() => {
     if (!companySearch) return companies;
     return companies.filter((company) =>
@@ -101,7 +138,6 @@ export function ContactsPage() {
     );
   }, [companies, companySearch]);
 
-  // Check if search doesn't match any company exactly
   const showAddCompanyOption = useMemo(() => {
     if (!companySearch.trim()) return false;
     const exactMatch = companies.some(
@@ -110,35 +146,33 @@ export function ContactsPage() {
     return !exactMatch;
   }, [companies, companySearch]);
 
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortField !== field) return null;
+    return sortDirection === 'asc' ? (
+      <ChevronUp className="w-4 h-4" />
+    ) : (
+      <ChevronDown className="w-4 h-4" />
+    );
+  };
+
   const openAddModal = () => {
-    setEditingContact(null);
     setFormData(initialContactFormData);
     setCompanySearch('');
     setShowCompanyDropdown(false);
     setShowModal(true);
   };
 
-  const openEditModal = (contact: Contact) => {
-    setEditingContact(contact);
-    const company = companies.find((c) => c.id === contact.companyId);
-    setFormData({
-      companyId: contact.companyId,
-      firstName: contact.firstName,
-      lastName: contact.lastName,
-      email: contact.email || '',
-      phoneOffice: contact.phoneOffice || '',
-      phoneMobile: contact.phoneMobile || '',
-      role: contact.role || '',
-      notes: contact.notes || '',
-    });
-    setCompanySearch(company?.name || '');
-    setShowCompanyDropdown(false);
-    setShowModal(true);
-  };
-
   const closeModal = () => {
     setShowModal(false);
-    setEditingContact(null);
     setFormData(initialContactFormData);
     setCompanySearch('');
     setShowCompanyDropdown(false);
@@ -169,28 +203,9 @@ export function ContactsPage() {
       notes: formData.notes || undefined,
     };
 
-    if (editingContact) {
-      updateContact(editingContact.id, contactData);
-      toast.success('Updated', `${formData.firstName} ${formData.lastName} has been updated`);
-    } else {
-      addContact(contactData);
-      toast.success('Created', `${formData.firstName} ${formData.lastName} has been added`);
-    }
-
+    addContact(contactData);
+    toast.success('Created', formData.firstName + ' ' + formData.lastName + ' has been added');
     closeModal();
-  };
-
-  const handleDelete = () => {
-    if (deleteTarget) {
-      deleteContact(deleteTarget.id);
-      toast.success('Deleted', `${deleteTarget.firstName} ${deleteTarget.lastName} has been removed`);
-      setDeleteTarget(null);
-    }
-  };
-
-  const getCompanyName = (companyId: string) => {
-    const company = companies.find((c) => c.id === companyId);
-    return company?.name || 'Unknown Company';
   };
 
   const selectCompany = (company: { id: string; name: string }) => {
@@ -199,7 +214,6 @@ export function ContactsPage() {
     setShowCompanyDropdown(false);
   };
 
-  // Open Add Company Modal with pre-filled name
   const openAddCompanyModal = () => {
     setCompanyFormData({
       ...initialCompanyFormData,
@@ -224,23 +238,22 @@ export function ContactsPage() {
       name: companyFormData.name.trim(),
       phone: companyFormData.phone || undefined,
       website: companyFormData.website || undefined,
-      address: companyFormData.street || companyFormData.city || companyFormData.state || companyFormData.zip
-        ? {
-            street: companyFormData.street,
-            city: companyFormData.city,
-            state: companyFormData.state,
-            zip: companyFormData.zip,
-          }
-        : undefined,
+      address:
+        companyFormData.street || companyFormData.city || companyFormData.state || companyFormData.zip
+          ? {
+              street: companyFormData.street,
+              city: companyFormData.city,
+              state: companyFormData.state,
+              zip: companyFormData.zip,
+            }
+          : undefined,
       notes: companyFormData.notes || undefined,
       salesRepId: companyFormData.salesRepId || undefined,
     };
 
     addCompany(companyData);
-    toast.success('Created', `${companyFormData.name} has been added`);
+    toast.success('Created', companyFormData.name + ' has been added');
 
-    // Find the newly created company and select it
-    // We need to get it after the store updates
     setTimeout(() => {
       const newCompany = useClientsStore.getState().companies.find(
         (c) => c.name === companyFormData.name.trim()
@@ -286,36 +299,66 @@ export function ContactsPage() {
         </Button>
       }
     >
-      {/* Filters */}
       <div className="mb-6 flex flex-col sm:flex-row gap-4">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Search contacts..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
-          />
-        </div>
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="Search contacts..."
+          className="flex-1 max-w-md"
+        />
         {companies.length > 0 && (
-          <select
-            value={companyFilter}
-            onChange={(e) => setCompanyFilter(e.target.value)}
-            className="px-3 py-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
-          >
-            <option value="">All Companies</option>
-            {companies.map((company) => (
-              <option key={company.id} value={company.id}>
-                {company.name}
-              </option>
-            ))}
-          </select>
+          <div className="relative">
+            <SearchInput
+              value={filterCompanySearch}
+              onChange={(val) => {
+                setFilterCompanySearch(val);
+                setShowFilterDropdown(true);
+              }}
+              onClear={() => {
+                setCompanyFilter('');
+                setShowFilterDropdown(false);
+              }}
+              onFocus={() => setShowFilterDropdown(true)}
+              placeholder="All Companies"
+              icon={<Building2 className="w-4 h-4" />}
+              className="w-56"
+            />
+            {showFilterDropdown && (
+              <div className="absolute z-10 w-full mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCompanyFilter('');
+                    setFilterCompanySearch('');
+                    setShowFilterDropdown(false);
+                  }}
+                  className="w-full px-4 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-900 dark:text-white font-medium"
+                >
+                  All Companies
+                </button>
+                {companies
+                  .filter((c) => c.name.toLowerCase().includes(filterCompanySearch.toLowerCase()))
+                  .map((company) => (
+                    <button
+                      key={company.id}
+                      type="button"
+                      onClick={() => {
+                        setCompanyFilter(company.id);
+                        setFilterCompanySearch(company.name);
+                        setShowFilterDropdown(false);
+                      }}
+                      className="w-full px-4 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-900 dark:text-white"
+                    >
+                      {company.name}
+                    </button>
+                  ))}
+              </div>
+            )}
+          </div>
         )}
       </div>
 
-      {/* Contacts Grid */}
-      {filteredContacts.length === 0 ? (
+      {filteredAndSortedContacts.length === 0 ? (
         <Card>
           <CardContent className="p-12 text-center">
             <User className="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600" />
@@ -334,90 +377,141 @@ export function ContactsPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredContacts.map((contact, index) => (
-            <motion.div
-              key={contact.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.05 }}
-            >
-              <Card hover className="h-full">
-                <CardContent className="p-5">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-start gap-4">
-                      <div className="w-12 h-12 rounded-xl bg-accent-100 dark:bg-accent-900/30 flex items-center justify-center text-lg font-semibold text-accent-600 dark:text-accent-400">
-                        {contact.firstName[0]}{contact.lastName[0]}
-                      </div>
-                      <div>
-                        <h3 className="font-semibold text-slate-900 dark:text-white">
-                          {contact.firstName} {contact.lastName}
-                        </h3>
-                        {contact.role && (
-                          <p className="text-sm text-slate-500 dark:text-slate-400">
-                            {contact.role}
-                          </p>
-                        )}
-                      </div>
-                    </div>
+        <Card>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-slate-200 dark:border-slate-700">
+                  <th
+                    className="text-left px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800"
+                    onClick={() => handleSort('name')}
+                  >
                     <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => openEditModal(contact)}
-                        className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600"
-                      >
-                        <Edit className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => setDeleteTarget(contact)}
-                        className="p-2 rounded-lg hover:bg-danger-50 dark:hover:bg-danger-900/20 text-slate-400 hover:text-danger-600"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      Name
+                      <SortIcon field="name" />
                     </div>
-                  </div>
-
-                  <div className="mt-4 space-y-2">
-                    <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
-                      <Building2 className="w-4 h-4 flex-shrink-0" />
-                      <span className="truncate">{getCompanyName(contact.companyId)}</span>
+                  </th>
+                  <th
+                    className="text-left px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800"
+                    onClick={() => handleSort('role')}
+                  >
+                    <div className="flex items-center gap-1">
+                      Role
+                      <SortIcon field="role" />
                     </div>
-                    {contact.email && (
-                      <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
-                        <Mail className="w-4 h-4 flex-shrink-0" />
-                        <a href={`mailto:${contact.email}`} className="hover:text-brand-600 truncate">
+                  </th>
+                  <th
+                    className="text-left px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800"
+                    onClick={() => handleSort('company')}
+                  >
+                    <div className="flex items-center gap-1">
+                      Company
+                      <SortIcon field="company" />
+                    </div>
+                  </th>
+                  <th
+                    className="text-left px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800"
+                    onClick={() => handleSort('email')}
+                  >
+                    <div className="flex items-center gap-1">
+                      Email
+                      <SortIcon field="email" />
+                    </div>
+                  </th>
+                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300">
+                    Work Phone
+                  </th>
+                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300">
+                    Mobile
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredAndSortedContacts.map((contact) => (
+                  <tr
+                    key={contact.id}
+                    className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+                  >
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={() => navigate('/clients/contacts/' + contact.id)}
+                        className="flex items-center gap-3 text-left hover:text-brand-600 dark:hover:text-brand-400 transition-colors"
+                      >
+                        <div className="w-8 h-8 rounded-full bg-accent-100 dark:bg-accent-900/30 flex items-center justify-center text-sm font-semibold text-accent-600 dark:text-accent-400 flex-shrink-0">
+                          {contact.firstName[0]}{contact.lastName[0]}
+                        </div>
+                        <span className="font-medium text-slate-900 dark:text-white hover:text-brand-600 dark:hover:text-brand-400">
+                          {contact.firstName} {contact.lastName}
+                        </span>
+                      </button>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">
+                      {contact.role || '—'}
+                    </td>
+                    <td className="px-4 py-3 text-sm">
+                      <button
+                        onClick={() => {
+                          const company = companies.find(c => c.id === contact.companyId);
+                          if (company) {
+                            navigate('/clients/companies/' + company.id);
+                          }
+                        }}
+                        className="flex items-center gap-2 text-slate-600 dark:text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 transition-colors"
+                      >
+                        <Building2 className="w-3 h-3 flex-shrink-0" />
+                        {getCompanyName(contact.companyId)}
+                      </button>
+                    </td>
+                    <td className="px-4 py-3 text-sm">
+                      {contact.email ? (
+                        <a
+                          href={'mailto:' + contact.email}
+                          className="text-brand-600 dark:text-brand-400 hover:underline flex items-center gap-1"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Mail className="w-3 h-3" />
                           {contact.email}
                         </a>
-                      </div>
-                    )}
-                    {contact.phoneOffice && (
-                      <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
-                        <Phone className="w-4 h-4 flex-shrink-0" />
-                        <span>{contact.phoneOffice}</span>
-                      </div>
-                    )}
-                    {contact.phoneMobile && (
-                      <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
-                        <Smartphone className="w-4 h-4 flex-shrink-0" />
-                        <span>{contact.phoneMobile}</span>
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-          ))}
-        </div>
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">
+                      {contact.phoneOffice ? (
+                        <span className="flex items-center gap-1">
+                          <Phone className="w-3 h-3" />
+                          {contact.phoneOffice}
+                        </span>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">
+                      {contact.phoneMobile ? (
+                        <span className="flex items-center gap-1">
+                          <Smartphone className="w-3 h-3" />
+                          {contact.phoneMobile}
+                        </span>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
       )}
 
-      {/* Add/Edit Contact Modal */}
-            <Modal
-            isOpen={showModal}
-            onClose={() => {
-                // Don't close if the Add Company modal is open
-                if (showAddCompanyModal) return;
-                closeModal();
-            }}
-        title={editingContact ? 'Edit Contact' : 'Add Contact'}
+      {/* Add Contact Modal */}
+      <Modal
+        isOpen={showModal}
+        onClose={() => {
+          if (showAddCompanyModal) return;
+          closeModal();
+        }}
+        title="Add Contact"
         size="lg"
         hasUnsavedChanges={hasContactChanges}
         onSaveChanges={handleSave}
@@ -428,36 +522,36 @@ export function ContactsPage() {
               Cancel
             </Button>
             <Button variant="primary" onClick={handleSave}>
-              {editingContact ? 'Update Contact' : 'Add Contact'}
+              Add Contact
             </Button>
           </>
         }
       >
         <div className="space-y-4">
-          {/* Company Search Dropdown */}
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
               Company *
             </label>
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input
-                type="text"
+              <SearchInput
                 value={companySearch}
-                onChange={(e) => {
-                  setCompanySearch(e.target.value);
+                onChange={(val) => {
+                  setCompanySearch(val);
                   setShowCompanyDropdown(true);
-                  if (!e.target.value) {
+                  if (!val) {
                     setFormData({ ...formData, companyId: '' });
                   }
                 }}
+                onClear={() => {
+                  setFormData({ ...formData, companyId: '' });
+                  setShowCompanyDropdown(false);
+                }}
                 onFocus={() => setShowCompanyDropdown(true)}
                 placeholder="Search for a company or type to add new..."
-                className="w-full pl-10 pr-4 py-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                icon={<Building2 className="w-4 h-4" />}
               />
               {showCompanyDropdown && (companySearch || companies.length > 0) && (
                 <div className="absolute z-10 w-full mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                  {/* Add New Company Option */}
                   {showAddCompanyOption && (
                     <button
                       type="button"
@@ -465,10 +559,9 @@ export function ContactsPage() {
                       className="w-full px-4 py-3 text-left text-sm hover:bg-brand-50 dark:hover:bg-brand-900/20 text-brand-600 dark:text-brand-400 flex items-center gap-2 border-b border-slate-200 dark:border-slate-700"
                     >
                       <Plus className="w-4 h-4" />
-                      <span>Add "{companySearch.trim()}" as new company</span>
+                      <span>Add &quot;{companySearch.trim()}&quot; as new company</span>
                     </button>
                   )}
-                  {/* Existing Companies */}
                   {filteredCompanies.map((company) => (
                     <button
                       key={company.id}
@@ -479,7 +572,6 @@ export function ContactsPage() {
                       {company.name}
                     </button>
                   ))}
-                  {/* No results message */}
                   {filteredCompanies.length === 0 && !showAddCompanyOption && (
                     <div className="px-4 py-3 text-sm text-slate-500 dark:text-slate-400">
                       No companies found. Type a name to add one.
@@ -566,7 +658,7 @@ export function ContactsPage() {
         </div>
       </Modal>
 
-      {/* Add Company Modal (Nested) */}
+      {/* Add Company Modal */}
       <Modal
         isOpen={showAddCompanyModal}
         onClose={closeAddCompanyModal}
@@ -672,17 +764,6 @@ export function ContactsPage() {
           </div>
         </div>
       </Modal>
-
-      {/* Delete Confirmation */}
-      <ConfirmModal
-        isOpen={!!deleteTarget}
-        onClose={() => setDeleteTarget(null)}
-        onConfirm={handleDelete}
-        title="Delete Contact"
-        message={`Are you sure you want to delete "${deleteTarget?.firstName} ${deleteTarget?.lastName}"?`}
-        confirmText="Delete"
-        variant="danger"
-      />
     </Page>
   );
 }

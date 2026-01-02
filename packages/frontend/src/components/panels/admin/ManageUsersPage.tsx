@@ -1,23 +1,20 @@
-import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { useState, useMemo } from 'react';
 import { clsx } from 'clsx';
 import {
   Plus,
-  Search,
   Users,
-  MoreHorizontal,
-  Edit,
-  Trash2,
   Check,
   Loader2,
   Mail,
   Phone,
   Shield,
   UserCheck,
-  UserX,
+  ChevronUp,
+  ChevronDown,
+  Trash2,
 } from 'lucide-react';
 import { Page } from '@/components/layout';
-import { Card, CardContent, Button, Input, Modal, ConfirmModal } from '@/components/common';
+import { Card, CardContent, Button, Input, Modal, ConfirmModal, SearchInput } from '@/components/common';
 import { useToast, useDepartmentsStore, useUsersStore, type User } from '@/contexts';
 import { useFormChanges } from '@/hooks';
 
@@ -39,18 +36,23 @@ const initialFormData: UserFormData = {
   isActive: true,
 };
 
+type SortField = 'name' | 'department';
+type SortDirection = 'asc' | 'desc';
+
 // User Modal Component
 function UserModal({
   isOpen,
   onClose,
   user,
   onSave,
+  onDelete,
   isLoading,
 }: {
   isOpen: boolean;
   onClose: () => void;
   user?: User | null;
   onSave: (data: UserFormData) => void;
+  onDelete?: () => void;
   isLoading: boolean;
 }) {
   const toast = useToast();
@@ -77,21 +79,21 @@ function UserModal({
   const availablePositions = selectedDepartment?.positions || [];
 
   // Reset form when user changes or modal opens
-  useEffect(() => {
+  useState(() => {
     if (isOpen) {
       initializeForm(getInitialData());
     }
-  }, [isOpen, user]);
+  });
 
   // Reset position when department changes (if position not in new department)
-  useEffect(() => {
+  useState(() => {
     if (formData.departmentId && formData.positionId) {
       const positionExists = availablePositions.some(p => p.id === formData.positionId);
       if (!positionExists) {
         setFormData({ ...formData, positionId: '' });
       }
     }
-  }, [formData.departmentId]);
+  });
 
   const handleSubmit = async () => {
     if (!formData.name || !formData.email) {
@@ -99,7 +101,6 @@ function UserModal({
       return;
     }
     onSave(formData);
-    toast.success('Saved', user ? 'User updated successfully' : 'User added successfully');
   };
 
   const handleDiscard = () => {
@@ -120,29 +121,43 @@ function UserModal({
       onSaveChanges={handleSubmit}
       onDiscardChanges={handleDiscard}
       footer={
-        <>
-          <Button type="button" variant="secondary" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            variant="primary"
-            onClick={handleSubmit}
-            disabled={isLoading || !formData.name || !formData.email}
-          >
-            {isLoading ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                Saving...
-              </>
-            ) : (
-              <>
-                <Check className="w-4 h-4 mr-2" />
-                {user ? 'Update User' : 'Add User'}
-              </>
+        <div className="flex items-center justify-between w-full">
+          <div>
+            {user && onDelete && (
+              <Button
+                type="button"
+                variant="danger"
+                onClick={onDelete}
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Delete User
+              </Button>
             )}
-          </Button>
-        </>
+          </div>
+          <div className="flex gap-3">
+            <Button type="button" variant="secondary" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              onClick={handleSubmit}
+              disabled={isLoading || !formData.name || !formData.email}
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Check className="w-4 h-4 mr-2" />
+                  {user ? 'Update User' : 'Add User'}
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
       }
     >
       <div className="space-y-6">
@@ -286,144 +301,6 @@ function UserModal({
   );
 }
 
-// User Card Component
-function UserCard({
-  user,
-  onEdit,
-  onDelete,
-  onToggleActive,
-}: {
-  user: User;
-  onEdit: () => void;
-  onDelete: () => void;
-  onToggleActive: () => void;
-}) {
-  const [showMenu, setShowMenu] = useState(false);
-  const { departments } = useDepartmentsStore();
-
-  const department = departments.find(d => d.id === user.departmentId);
-  const position = department?.positions.find(p => p.id === user.positionId);
-
-  const displayPosition = position?.name || 'No Position';
-  const displayDepartment = department?.name || 'No Department';
-
-  return (
-    <Card hover className="relative">
-      <CardContent className="p-5">
-        <div className="flex items-start justify-between">
-          <div className="flex items-start gap-4">
-            <div className={clsx(
-              'w-12 h-12 rounded-xl flex items-center justify-center text-lg font-semibold',
-              user.isActive
-                ? 'bg-brand-100 dark:bg-brand-900/30 text-brand-600 dark:text-brand-400'
-                : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500'
-            )}>
-              {user.name.split(' ').map(n => n[0]).join('')}
-            </div>
-            <div>
-              <h3 className="font-semibold text-slate-900 dark:text-white">
-                {user.name}
-              </h3>
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                {displayPosition} • {displayDepartment}
-              </p>
-            </div>
-          </div>
-
-          <div className="relative">
-            <button
-              onClick={() => setShowMenu(!showMenu)}
-              className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400"
-            >
-              <MoreHorizontal className="w-4 h-4" />
-            </button>
-            {showMenu && (
-              <>
-                <div
-                  className="fixed inset-0 z-10"
-                  onClick={() => setShowMenu(false)}
-                />
-                <div className="absolute right-0 top-full mt-1 w-44 bg-white dark:bg-slate-800
-                  rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 py-1 z-20">
-                  <button
-                    onClick={() => { onEdit(); setShowMenu(false); }}
-                    className="w-full px-3 py-2 text-left text-sm flex items-center gap-2
-                      hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300"
-                  >
-                    <Edit className="w-4 h-4" />
-                    Edit User
-                  </button>
-                  <button
-                    onClick={() => { onToggleActive(); setShowMenu(false); }}
-                    className="w-full px-3 py-2 text-left text-sm flex items-center gap-2
-                      hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300"
-                  >
-                    {user.isActive ? (
-                      <>
-                        <UserX className="w-4 h-4" />
-                        Deactivate
-                      </>
-                    ) : (
-                      <>
-                        <UserCheck className="w-4 h-4" />
-                        Activate
-                      </>
-                    )}
-                  </button>
-                  <button
-                    onClick={() => { onDelete(); setShowMenu(false); }}
-                    className="w-full px-3 py-2 text-left text-sm flex items-center gap-2
-                      hover:bg-slate-100 dark:hover:bg-slate-700 text-danger-600"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    Delete User
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Status Badge */}
-        <div className="mt-3">
-          <span className={clsx(
-            'inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium',
-            user.isActive
-              ? 'bg-success-100 text-success-700 dark:bg-success-900/30 dark:text-success-400'
-              : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-500'
-          )}>
-            {user.isActive ? (
-              <>
-                <UserCheck className="w-3 h-3" />
-                Active
-              </>
-            ) : (
-              <>
-                <UserX className="w-3 h-3" />
-                Inactive
-              </>
-            )}
-          </span>
-        </div>
-
-        {/* Contact Info */}
-        <div className="mt-4 space-y-2">
-          <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
-            <Mail className="w-4 h-4" />
-            <span>{user.email}</span>
-          </div>
-          {user.phone && (
-            <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
-              <Phone className="w-4 h-4" />
-              <span>{user.phone}</span>
-            </div>
-          )}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
 // Main Page Component
 export function ManageUsersPage() {
   const [search, setSearch] = useState('');
@@ -432,20 +309,77 @@ export function ManageUsersPage() {
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
+  const [userToToggle, setUserToToggle] = useState<User | null>(null);
+  const [sortField, setSortField] = useState<SortField>('name');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const toast = useToast();
 
-  // Use the shared store
+  // Use the shared stores
   const { users, addUser, updateUser, deleteUser, toggleUserActive } = useUsersStore();
+  const { departments } = useDepartmentsStore();
 
-  // Filter users
-  const filteredUsers = users.filter((user) => {
-    const matchesSearch = user.name.toLowerCase().includes(search.toLowerCase()) ||
-      user.email.toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = statusFilter === 'all' ||
-      (statusFilter === 'active' && user.isActive) ||
-      (statusFilter === 'inactive' && !user.isActive);
-    return matchesSearch && matchesStatus;
-  });
+  const getDepartmentName = (departmentId: string) => {
+    const dept = departments.find(d => d.id === departmentId);
+    return dept?.name || '—';
+  };
+
+  const getPositionName = (departmentId: string, positionId: string) => {
+    const dept = departments.find(d => d.id === departmentId);
+    const pos = dept?.positions.find(p => p.id === positionId);
+    return pos?.name || '—';
+  };
+
+  // Filter and sort users
+  const filteredAndSortedUsers = useMemo(() => {
+    let result = users.filter((user) => {
+      const matchesSearch = user.name.toLowerCase().includes(search.toLowerCase()) ||
+        user.email.toLowerCase().includes(search.toLowerCase());
+      const matchesStatus = statusFilter === 'all' ||
+        (statusFilter === 'active' && user.isActive) ||
+        (statusFilter === 'inactive' && !user.isActive);
+      return matchesSearch && matchesStatus;
+    });
+
+    result = [...result].sort((a, b) => {
+      let aVal = '';
+      let bVal = '';
+
+      switch (sortField) {
+        case 'name':
+          aVal = a.name.toLowerCase();
+          bVal = b.name.toLowerCase();
+          break;
+        case 'department':
+          aVal = getDepartmentName(a.departmentId).toLowerCase();
+          bVal = getDepartmentName(b.departmentId).toLowerCase();
+          break;
+      }
+
+      if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    return result;
+  }, [users, search, statusFilter, sortField, sortDirection, departments]);
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortField !== field) return null;
+    return sortDirection === 'asc' ? (
+      <ChevronUp className="w-4 h-4" />
+    ) : (
+      <ChevronDown className="w-4 h-4" />
+    );
+  };
 
   const handleSave = async (formData: UserFormData) => {
     setIsLoading(true);
@@ -453,8 +387,10 @@ export function ManageUsersPage() {
 
     if (editingUser) {
       updateUser(editingUser.id, formData);
+      toast.success('Updated', formData.name + ' has been updated');
     } else {
       addUser(formData);
+      toast.success('Created', formData.name + ' has been added');
     }
 
     setIsLoading(false);
@@ -462,24 +398,40 @@ export function ManageUsersPage() {
     setEditingUser(null);
   };
 
-  const handleDelete = (user: User) => {
-    setUserToDelete(user);
+  const handleDeleteFromModal = () => {
+    if (editingUser) {
+      setUserToDelete(editingUser);
+      setIsModalOpen(false);
+    }
   };
 
   const confirmDelete = () => {
     if (userToDelete) {
       deleteUser(userToDelete.id);
-      toast.success('Deleted', `${userToDelete.name} has been removed`);
+      toast.success('Deleted', userToDelete.name + ' has been removed');
       setUserToDelete(null);
+      setEditingUser(null);
     }
   };
 
-  const handleToggleActive = (user: User) => {
-    toggleUserActive(user.id);
-    toast.success(
-      user.isActive ? 'Deactivated' : 'Activated',
-      `${user.name} has been ${user.isActive ? 'deactivated' : 'activated'}`
-    );
+  const handleToggleClick = (user: User) => {
+    setUserToToggle(user);
+  };
+
+  const confirmToggle = () => {
+    if (userToToggle) {
+      toggleUserActive(userToToggle.id);
+      toast.success(
+        userToToggle.isActive ? 'Deactivated' : 'Activated',
+        userToToggle.name + ' has been ' + (userToToggle.isActive ? 'deactivated' : 'activated')
+      );
+      setUserToToggle(null);
+    }
+  };
+
+  const openEditModal = (user: User) => {
+    setEditingUser(user);
+    setIsModalOpen(true);
   };
 
   return (
@@ -498,18 +450,12 @@ export function ManageUsersPage() {
     >
       {/* Search and Filters */}
       <div className="mb-6 flex flex-col sm:flex-row gap-4">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Search users..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 border border-slate-300 dark:border-slate-700 rounded-lg
-              bg-white dark:bg-slate-800 text-slate-900 dark:text-white
-              placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
-          />
-        </div>
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="Search users..."
+          className="flex-1 max-w-md"
+        />
 
         <div className="flex gap-2">
           {(['all', 'active', 'inactive'] as const).map((status) => (
@@ -529,8 +475,8 @@ export function ManageUsersPage() {
         </div>
       </div>
 
-      {/* Users Grid */}
-      {filteredUsers.length === 0 ? (
+      {/* Users Table */}
+      {filteredAndSortedUsers.length === 0 ? (
         <Card>
           <CardContent className="p-12 text-center">
             <Users className="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600" />
@@ -553,27 +499,117 @@ export function ManageUsersPage() {
           </CardContent>
         </Card>
       ) : (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
-        >
-          {filteredUsers.map((user, index) => (
-            <motion.div
-              key={user.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.05 }}
-            >
-              <UserCard
-                user={user}
-                onEdit={() => { setEditingUser(user); setIsModalOpen(true); }}
-                onDelete={() => handleDelete(user)}
-                onToggleActive={() => handleToggleActive(user)}
-              />
-            </motion.div>
-          ))}
-        </motion.div>
+        <Card>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-slate-200 dark:border-slate-700">
+                  <th
+                    className="text-left px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800"
+                    onClick={() => handleSort('name')}
+                  >
+                    <div className="flex items-center gap-1">
+                      Name
+                      <SortIcon field="name" />
+                    </div>
+                  </th>
+                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300">
+                    Email
+                  </th>
+                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300">
+                    Phone
+                  </th>
+                  <th
+                    className="text-left px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800"
+                    onClick={() => handleSort('department')}
+                  >
+                    <div className="flex items-center gap-1">
+                      Department
+                      <SortIcon field="department" />
+                    </div>
+                  </th>
+                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300">
+                    Position
+                  </th>
+                  <th className="text-center px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300">
+                    Status
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredAndSortedUsers.map((user) => (
+                  <tr
+                    key={user.id}
+                    className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+                  >
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={() => openEditModal(user)}
+                        className="flex items-center gap-3 text-left hover:text-brand-600 dark:hover:text-brand-400 transition-colors"
+                      >
+                        <div className={clsx(
+                          'w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold flex-shrink-0',
+                          user.isActive
+                            ? 'bg-brand-100 dark:bg-brand-900/30 text-brand-600 dark:text-brand-400'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500'
+                        )}>
+                          {user.name.split(' ').map(n => n[0]).join('')}
+                        </div>
+                        <span className="font-medium text-slate-900 dark:text-white hover:text-brand-600 dark:hover:text-brand-400">
+                          {user.name}
+                        </span>
+                      </button>
+                    </td>
+                    <td className="px-4 py-3 text-sm">
+                      <a
+                        href={'mailto:' + user.email}
+                        className="text-brand-600 dark:text-brand-400 hover:underline flex items-center gap-1"
+                      >
+                        <Mail className="w-3 h-3" />
+                        {user.email}
+                      </a>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">
+                      {user.phone ? (
+                        <span className="flex items-center gap-1">
+                          <Phone className="w-3 h-3" />
+                          {user.phone}
+                        </span>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">
+                      {getDepartmentName(user.departmentId)}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">
+                      {getPositionName(user.departmentId, user.positionId)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex justify-center">
+                        <button
+                          onClick={() => handleToggleClick(user)}
+                          className={clsx(
+                            'w-11 h-6 rounded-full transition-colors relative',
+                            user.isActive ? 'bg-success-500' : 'bg-slate-300 dark:bg-slate-600'
+                          )}
+                          title={user.isActive ? 'Click to deactivate' : 'Click to activate'}
+                        >
+                          <div
+                            className={clsx(
+                              'absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform left-0.5',
+                              user.isActive && 'translate-x-[22px]'
+                            )}
+                          />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
       )}
 
       {/* User Modal */}
@@ -582,6 +618,7 @@ export function ManageUsersPage() {
         onClose={() => { setIsModalOpen(false); setEditingUser(null); }}
         user={editingUser}
         onSave={handleSave}
+        onDelete={editingUser ? handleDeleteFromModal : undefined}
         isLoading={isLoading}
       />
 
@@ -591,10 +628,22 @@ export function ManageUsersPage() {
         onClose={() => setUserToDelete(null)}
         onConfirm={confirmDelete}
         title="Delete User"
-        message={`Are you sure you want to delete "${userToDelete?.name}"? This action cannot be undone.`}
+        message={'Are you sure you want to delete "' + (userToDelete?.name || '') + '"? This action cannot be undone.'}
         confirmText="Delete"
         cancelText="Cancel"
         variant="danger"
+      />
+
+      {/* Toggle Status Confirmation Modal */}
+      <ConfirmModal
+        isOpen={!!userToToggle}
+        onClose={() => setUserToToggle(null)}
+        onConfirm={confirmToggle}
+        title={userToToggle?.isActive ? 'Deactivate User' : 'Activate User'}
+        message={'Are you sure you want to ' + (userToToggle?.isActive ? 'deactivate' : 'activate') + ' "' + (userToToggle?.name || '') + '"?'}
+        confirmText={userToToggle?.isActive ? 'Deactivate' : 'Activate'}
+        cancelText="Cancel"
+        variant={userToToggle?.isActive ? 'warning' : 'primary'}
       />
     </Page>
   );
