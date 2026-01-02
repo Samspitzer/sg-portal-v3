@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useSafeNavigate } from '@/hooks';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -26,15 +26,35 @@ export function PanelHeader() {
   const toast = useToast();
 
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  const [focusedIndex, setFocusedIndex] = useState<number>(-1);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showThemeMenu, setShowThemeMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   
   const dropdownRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
+  const dropdownItemRefs = useRef<{ [key: string]: (HTMLButtonElement | null)[] }>({});
   const userMenuRef = useRef<HTMLDivElement>(null);
   const themeMenuRef = useRef<HTMLDivElement>(null);
   const notificationRef = useRef<HTMLDivElement>(null);
+  const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Convert PANELS object to array for mapping
+  const panels = Object.values(PANELS);
+
+  // Reset focused index when dropdown changes
+  useEffect(() => {
+    setFocusedIndex(-1);
+  }, [openDropdown]);
+
+  // Focus the item when focusedIndex changes
+  useEffect(() => {
+    if (openDropdown && focusedIndex >= 0) {
+      const items = dropdownItemRefs.current[openDropdown];
+      if (items && items[focusedIndex]) {
+        items[focusedIndex]?.focus();
+      }
+    }
+  }, [focusedIndex, openDropdown]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -59,6 +79,104 @@ export function PanelHeader() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (hoverTimeoutRef.current) {
+        clearTimeout(hoverTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const handleMouseEnter = (panelId: string, hasTiles: boolean) => {
+    if (!hasTiles) return;
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+    }
+    setOpenDropdown(panelId);
+  };
+
+  const handleMouseLeave = () => {
+    hoverTimeoutRef.current = setTimeout(() => {
+      setOpenDropdown(null);
+    }, 150);
+  };
+
+  const handlePanelKeyDown = useCallback((
+    e: React.KeyboardEvent,
+    panelId: string,
+    hasTiles: boolean,
+    tilesCount: number
+  ) => {
+    if (!hasTiles) return;
+
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        if (openDropdown !== panelId) {
+          setOpenDropdown(panelId);
+          setFocusedIndex(0);
+        } else {
+          setFocusedIndex(0);
+        }
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        if (openDropdown !== panelId) {
+          setOpenDropdown(panelId);
+          setFocusedIndex(tilesCount - 1);
+        } else {
+          setFocusedIndex(tilesCount - 1);
+        }
+        break;
+      case 'Enter':
+      case ' ':
+        if (openDropdown !== panelId) {
+          e.preventDefault();
+          setOpenDropdown(panelId);
+          setFocusedIndex(0);
+        }
+        break;
+      case 'Escape':
+        e.preventDefault();
+        setOpenDropdown(null);
+        break;
+    }
+  }, [openDropdown]);
+
+  const handleDropdownKeyDown = useCallback((
+    e: React.KeyboardEvent,
+    panelId: string,
+    tilesCount: number,
+    onSelect: () => void
+  ) => {
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        setFocusedIndex((prev) => (prev + 1) % tilesCount);
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        setFocusedIndex((prev) => (prev - 1 + tilesCount) % tilesCount);
+        break;
+      case 'Enter':
+      case ' ':
+        e.preventDefault();
+        onSelect();
+        break;
+      case 'Escape':
+        e.preventDefault();
+        setOpenDropdown(null);
+        // Return focus to the panel button
+        const panelButton = dropdownRefs.current[panelId]?.querySelector('button');
+        panelButton?.focus();
+        break;
+      case 'Tab':
+        setOpenDropdown(null);
+        break;
+    }
+  }, []);
+
   const handleLogout = async () => {
     try {
       await logout();
@@ -76,9 +194,6 @@ export function PanelHeader() {
 
   const CurrentThemeIcon = theme === 'dark' ? Moon : theme === 'light' ? Sun : Monitor;
 
-  // Convert PANELS object to array for mapping
-  const panels = Object.values(PANELS);
-
   return (
     <header
       style={{ height: 'var(--header-height)' }}
@@ -92,7 +207,7 @@ export function PanelHeader() {
       <div className="h-full flex items-center justify-between px-4">
         {/* Left - Logo & Navigation */}
         <div className="flex items-center gap-1">
-         {/* Logo */}
+          {/* Logo */}
           <button
             onClick={() => navigate('/')}
             className={clsx(
@@ -100,21 +215,20 @@ export function PanelHeader() {
               'transition-colors'
             )}
           >
-  {company.logo ? (
-    <img 
-      src={company.logo} 
-      alt={company.name} 
-      className="h-12 w-auto max-w-[180px] object-contain"
-    />
-  ) : (
-    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center">
-      <span className="text-white font-bold text-xs">
-        {company.name.split(' ').map(w => w[0]).join('').slice(0, 3)}
-      </span>
-    </div>
-  )}
-  
-</button>
+            {company.logo ? (
+              <img 
+                src={company.logo} 
+                alt={company.name} 
+                className="h-12 w-auto max-w-[180px] object-contain"
+              />
+            ) : (
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center">
+                <span className="text-white font-bold text-xs">
+                  {company.name.split(' ').map(w => w[0]).join('').slice(0, 3)}
+                </span>
+              </div>
+            )}
+          </button>
 
           {/* Divider */}
           <div className="h-6 w-px bg-slate-200 dark:bg-slate-700 mx-2" />
@@ -122,22 +236,32 @@ export function PanelHeader() {
           {/* Navigation Items */}
           {panels.map((panel) => {
             const PanelIcon = panel.icon;
+            const hasTiles = panel.tiles.length > 0;
+            
+            // Initialize refs array for this panel's dropdown items
+            if (!dropdownItemRefs.current[panel.id]) {
+              dropdownItemRefs.current[panel.id] = [];
+            }
             
             return (
               <div
                 key={panel.id}
                 ref={(el) => (dropdownRefs.current[panel.id] = el)}
                 className="relative flex items-center"
+                onMouseEnter={() => handleMouseEnter(panel.id, hasTiles)}
+                onMouseLeave={handleMouseLeave}
               >
-                {/* Panel Name - Clickable to navigate */}
+                {/* Panel Button */}
                 <button
                   onClick={() => {
                     navigate(panel.basePath);
                     setOpenDropdown(null);
                   }}
+                  onKeyDown={(e) => handlePanelKeyDown(e, panel.id, hasTiles, panel.tiles.length)}
+                  aria-expanded={openDropdown === panel.id}
+                  aria-haspopup={hasTiles ? 'menu' : undefined}
                   className={clsx(
-                    'flex items-center gap-2 pl-3 py-2 rounded-lg text-sm font-medium transition-colors',
-                    panel.tiles.length > 0 ? 'pr-1 rounded-r-none' : 'pr-3',
+                    'flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
                     location.pathname.startsWith(panel.basePath)
                       ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
                       : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
@@ -145,32 +269,23 @@ export function PanelHeader() {
                 >
                   <PanelIcon className="w-4 h-4" />
                   <span className="hidden md:inline">{panel.name}</span>
-                </button>
-
-                {/* Dropdown Arrow - Only shows if panel has tiles */}
-                {panel.tiles.length > 0 && (
-                  <button
-                    onClick={() => setOpenDropdown(openDropdown === panel.id ? null : panel.id)}
-                    className={clsx(
-                      'flex items-center px-1 py-2 rounded-r-lg transition-colors',
-                      location.pathname.startsWith(panel.basePath)
-                        ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/50'
-                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-                    )}
-                  >
+                  {hasTiles && (
                     <ChevronDown className={clsx(
                       'w-4 h-4 transition-transform',
                       openDropdown === panel.id && 'rotate-180'
                     )} />
-                  </button>
-                )}
+                  )}
+                </button>
 
+                {/* Dropdown Menu */}
                 <AnimatePresence>
-                  {openDropdown === panel.id && panel.tiles.length > 0 && (
+                  {openDropdown === panel.id && hasTiles && (
                     <motion.div
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: 10 }}
+                      role="menu"
+                      aria-label={`${panel.name} submenu`}
                       className={clsx(
                         'absolute left-0 top-full mt-1',
                         'w-56 py-2',
@@ -179,17 +294,38 @@ export function PanelHeader() {
                         'border border-slate-200 dark:border-slate-700'
                       )}
                     >
-                      {panel.tiles.map((tile) => (
+                      {panel.tiles.map((tile, index) => (
                         <button
                           key={tile.path}
+                          ref={(el) => {
+                            if (!dropdownItemRefs.current[panel.id]) {
+                              dropdownItemRefs.current[panel.id] = [];
+                            }
+                            const items = dropdownItemRefs.current[panel.id];
+                            if (items) {
+                              items[index] = el;
+                            }
+                          }}
+                          role="menuitem"
+                          tabIndex={focusedIndex === index ? 0 : -1}
                           onClick={() => {
                             navigate(tile.path);
                             setOpenDropdown(null);
                           }}
+                          onKeyDown={(e) => handleDropdownKeyDown(
+                            e,
+                            panel.id,
+                            panel.tiles.length,
+                            () => {
+                              navigate(tile.path);
+                              setOpenDropdown(null);
+                            }
+                          )}
                           className={clsx(
                             'w-full flex items-center gap-3 px-4 py-2 text-sm',
                             'text-slate-700 dark:text-slate-300',
                             'hover:bg-slate-100 dark:hover:bg-slate-700',
+                            'focus:bg-slate-100 dark:focus:bg-slate-700 focus:outline-none',
                             location.pathname === tile.path && 'bg-slate-100 dark:bg-slate-700'
                           )}
                         >
