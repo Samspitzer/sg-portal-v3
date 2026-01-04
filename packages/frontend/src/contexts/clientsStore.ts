@@ -97,8 +97,7 @@ export const useClientsStore = create<ClientsStore>()(
         deleteCompany: (id) => {
           set((state) => ({
             companies: state.companies.filter((company) => company.id !== id),
-            // Also delete all contacts for this company
-            contacts: state.contacts.filter((contact) => contact.companyId !== id),
+            // Contacts are NOT deleted - they become orphaned and show as red in the UI
           }));
         },
 

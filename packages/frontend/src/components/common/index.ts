@@ -5,3 +5,7 @@ export { Modal, ConfirmModal } from './Modal';
 export { ToastContainer } from './Toast';
 export { PageNavigationGuard } from './PageNavigationGuard';
 export { SearchInput } from './SearchInput';
+export { AlphabetFilter } from './AlphabetFilter';
+export { CollapsibleSection } from './CollapsibleSection';
+export { DuplicateContactModal } from './DuplicateContactModal';
+export { DuplicateCompanyModal } from './DuplicateCompanyModal';

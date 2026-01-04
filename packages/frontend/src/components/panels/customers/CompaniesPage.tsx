@@ -10,6 +10,8 @@ import {
 import { Page } from '@/components/layout';
 import { useClientsStore, useUsersStore, useToast, type Company } from '@/contexts';
 import { Card, CardContent, Button, Input, Modal, SearchInput } from '@/components/common';
+import { AlphabetFilter } from '@/components/common/AlphabetFilter';
+import { DuplicateCompanyModal } from '@/components/common/DuplicateCompanyModal';
 
 interface CompanyFormData {
   name: string;
@@ -45,10 +47,22 @@ export function CompaniesPage() {
   const toast = useToast();
 
   const [search, setSearch] = useState('');
+  const [letterFilter, setLetterFilter] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [formData, setFormData] = useState<CompanyFormData>(initialFormData);
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+
+  // Duplicate company detection
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false);
+  const [duplicateCompany, setDuplicateCompany] = useState<{
+    id: string;
+    name: string;
+    phone?: string;
+    website?: string;
+    city?: string;
+    state?: string;
+  } | null>(null);
 
   const activeUsers = useMemo(() => users.filter((u) => u.isActive), [users]);
 
@@ -67,10 +81,20 @@ export function CompaniesPage() {
     return [company.address.city, company.address.state].filter(Boolean).join(', ');
   };
 
+  // Get all company names for the alphabet filter
+  const companyNames = useMemo(() => companies.map((c) => c.name), [companies]);
+
   const filteredAndSortedCompanies = useMemo(() => {
-    let result = companies.filter((company) =>
-      company.name.toLowerCase().includes(search.toLowerCase())
-    );
+    let result = companies.filter((company) => {
+      // Search filter
+      const matchesSearch = company.name.toLowerCase().includes(search.toLowerCase());
+      
+      // Letter filter
+      const matchesLetter = !letterFilter || 
+        (company.name?.charAt(0)?.toUpperCase() === letterFilter);
+      
+      return matchesSearch && matchesLetter;
+    });
 
     result = [...result].sort((a, b) => {
       let aVal: string | number = '';
@@ -101,7 +125,7 @@ export function CompaniesPage() {
     });
 
     return result;
-  }, [companies, search, sortField, sortDirection, contacts, users]);
+  }, [companies, search, letterFilter, sortField, sortDirection, contacts, users]);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -131,12 +155,40 @@ export function CompaniesPage() {
     setFormData(initialFormData);
   };
 
+  // Check for duplicate company by name
+  const findDuplicateCompany = (name: string) => {
+    const normalizedName = name.trim().toLowerCase();
+    return companies.find(
+      (company) => company.name.toLowerCase() === normalizedName
+    );
+  };
+
   const handleSave = () => {
     if (!formData.name.trim()) {
       toast.error('Error', 'Company name is required');
       return;
     }
 
+    // Check for duplicate
+    const existing = findDuplicateCompany(formData.name);
+    if (existing) {
+      setDuplicateCompany({
+        id: existing.id,
+        name: existing.name,
+        phone: existing.phone,
+        website: existing.website,
+        city: existing.address?.city,
+        state: existing.address?.state,
+      });
+      setShowDuplicateModal(true);
+      return;
+    }
+
+    // No duplicate, create company
+    createCompany();
+  };
+
+  const createCompany = () => {
     const companyData = {
       name: formData.name.trim(),
       phone: formData.phone || undefined,
@@ -157,6 +209,20 @@ export function CompaniesPage() {
     addCompany(companyData);
     toast.success('Created', formData.name + ' has been added');
     closeModal();
+  };
+
+  const handleViewExistingCompany = () => {
+    if (duplicateCompany) {
+      navigate('/clients/companies/' + duplicateCompany.id);
+    }
+    setShowDuplicateModal(false);
+    setDuplicateCompany(null);
+    closeModal();
+  };
+
+  const handleCloseDuplicateModal = () => {
+    setShowDuplicateModal(false);
+    setDuplicateCompany(null);
   };
 
   const hasChanges =
@@ -181,7 +247,8 @@ export function CompaniesPage() {
         </Button>
       }
     >
-      <div className="mb-6">
+      {/* Search and Filters */}
+      <div className="mb-4">
         <SearchInput
           value={search}
           onChange={setSearch}
@@ -190,17 +257,28 @@ export function CompaniesPage() {
         />
       </div>
 
+      {/* A-Z Filter Bar */}
+      <div className="mb-6">
+        <AlphabetFilter
+          selected={letterFilter}
+          onSelect={setLetterFilter}
+          items={companyNames}
+        />
+      </div>
+
       {filteredAndSortedCompanies.length === 0 ? (
         <Card>
           <CardContent className="p-12 text-center">
             <Building2 className="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600" />
             <h3 className="mt-4 text-lg font-medium text-slate-900 dark:text-white">
-              {search ? 'No companies found' : 'No companies yet'}
+              {search || letterFilter ? 'No companies found' : 'No companies yet'}
             </h3>
             <p className="mt-2 text-slate-500 dark:text-slate-400">
-              {search ? 'Try a different search term' : 'Get started by adding your first company'}
+              {search || letterFilter 
+                ? 'Try a different search term or filter' 
+                : 'Get started by adding your first company'}
             </p>
-            {!search && (
+            {!search && !letterFilter && (
               <Button variant="primary" className="mt-4" onClick={openAddModal}>
                 <Plus className="w-4 h-4 mr-2" />
                 Add Company
@@ -430,6 +508,14 @@ export function CompaniesPage() {
           </div>
         </div>
       </Modal>
+
+      {/* Duplicate Company Modal */}
+      <DuplicateCompanyModal
+        isOpen={showDuplicateModal}
+        existingCompany={duplicateCompany}
+        onClose={handleCloseDuplicateModal}
+        onUseExisting={handleViewExistingCompany}
+      />
     </Page>
   );
 }

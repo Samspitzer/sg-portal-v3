@@ -16,9 +16,12 @@ import {
   Check,
   X,
   Pencil,
+  CalendarClock,
+  Users,
 } from 'lucide-react';
 import { Page } from '@/components/layout';
 import { Card, CardContent, Button, ConfirmModal } from '@/components/common';
+import { CollapsibleSection } from '@/components/common/CollapsibleSection';
 import { useClientsStore, useUsersStore, useToast, useNavigationGuardStore, type Company } from '@/contexts';
 
 // Unsaved Changes Modal with Save option and focus trapping
@@ -51,7 +54,6 @@ function UnsavedChangesModal({
     } else if (e.key === 'Tab') {
       e.preventDefault();
       e.stopPropagation();
-      // Cycle focus between buttons
       if (document.activeElement === discardRef.current) {
         keepEditingRef.current?.focus();
       } else if (document.activeElement === keepEditingRef.current) {
@@ -62,7 +64,6 @@ function UnsavedChangesModal({
     } else if (e.key === 'Enter') {
       e.preventDefault();
       e.stopPropagation();
-      // Enter on focused button triggers it
       if (document.activeElement === discardRef.current) {
         onDiscard();
       } else if (document.activeElement === keepEditingRef.current) {
@@ -76,15 +77,9 @@ function UnsavedChangesModal({
   if (!isOpen) return null;
 
   return (
-    <div 
-      className="fixed inset-0 z-[100] flex items-center justify-center p-4"
-      onKeyDown={handleKeyDown}
-    >
-      <div 
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-        onClick={onCancel}
-      />
-      <div 
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" onKeyDown={handleKeyDown}>
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onCancel} />
+      <div
         className="relative z-10 bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 max-w-md w-full p-6"
         onClick={(e) => e.stopPropagation()}
       >
@@ -92,9 +87,7 @@ function UnsavedChangesModal({
           <div className="w-10 h-10 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
             <FileText className="w-5 h-5 text-amber-600 dark:text-amber-400" />
           </div>
-          <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
-            Unsaved Changes
-          </h3>
+          <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Unsaved Changes</h3>
         </div>
         <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
           You have unsaved changes. What would you like to do?
@@ -127,7 +120,7 @@ function UnsavedChangesModal({
   );
 }
 
-// Inline Editable Field Component
+// Compact Inline Editable Field Component
 function InlineField({
   label,
   value,
@@ -163,7 +156,9 @@ function InlineField({
 
   const moveToNextField = () => {
     const focusableElements = document.querySelectorAll('[data-inline-field="true"]');
-    const currentIndex = Array.from(focusableElements).findIndex(el => el === fieldRef.current || el.contains(fieldRef.current));
+    const currentIndex = Array.from(focusableElements).findIndex(
+      (el) => el === fieldRef.current || el.contains(fieldRef.current)
+    );
     const nextElement = focusableElements[currentIndex + 1] as HTMLElement;
     if (nextElement) {
       nextElement.focus();
@@ -197,7 +192,6 @@ function InlineField({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    // Don't process keys when modal is open
     if (showModal) {
       e.preventDefault();
       e.stopPropagation();
@@ -240,9 +234,7 @@ function InlineField({
     return (
       <>
         <div className="space-y-1" data-inline-field="true" ref={fieldRef}>
-          <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
-            {label}
-          </label>
+          <label className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</label>
           <div className="flex items-center gap-2">
             {type === 'textarea' ? (
               <textarea
@@ -252,7 +244,7 @@ function InlineField({
                 placeholder={placeholder}
                 rows={3}
                 autoFocus
-                className="flex-1 px-3 py-2 text-sm border border-brand-500 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                className="flex-1 px-3 py-1.5 text-sm border border-brand-500 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
               />
             ) : (
               <input
@@ -262,21 +254,21 @@ function InlineField({
                 onKeyDown={handleKeyDown}
                 placeholder={placeholder}
                 autoFocus
-                className="flex-1 px-3 py-2 text-sm border border-brand-500 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                className="flex-1 px-3 py-1.5 text-sm border border-brand-500 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
               />
             )}
             <button
               onClick={handleSave}
               tabIndex={-1}
-              className="p-2 text-success-600 hover:bg-success-50 dark:hover:bg-success-900/20 rounded-lg"
+              className="p-1.5 text-success-600 hover:bg-success-50 dark:hover:bg-success-900/20 rounded-lg"
               title="Save (Enter)"
             >
               <Check className="w-4 h-4" />
             </button>
             <button
-              onClick={() => hasChanges ? setShowModal(true) : setIsEditing(false)}
+              onClick={() => (hasChanges ? setShowModal(true) : setIsEditing(false))}
               tabIndex={-1}
-              className="p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"
+              className="p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"
               title="Cancel (Esc)"
             >
               <X className="w-4 h-4" />
@@ -303,15 +295,10 @@ function InlineField({
       onClick={() => setIsEditing(true)}
       onKeyDown={handleViewKeyDown}
     >
-      <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
-        {label}
-      </div>
-      <div className="flex items-center gap-2">
-        {Icon && <Icon className="w-4 h-4 text-slate-400" />}
-        <span className={clsx(
-          'text-sm',
-          value ? 'text-slate-900 dark:text-white' : 'text-slate-400 italic'
-        )}>
+      <div className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</div>
+      <div className="flex items-center gap-2 mt-0.5">
+        {Icon && <Icon className="w-3.5 h-3.5 text-slate-400" />}
+        <span className={clsx('text-sm', value ? 'text-slate-900 dark:text-white' : 'text-slate-400 italic')}>
           {value || placeholder || 'Click to add...'}
         </span>
         <Pencil className="w-3 h-3 text-slate-300 opacity-0 group-hover:opacity-100 group-focus:opacity-100 transition-opacity ml-auto" />
@@ -338,8 +325,8 @@ function SalesRepField({
   const [pendingTab, setPendingTab] = useState(false);
   const fieldRef = useRef<HTMLDivElement>(null);
   const { users } = useUsersStore();
-  const activeUsers = users.filter(u => u.isActive);
-  const selectedUser = users.find(u => u.id === value);
+  const activeUsers = users.filter((u) => u.isActive);
+  const selectedUser = users.find((u) => u.id === value);
 
   useEffect(() => {
     setEditValue(value);
@@ -353,7 +340,9 @@ function SalesRepField({
 
   const moveToNextField = () => {
     const focusableElements = document.querySelectorAll('[data-inline-field="true"]');
-    const currentIndex = Array.from(focusableElements).findIndex(el => el === fieldRef.current || el.contains(fieldRef.current));
+    const currentIndex = Array.from(focusableElements).findIndex(
+      (el) => el === fieldRef.current || el.contains(fieldRef.current)
+    );
     const nextElement = focusableElements[currentIndex + 1] as HTMLElement;
     if (nextElement) {
       nextElement.focus();
@@ -387,7 +376,6 @@ function SalesRepField({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    // Don't process keys when modal is open
     if (showModal) {
       e.preventDefault();
       e.stopPropagation();
@@ -427,9 +415,7 @@ function SalesRepField({
     return (
       <>
         <div className="space-y-1" data-inline-field="true" ref={fieldRef}>
-          <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
-            {label}
-          </label>
+          <label className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</label>
           <div className="flex items-center gap-2">
             <select
               value={editValue}
@@ -439,17 +425,19 @@ function SalesRepField({
               }}
               onKeyDown={handleKeyDown}
               autoFocus
-              className="flex-1 px-3 py-2 text-sm border border-brand-500 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+              className="flex-1 px-3 py-1.5 text-sm border border-brand-500 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
             >
               <option value="">No sales rep assigned</option>
-              {activeUsers.map(user => (
-                <option key={user.id} value={user.id}>{user.name}</option>
+              {activeUsers.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.name}
+                </option>
               ))}
             </select>
             <button
-              onClick={() => hasChanges ? setShowModal(true) : setIsEditing(false)}
+              onClick={() => (hasChanges ? setShowModal(true) : setIsEditing(false))}
               tabIndex={-1}
-              className="p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"
+              className="p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"
               title="Cancel (Esc)"
             >
               <X className="w-4 h-4" />
@@ -476,15 +464,10 @@ function SalesRepField({
       onClick={() => setIsEditing(true)}
       onKeyDown={handleViewKeyDown}
     >
-      <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
-        {label}
-      </div>
-      <div className="flex items-center gap-2">
-        <User className="w-4 h-4 text-slate-400" />
-        <span className={clsx(
-          'text-sm',
-          selectedUser ? 'text-slate-900 dark:text-white' : 'text-slate-400 italic'
-        )}>
+      <div className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</div>
+      <div className="flex items-center gap-2 mt-0.5">
+        <User className="w-3.5 h-3.5 text-slate-400" />
+        <span className={clsx('text-sm', selectedUser ? 'text-slate-900 dark:text-white' : 'text-slate-400 italic')}>
           {selectedUser?.name || 'Click to assign...'}
         </span>
         <Pencil className="w-3 h-3 text-slate-300 opacity-0 group-hover:opacity-100 group-focus:opacity-100 transition-opacity ml-auto" />
@@ -498,19 +481,17 @@ export function CompanyDetailPage() {
   const navigate = useNavigate();
   const toast = useToast();
   const { companies, contacts, updateCompany, deleteCompany } = useClientsStore();
-  
+
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [editingFields, setEditingFields] = useState<Map<string, boolean>>(new Map());
-  
-  const company = companies.find(c => c.id === id);
-  const companyContacts = contacts.filter(c => c.companyId === id);
 
-  // Track if any field is being edited with changes
-  const hasUnsavedEdits = Array.from(editingFields.values()).some(hasChanges => hasChanges);
-  
-  // Register with navigation guard
+  const company = companies.find((c) => c.id === id);
+  const companyContacts = contacts.filter((c) => c.companyId === id);
+
+  const hasUnsavedEdits = Array.from(editingFields.values()).some((hasChanges) => hasChanges);
+
   const { setGuard, clearGuard } = useNavigationGuardStore();
-  
+
   useEffect(() => {
     setGuard(hasUnsavedEdits);
     return () => clearGuard();
@@ -518,7 +499,7 @@ export function CompanyDetailPage() {
 
   const handleEditingChange = useCallback((fieldName: string) => {
     return (isEditing: boolean, hasChanges: boolean) => {
-      setEditingFields(prev => {
+      setEditingFields((prev) => {
         const next = new Map(prev);
         if (isEditing && hasChanges) {
           next.set(fieldName, true);
@@ -536,17 +517,9 @@ export function CompanyDetailPage() {
         <Card>
           <CardContent className="p-12 text-center">
             <Building2 className="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600" />
-            <h3 className="mt-4 text-lg font-medium text-slate-900 dark:text-white">
-              Company not found
-            </h3>
-            <p className="mt-2 text-slate-500 dark:text-slate-400">
-              This company may have been deleted.
-            </p>
-            <Button
-              variant="primary"
-              className="mt-4"
-              onClick={() => navigate('/clients/companies')}
-            >
+            <h3 className="mt-4 text-lg font-medium text-slate-900 dark:text-white">Company not found</h3>
+            <p className="mt-2 text-slate-500 dark:text-slate-400">This company may have been deleted.</p>
+            <Button variant="primary" className="mt-4" onClick={() => navigate('/clients/companies')}>
               <ArrowLeft className="w-4 h-4 mr-2" />
               Back to Companies
             </Button>
@@ -585,29 +558,29 @@ export function CompanyDetailPage() {
       title={company.name}
       description="Company details"
       actions={
-        <div className="flex items-center gap-3">
-          <Button variant="secondary" onClick={() => navigate('/clients/companies')}>
-            <ArrowLeft className="w-4 h-4 mr-2" />
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" size="sm" onClick={() => navigate(-1)}>
+            <ArrowLeft className="w-4 h-4 mr-1" />
             Back
           </Button>
-          <Button variant="danger" onClick={() => setShowDeleteModal(true)}>
-            <Trash2 className="w-4 h-4 mr-2" />
+          <Button variant="danger" size="sm" onClick={() => setShowDeleteModal(true)}>
+            <Trash2 className="w-4 h-4 mr-1" />
             Delete
           </Button>
         </div>
       }
     >
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Left Column - Company Info */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Basic Info Card */}
+        <div className="lg:col-span-2 space-y-4">
+          {/* Header Card - Compact */}
           <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-12 h-12 rounded-xl bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center">
+            <CardContent className="p-4">
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 rounded-xl bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center flex-shrink-0">
                   <Building2 className="w-6 h-6 text-brand-600 dark:text-brand-400" />
                 </div>
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
                   <InlineField
                     label="Company Name"
                     value={company.name}
@@ -617,8 +590,8 @@ export function CompanyDetailPage() {
                   />
                 </div>
               </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
                 <InlineField
                   label="Phone"
                   value={company.phone || ''}
@@ -647,135 +620,163 @@ export function CompanyDetailPage() {
             </CardContent>
           </Card>
 
-          {/* Address Card */}
-          <Card>
-            <CardContent className="p-6">
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
-                <MapPin className="w-4 h-4" />
-                Address
-              </h3>
-              <div className="space-y-3">
-                <InlineField
-                  label="Street"
-                  value={company.address?.street || ''}
-                  onSave={(v) => handleAddressSave('street', v)}
-                  placeholder="123 Main Street"
-                  onEditingChange={handleEditingChange('street')}
-                />
-                <div className="grid grid-cols-3 gap-4">
-                  <InlineField
-                    label="City"
-                    value={company.address?.city || ''}
-                    onSave={(v) => handleAddressSave('city', v)}
-                    placeholder="New York"
-                    onEditingChange={handleEditingChange('city')}
-                  />
-                  <InlineField
-                    label="State"
-                    value={company.address?.state || ''}
-                    onSave={(v) => handleAddressSave('state', v)}
-                    placeholder="NY"
-                    onEditingChange={handleEditingChange('state')}
-                  />
-                  <InlineField
-                    label="ZIP"
-                    value={company.address?.zip || ''}
-                    onSave={(v) => handleAddressSave('zip', v)}
-                    placeholder="10001"
-                    onEditingChange={handleEditingChange('zip')}
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Notes Card */}
-          <Card>
-            <CardContent className="p-6">
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
-                <FileText className="w-4 h-4" />
-                Notes
-              </h3>
+          {/* Address Section - Collapsible */}
+          <CollapsibleSection
+            title="Address"
+            icon={<MapPin className="w-4 h-4 text-slate-500" />}
+            defaultOpen={true}
+          >
+            <div className="space-y-3">
               <InlineField
-                label="Notes"
-                value={company.notes || ''}
-                onSave={(v) => handleFieldSave('notes', v)}
-                type="textarea"
-                placeholder="Add notes about this company..."
-                onEditingChange={handleEditingChange('notes')}
+                label="Street"
+                value={company.address?.street || ''}
+                onSave={(v) => handleAddressSave('street', v)}
+                placeholder="123 Main Street"
+                onEditingChange={handleEditingChange('street')}
               />
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Right Column - Contacts */}
-        <div className="space-y-6">
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
-                  Contacts ({companyContacts.length})
-                </h3>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => navigate('/clients/contacts?company=' + company.id)}
-                >
-                  <Plus className="w-4 h-4 mr-1" />
-                  Add
-                </Button>
+              <div className="grid grid-cols-3 gap-3">
+                <InlineField
+                  label="City"
+                  value={company.address?.city || ''}
+                  onSave={(v) => handleAddressSave('city', v)}
+                  placeholder="New York"
+                  onEditingChange={handleEditingChange('city')}
+                />
+                <InlineField
+                  label="State"
+                  value={company.address?.state || ''}
+                  onSave={(v) => handleAddressSave('state', v)}
+                  placeholder="NY"
+                  onEditingChange={handleEditingChange('state')}
+                />
+                <InlineField
+                  label="ZIP"
+                  value={company.address?.zip || ''}
+                  onSave={(v) => handleAddressSave('zip', v)}
+                  placeholder="10001"
+                  onEditingChange={handleEditingChange('zip')}
+                />
               </div>
+            </div>
+          </CollapsibleSection>
 
-              {companyContacts.length === 0 ? (
-                <div className="text-center py-8 text-slate-400">
-                  <User className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                  <p className="text-sm">No contacts yet</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {companyContacts.map(contact => (
-                    <div
-                      key={contact.id}
-                      onClick={() => navigate('/clients/contacts/' + contact.id)}
-                      className="p-3 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-brand-300 dark:hover:border-brand-700 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors"
-                    >
-                      <div className="font-medium text-slate-900 dark:text-white">
+          {/* Contacts Section - Collapsible, Collapsed by Default */}
+          <CollapsibleSection
+            title="Contacts"
+            icon={<Users className="w-4 h-4 text-slate-500" />}
+            badge={companyContacts.length}
+            defaultOpen={false}
+          >
+            <div className="flex justify-end mb-3">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => navigate('/clients/contacts?company=' + company.id)}
+              >
+                <Plus className="w-4 h-4 mr-1" />
+                Add Contact
+              </Button>
+            </div>
+
+            {companyContacts.length === 0 ? (
+              <div className="text-center py-6 text-slate-400">
+                <User className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">No contacts yet</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {companyContacts.map((contact) => (
+                  <div
+                    key={contact.id}
+                    onClick={() => navigate('/clients/contacts/' + contact.id)}
+                    className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer transition-colors"
+                  >
+                    <div className="w-8 h-8 rounded-full bg-accent-100 dark:bg-accent-900/30 flex items-center justify-center text-xs font-semibold text-accent-600 dark:text-accent-400">
+                      {contact.firstName[0]}
+                      {contact.lastName[0]}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-slate-900 dark:text-white truncate">
                         {contact.firstName} {contact.lastName}
                       </div>
-                      {contact.role && (
-                        <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                          {contact.role}
-                        </div>
-                      )}
-                      <div className="flex items-center gap-3 mt-2 text-xs text-slate-400">
+                      <div className="flex items-center gap-3 text-xs text-slate-500">
+                        {contact.role && <span>{contact.role}</span>}
                         {contact.email && (
-                          <span className="flex items-center gap-1">
+                          <span className="flex items-center gap-1 truncate">
                             <Mail className="w-3 h-3" />
                             {contact.email}
                           </span>
                         )}
-                        {contact.phoneMobile && (
-                          <span className="flex items-center gap-1">
-                            <Smartphone className="w-3 h-3" />
-                            {contact.phoneMobile}
-                          </span>
-                        )}
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
+                    {contact.phoneMobile && (
+                      <div className="flex items-center gap-1 text-xs text-slate-400">
+                        <Smartphone className="w-3 h-3" />
+                        {contact.phoneMobile}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </CollapsibleSection>
+
+          {/* Notes Section - Collapsible */}
+          <CollapsibleSection
+            title="Notes"
+            icon={<FileText className="w-4 h-4 text-slate-500" />}
+            defaultOpen={true}
+          >
+            <InlineField
+              label="Notes"
+              value={company.notes || ''}
+              onSave={(v) => handleFieldSave('notes', v)}
+              type="textarea"
+              placeholder="Add notes about this company..."
+              onEditingChange={handleEditingChange('notes')}
+            />
+          </CollapsibleSection>
+        </div>
+
+        {/* Right Column - Tasks & Quick Info */}
+        <div className="space-y-4">
+          {/* Upcoming Tasks */}
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                  <CalendarClock className="w-4 h-4 text-slate-500" />
+                  Upcoming Tasks
+                </h3>
+                <Button variant="secondary" size="sm">
+                  <Plus className="w-3 h-3" />
+                </Button>
+              </div>
+              <div className="text-center py-8 text-slate-400">
+                <CalendarClock className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">No upcoming tasks</p>
+                <p className="text-xs mt-1">Tasks will appear here</p>
+              </div>
             </CardContent>
           </Card>
 
-          {/* Activity Card - Placeholder */}
+          {/* Quick Stats - Optional placeholder for future */}
           <Card>
-            <CardContent className="p-6">
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-4">
-                Recent Activity
-              </h3>
-              <div className="text-center py-8 text-slate-400">
-                <p className="text-sm">Coming soon...</p>
+            <CardContent className="p-4">
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-3">Quick Info</h3>
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-500">Contacts</span>
+                  <span className="font-medium text-slate-900 dark:text-white">{companyContacts.length}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-500">Open Tasks</span>
+                  <span className="font-medium text-slate-900 dark:text-white">0</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-500">Projects</span>
+                  <span className="font-medium text-slate-900 dark:text-white">0</span>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -790,7 +791,11 @@ export function CompanyDetailPage() {
         title="Delete Company"
         message={
           companyContacts.length > 0
-            ? 'Are you sure you want to delete "' + company.name + '"? This will also delete ' + companyContacts.length + ' contact(s) associated with this company.'
+            ? 'Are you sure you want to delete "' +
+              company.name +
+              '"? This will also delete ' +
+              companyContacts.length +
+              ' contact(s) associated with this company.'
             : 'Are you sure you want to delete "' + company.name + '"?'
         }
         confirmText="Delete"

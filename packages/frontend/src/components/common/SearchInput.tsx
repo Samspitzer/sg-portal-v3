@@ -20,20 +20,25 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(
       showClearButton = true,
       icon,
       placeholder = 'Search...',
+      onKeyDown: externalKeyDown,
       ...props
     },
     ref
   ) => {
     const handleKeyDown = useCallback(
       (e: React.KeyboardEvent<HTMLInputElement>) => {
-        if (e.key === 'Escape') {
+        // Call external handler first (for dropdown navigation)
+        externalKeyDown?.(e);
+        
+        // Only handle Escape for clearing if not already handled
+        if (e.key === 'Escape' && !e.defaultPrevented) {
           e.preventDefault();
           e.stopPropagation();
           onChange('');
           onClear?.();
         }
       },
-      [onChange, onClear]
+      [onChange, onClear, externalKeyDown]
     );
 
     const handleClear = useCallback(() => {
