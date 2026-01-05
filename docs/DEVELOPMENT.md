@@ -8,9 +8,22 @@
 
 1. [Common Components](#common-components)
 2. [Custom Hooks](#custom-hooks)
-3. [Established Patterns](#established-patterns)
-4. [Keyboard Navigation Standards](#keyboard-navigation-standards)
-5. [File Structure](#file-structure)
+3. [Layout Components](#layout-components)
+4. [Established Patterns](#established-patterns)
+5. [Keyboard Navigation Standards](#keyboard-navigation-standards)
+6. [File Structure](#file-structure)
+7. [Adding New Features Checklist](#adding-new-features-checklist)
+
+---
+
+## ⚠️ IMPORTANT RULES
+
+**Before creating any new component or functionality:**
+
+1. **ALWAYS check this document first** - The component or pattern you need likely already exists
+2. **ALWAYS use `useDropdownKeyboard` hook** for ANY dropdown, select, or autocomplete component
+3. **ALWAYS use existing common components** - Don't recreate buttons, inputs, modals, etc.
+4. **ALWAYS follow keyboard navigation standards** - Arrow keys, Enter, Escape must work consistently
 
 ---
 
@@ -95,6 +108,155 @@ import { SearchInput } from '@/components/common';
   onFocus={() => setShowDropdown(true)}
   placeholder="Search companies..."
   icon={<Building2 className="w-4 h-4" />}
+/>
+```
+
+---
+
+### SelectFilter
+**File:** `SelectFilter.tsx`
+
+**Purpose:** Dropdown filter button with keyboard navigation built-in. Uses `useDropdownKeyboard` internally.
+
+**Props:**
+- `label`: string - Label shown when nothing is selected
+- `value`: string - Currently selected value (empty string = all)
+- `options`: SelectFilterOption[] - `{ value: string, label: string, count?: number }`
+- `onChange`: (value: string) => void
+- `icon`: ReactNode (optional)
+- `showAllOption`: boolean (default: true)
+- `allLabel`: string (default: "All")
+- `className`: string (optional)
+
+**Keyboard Support:** Arrow Up/Down, Enter, Escape (built-in)
+
+**Usage:**
+```tsx
+import { SelectFilter } from '@/components/common';
+
+// Build options from data
+const locationOptions = useMemo(() => {
+  const locations = new Map<string, number>();
+  companies.forEach((company) => {
+    const loc = getLocation(company);
+    if (loc) {
+      locations.set(loc, (locations.get(loc) || 0) + 1);
+    }
+  });
+  return Array.from(locations.entries())
+    .map(([value, count]) => ({ value, label: value, count }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+}, [companies]);
+
+<SelectFilter
+  label="Location"
+  value={locationFilter}
+  options={locationOptions}
+  onChange={setLocationFilter}
+  icon={<MapPin className="w-4 h-4" />}
+/>
+```
+
+---
+
+### DataTable
+**File:** `DataTable.tsx`
+
+**Purpose:** Reusable data table with sorting, scrolling, filters slot, and empty state.
+
+**Props:**
+- `columns`: DataTableColumn<T>[] - Column definitions
+- `data`: T[] - Data array
+- `rowKey`: (item: T) => string - Unique key for each row
+- `onRowClick`: (item: T) => void (optional)
+- `sortField`: string (optional)
+- `sortDirection`: 'asc' | 'desc' (optional)
+- `onSort`: (field: string) => void (optional)
+- `filters`: ReactNode (optional) - Search/filter bar content
+- `emptyState`: ReactNode (optional) - Content when data is empty
+- `loading`: boolean (optional)
+- `className`: string (optional)
+
+**Column Definition:**
+```tsx
+interface DataTableColumn<T> {
+  key: string;
+  header: string;
+  render: (item: T) => ReactNode;
+  sortable?: boolean;
+  sortValue?: (item: T) => string | number;
+  width?: string;
+  align?: 'left' | 'center' | 'right';
+  hideOnMobile?: boolean;
+}
+```
+
+**Usage:**
+```tsx
+import { DataTable, type DataTableColumn } from '@/components/common';
+
+const columns: DataTableColumn<Company>[] = [
+  {
+    key: 'name',
+    header: 'Company Name',
+    sortable: true,
+    render: (company) => (
+      <div className="flex items-center gap-3">
+        <Building2 className="w-4 h-4" />
+        <span>{company.name}</span>
+      </div>
+    ),
+  },
+  {
+    key: 'location',
+    header: 'Location',
+    sortable: true,
+    render: (company) => company.address?.city || '—',
+    hideOnMobile: true,
+  },
+];
+
+<DataTable
+  columns={columns}
+  data={filteredCompanies}
+  rowKey={(company) => company.id}
+  onRowClick={(company) => navigate(`/companies/${company.id}`)}
+  sortField={sortField}
+  sortDirection={sortDirection}
+  onSort={handleSort}
+  filters={<SearchInput ... />}
+  emptyState={<EmptyState />}
+/>
+```
+
+---
+
+### AlphabetFilter
+**File:** `AlphabetFilter.tsx`
+
+**Purpose:** A-Z filter bar with numbers. Only shows letters/numbers that have items.
+
+**Props:**
+- `selected`: string | null
+- `onSelect`: (letter: string | null) => void
+- `items`: string[] - array of names to determine available letters/numbers
+
+**Features:**
+- Shows "All" button
+- Only shows numbers (0-9) if items start with numbers
+- Disabled state for letters with no items
+- Responsive sizing
+
+**Usage:**
+```tsx
+import { AlphabetFilter } from '@/components/common';
+
+const companyNames = companies.map(c => c.name);
+
+<AlphabetFilter
+  selected={letterFilter}
+  onSelect={setLetterFilter}
+  items={companyNames}
 />
 ```
 
@@ -203,7 +365,7 @@ import { ConfirmModal } from '@/components/common';
 
 **Usage:**
 ```tsx
-import { CollapsibleSection } from '@/components/common/CollapsibleSection';
+import { CollapsibleSection } from '@/components/common';
 
 <CollapsibleSection
   title="Contact Information"
@@ -212,31 +374,6 @@ import { CollapsibleSection } from '@/components/common/CollapsibleSection';
 >
   {/* Content */}
 </CollapsibleSection>
-```
-
----
-
-### AlphabetFilter
-**File:** `AlphabetFilter.tsx`
-
-**Purpose:** A-Z filter bar that shows available letters based on data.
-
-**Props:**
-- `selected`: string | null
-- `onSelect`: (letter: string | null) => void
-- `items`: string[] - array of names to determine available letters
-
-**Usage:**
-```tsx
-import { AlphabetFilter } from '@/components/common/AlphabetFilter';
-
-const contactNames = contacts.map(c => c.firstName);
-
-<AlphabetFilter
-  selected={letterFilter}
-  onSelect={setLetterFilter}
-  items={contactNames}
-/>
 ```
 
 ---
@@ -314,10 +451,12 @@ import { PageNavigationGuard } from '@/components/common';
 
 Location: `src/hooks/`
 
-### useDropdownKeyboard
+### useDropdownKeyboard ⚠️ ALWAYS USE THIS FOR DROPDOWNS
 **File:** `useDropdownKeyboard.ts`
 
 **Purpose:** Keyboard navigation for custom dropdowns (Arrow Up/Down, Enter, Escape).
+
+> **⚠️ IMPORTANT:** Any component with a dropdown, select, autocomplete, or list selection MUST use this hook for consistent keyboard navigation.
 
 **Options:**
 - `items`: T[] - array of dropdown items
@@ -351,9 +490,10 @@ const dropdownKeyboard = useDropdownKeyboard({
   hasAddOption: showAddOption,
 });
 
-// In JSX:
+// In JSX - attach handleKeyDown to input:
 <input onKeyDown={dropdownKeyboard.handleKeyDown} />
 
+// Highlight the current item:
 {items.map((item, index) => (
   <button
     className={index === dropdownKeyboard.highlightedIndex ? 'bg-brand-50' : ''}
@@ -423,6 +563,69 @@ import { useSafeNavigate } from '@/hooks';
 
 const safeNavigate = useSafeNavigate();
 safeNavigate('/some-path');
+```
+
+---
+
+## Layout Components
+
+Location: `src/components/layout/`
+
+### Page
+**File:** `Layout.tsx`
+
+**Purpose:** Page wrapper with title, description, actions, and optional full-height content.
+
+**Props:**
+- `title`: string - Page title
+- `description`: string (optional) - Subtitle text
+- `actions`: ReactNode (optional) - Action buttons (top right)
+- `children`: ReactNode
+- `className`: string (optional)
+- `centered`: boolean (optional) - Center the title/description
+- `fillHeight`: boolean (optional) - **Use for pages with DataTable** - Makes children fill viewport height
+
+**Usage:**
+```tsx
+import { Page } from '@/components/layout';
+
+// Regular page (scrolls normally)
+<Page title="Settings" description="Manage your preferences">
+  {/* Content */}
+</Page>
+
+// Page with DataTable (table scrolls internally)
+<Page
+  title="Companies"
+  description="Manage your client companies."
+  fillHeight  // ← Add this for pages with DataTable
+  actions={<Button>Add Company</Button>}
+>
+  <DataTable ... />
+</Page>
+```
+
+---
+
+### PanelLayout
+**File:** `PanelLayout.tsx`
+
+**Purpose:** Wrapper that adds SideRibbon navigation to panel pages.
+
+**Pre-configured layouts:**
+- `CustomersLayout`
+- `AccountingLayout`
+- `ProjectsLayout`
+- `EstimatingLayout`
+- `AdminLayout`
+
+**Usage:**
+```tsx
+// In route configuration:
+<Route element={<CustomersLayout><Outlet /></CustomersLayout>}>
+  <Route path="companies" element={<CompaniesPage />} />
+  <Route path="contacts" element={<ContactsPage />} />
+</Route>
 ```
 
 ---
@@ -510,22 +713,76 @@ const showAddOption = useMemo(() => {
   );
 }, [items, search]);
 
+// ALWAYS use useDropdownKeyboard for keyboard navigation!
+const dropdownKeyboard = useDropdownKeyboard({
+  items: filteredItems,
+  isOpen: showDropdown,
+  onSelect: handleSelect,
+  onClose: () => setShowDropdown(false),
+  hasAddOption: showAddOption,
+});
+
 // In dropdown:
 {showAddOption && (
   <button onClick={openAddModal}>
     Add "{search}" as new item
   </button>
 )}
-{filteredItems.map(item => (
-  <button onClick={() => selectItem(item)}>{item.name}</button>
+{filteredItems.map((item, index) => (
+  <button 
+    onClick={() => selectItem(item)}
+    className={index === dropdownKeyboard.highlightedIndex ? 'bg-brand-50' : ''}
+  >
+    {item.name}
+  </button>
 ))}
+```
+
+---
+
+### 6. List Pages with DataTable
+
+Standard pattern for pages displaying lists of items:
+
+```tsx
+<Page
+  title="Companies"
+  description="Manage your client companies."
+  fillHeight  // Makes DataTable scroll, not the page
+  actions={<Button>Add Company</Button>}
+>
+  <DataTable
+    columns={columns}
+    data={filteredData}
+    rowKey={(item) => item.id}
+    onRowClick={(item) => navigate(`/path/${item.id}`)}
+    sortField={sortField}
+    sortDirection={sortDirection}
+    onSort={handleSort}
+    filters={
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <SearchInput ... />
+          <SelectFilter ... />
+          {hasActiveFilters && (
+            <Button variant="ghost" size="sm" onClick={clearFilters}>
+              Clear filters
+            </Button>
+          )}
+        </div>
+        <AlphabetFilter ... />
+      </div>
+    }
+    emptyState={<EmptyState />}
+  />
+</Page>
 ```
 
 ---
 
 ## Keyboard Navigation Standards
 
-### Dropdowns (Custom)
+### Dropdowns (Custom) - Use `useDropdownKeyboard`
 | Key | Action |
 |-----|--------|
 | Arrow Down | Highlight next item |
@@ -561,14 +818,22 @@ src/
 │   │   ├── Button.tsx
 │   │   ├── Card.tsx
 │   │   ├── CollapsibleSection.tsx
+│   │   ├── DataTable.tsx      # NEW - Reusable data table
 │   │   ├── DuplicateCompanyModal.tsx
 │   │   ├── DuplicateContactModal.tsx
 │   │   ├── Input.tsx
 │   │   ├── Modal.tsx
 │   │   ├── PageNavigationGuard.tsx
 │   │   ├── SearchInput.tsx
+│   │   ├── SelectFilter.tsx   # NEW - Dropdown filter
 │   │   └── Toast.tsx
 │   ├── layout/
+│   │   ├── index.ts
+│   │   ├── Layout.tsx         # Contains Page component
+│   │   ├── PanelLayout.tsx    # Panel wrappers with SideRibbon
+│   │   ├── PanelHeader.tsx
+│   │   ├── Sidebar.tsx
+│   │   └── SideRibbon.tsx
 │   └── panels/
 │       └── customers/
 │           ├── ContactsPage.tsx
@@ -577,7 +842,7 @@ src/
 │           └── CompanyDetailPage.tsx
 ├── hooks/
 │   ├── index.ts               # Exports all hooks
-│   ├── useDropdownKeyboard.ts
+│   ├── useDropdownKeyboard.ts # ⚠️ USE FOR ALL DROPDOWNS
 │   ├── useFormChanges.ts
 │   ├── useNavigationGuard.ts
 │   └── useSafeNavigate.ts
@@ -593,20 +858,35 @@ src/
 
 ## Adding New Features Checklist
 
-When adding new features, check if these exist:
+When adding new features, **ALWAYS check if these exist first:**
 
+### Components
 - [ ] Need a button? → Use `Button` component
 - [ ] Need form inputs? → Use `Input` component
-- [ ] Need search with dropdown? → Use `SearchInput` + `useDropdownKeyboard`
+- [ ] Need search input? → Use `SearchInput` component
+- [ ] Need a dropdown filter? → Use `SelectFilter` component
+- [ ] Need a data table/list? → Use `DataTable` component
+- [ ] Need A-Z filtering? → Use `AlphabetFilter` component
 - [ ] Need modal? → Use `Modal` or `ConfirmModal`
 - [ ] Need collapsible sections? → Use `CollapsibleSection`
-- [ ] Need A-Z filtering? → Use `AlphabetFilter`
 - [ ] Need toast notifications? → Use `useToast()`
+
+### Hooks
+- [ ] **ANY dropdown/select/autocomplete?** → **⚠️ MUST use `useDropdownKeyboard`**
 - [ ] Need to track form changes? → Use `useFormChanges`
 - [ ] Need to prevent navigation with unsaved changes? → Use `useNavigationGuardStore`
+- [ ] Need safe navigation? → Use `useSafeNavigate`
+
+### Patterns
 - [ ] Need duplicate detection? → Follow duplicate detection pattern
 - [ ] Need back navigation? → Use `navigate(-1)`
+- [ ] Creating a list page? → Use `DataTable` with `Page fillHeight`
+- [ ] Need inline editing? → Follow inline editing pattern from ContactDetailPage
+
+### Layout
+- [ ] Page with DataTable? → Add `fillHeight` prop to `Page`
+- [ ] Page in a panel? → Use appropriate `*Layout` wrapper
 
 ---
 
-*Last updated: January 2026*
+*Last updated: January 5 2026*

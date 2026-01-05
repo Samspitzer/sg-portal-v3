@@ -4,13 +4,15 @@ import {
   Plus,
   Building2,
   Globe,
-  ChevronUp,
-  ChevronDown,
+  MapPin,
+  User,
 } from 'lucide-react';
 import { Page } from '@/components/layout';
 import { useClientsStore, useUsersStore, useToast, type Company } from '@/contexts';
-import { Card, CardContent, Button, Input, Modal, SearchInput } from '@/components/common';
+import { CardContent, Button, Input, Modal, SearchInput } from '@/components/common';
 import { AlphabetFilter } from '@/components/common/AlphabetFilter';
+import { DataTable, type DataTableColumn } from '@/components/common/DataTable';
+import { SelectFilter } from '@/components/common/SelectFilter';
 import { DuplicateCompanyModal } from '@/components/common/DuplicateCompanyModal';
 
 interface CompanyFormData {
@@ -46,10 +48,17 @@ export function CompaniesPage() {
   const { users } = useUsersStore();
   const toast = useToast();
 
+  // Search and filters
   const [search, setSearch] = useState('');
   const [letterFilter, setLetterFilter] = useState<string | null>(null);
+  const [locationFilter, setLocationFilter] = useState('');
+  const [salesRepFilter, setSalesRepFilter] = useState('');
+
+  // Modal state
   const [showModal, setShowModal] = useState(false);
   const [formData, setFormData] = useState<CompanyFormData>(initialFormData);
+
+  // Sorting
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
@@ -66,6 +75,7 @@ export function CompaniesPage() {
 
   const activeUsers = useMemo(() => users.filter((u) => u.isActive), [users]);
 
+  // Helper functions
   const getSalesRepName = (salesRepId?: string) => {
     if (!salesRepId) return '';
     const user = users.find((u) => u.id === salesRepId);
@@ -81,19 +91,61 @@ export function CompaniesPage() {
     return [company.address.city, company.address.state].filter(Boolean).join(', ');
   };
 
+  // Get unique locations for filter
+  const locationOptions = useMemo(() => {
+    const locations = new Map<string, number>();
+    companies.forEach((company) => {
+      const loc = getLocation(company);
+      if (loc) {
+        locations.set(loc, (locations.get(loc) || 0) + 1);
+      }
+    });
+    return Array.from(locations.entries())
+      .map(([value, count]) => ({ value, label: value, count }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [companies]);
+
+  // Get sales reps for filter
+  const salesRepOptions = useMemo(() => {
+    const reps = new Map<string, { name: string; count: number }>();
+    companies.forEach((company) => {
+      if (company.salesRepId) {
+        const name = getSalesRepName(company.salesRepId);
+        if (name) {
+          const existing = reps.get(company.salesRepId);
+          if (existing) {
+            existing.count++;
+          } else {
+            reps.set(company.salesRepId, { name, count: 1 });
+          }
+        }
+      }
+    });
+    return Array.from(reps.entries())
+      .map(([value, { name, count }]) => ({ value, label: name, count }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [companies, users]);
+
   // Get all company names for the alphabet filter
   const companyNames = useMemo(() => companies.map((c) => c.name), [companies]);
 
+  // Filtered and sorted companies
   const filteredAndSortedCompanies = useMemo(() => {
     let result = companies.filter((company) => {
       // Search filter
       const matchesSearch = company.name.toLowerCase().includes(search.toLowerCase());
-      
+
       // Letter filter
-      const matchesLetter = !letterFilter || 
-        (company.name?.charAt(0)?.toUpperCase() === letterFilter);
-      
-      return matchesSearch && matchesLetter;
+      const matchesLetter =
+        !letterFilter || company.name?.charAt(0)?.toUpperCase() === letterFilter;
+
+      // Location filter
+      const matchesLocation = !locationFilter || getLocation(company) === locationFilter;
+
+      // Sales rep filter
+      const matchesSalesRep = !salesRepFilter || company.salesRepId === salesRepFilter;
+
+      return matchesSearch && matchesLetter && matchesLocation && matchesSalesRep;
     });
 
     result = [...result].sort((a, b) => {
@@ -125,26 +177,101 @@ export function CompaniesPage() {
     });
 
     return result;
-  }, [companies, search, letterFilter, sortField, sortDirection, contacts, users]);
+  }, [companies, search, letterFilter, locationFilter, salesRepFilter, sortField, sortDirection, contacts, users]);
 
-  const handleSort = (field: SortField) => {
+  // Sorting handler
+  const handleSort = (field: string) => {
     if (sortField === field) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
     } else {
-      setSortField(field);
+      setSortField(field as SortField);
       setSortDirection('asc');
     }
   };
 
-  const SortIcon = ({ field }: { field: SortField }) => {
-    if (sortField !== field) return null;
-    return sortDirection === 'asc' ? (
-      <ChevronUp className="w-4 h-4" />
-    ) : (
-      <ChevronDown className="w-4 h-4" />
-    );
-  };
+  // Table columns
+  const columns: DataTableColumn<Company>[] = [
+    {
+      key: 'name',
+      header: 'Company Name',
+      sortable: true,
+      render: (company) => (
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center flex-shrink-0">
+            <Building2 className="w-4 h-4 text-brand-600 dark:text-brand-400" />
+          </div>
+          <span className="font-medium text-slate-900 dark:text-white hover:text-brand-600 dark:hover:text-brand-400">
+            {company.name}
+          </span>
+        </div>
+      ),
+    },
+    {
+      key: 'phone',
+      header: 'Phone',
+      render: (company) => (
+        <span className="text-slate-600 dark:text-slate-400">{company.phone || '—'}</span>
+      ),
+      hideOnMobile: true,
+    },
+    {
+      key: 'website',
+      header: 'Website',
+      render: (company) => {
+        if (!company.website) {
+          return <span className="text-slate-400">—</span>;
+        }
+        const websiteUrl = company.website.startsWith('http')
+          ? company.website
+          : 'https://' + company.website;
+        const websiteDisplay = company.website.replace(/^https?:\/\//, '');
+        return (
+          <a
+            href={websiteUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-brand-600 dark:text-brand-400 hover:underline flex items-center gap-1"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Globe className="w-3 h-3" />
+            {websiteDisplay}
+          </a>
+        );
+      },
+      hideOnMobile: true,
+    },
+    {
+      key: 'location',
+      header: 'Location',
+      sortable: true,
+      render: (company) => (
+        <span className="text-slate-600 dark:text-slate-400">{getLocation(company) || '—'}</span>
+      ),
+      hideOnMobile: true,
+    },
+    {
+      key: 'salesRep',
+      header: 'Sales Rep',
+      sortable: true,
+      render: (company) => (
+        <span className="text-slate-600 dark:text-slate-400">
+          {getSalesRepName(company.salesRepId) || '—'}
+        </span>
+      ),
+      hideOnMobile: true,
+    },
+    {
+      key: 'contacts',
+      header: 'Contacts',
+      sortable: true,
+      align: 'center',
+      render: (company) => (
+        <span className="text-slate-600 dark:text-slate-400">{getContactCount(company.id)}</span>
+      ),
+    },
+  ];
 
+  // Modal handlers
   const openAddModal = () => {
     setFormData(initialFormData);
     setShowModal(true);
@@ -158,9 +285,7 @@ export function CompaniesPage() {
   // Check for duplicate company by name
   const findDuplicateCompany = (name: string) => {
     const normalizedName = name.trim().toLowerCase();
-    return companies.find(
-      (company) => company.name.toLowerCase() === normalizedName
-    );
+    return companies.find((company) => company.name.toLowerCase() === normalizedName);
   };
 
   const handleSave = () => {
@@ -236,10 +361,21 @@ export function CompaniesPage() {
     formData.notes !== '' ||
     formData.salesRepId !== '';
 
+  // Clear all filters
+  const clearFilters = () => {
+    setSearch('');
+    setLetterFilter(null);
+    setLocationFilter('');
+    setSalesRepFilter('');
+  };
+
+  const hasActiveFilters = search || letterFilter || locationFilter || salesRepFilter;
+
   return (
     <Page
       title="Companies"
       description="Manage your client companies."
+      fillHeight  // ← This makes the DataTable fill available space and scroll
       actions={
         <Button variant="primary" onClick={openAddModal}>
           <Plus className="w-4 h-4 mr-2" />
@@ -247,160 +383,73 @@ export function CompaniesPage() {
         </Button>
       }
     >
-      {/* Search and Filters */}
-      <div className="mb-4">
-        <SearchInput
-          value={search}
-          onChange={setSearch}
-          placeholder="Search companies..."
-          className="max-w-md"
-        />
-      </div>
+      <DataTable
+        columns={columns}
+        data={filteredAndSortedCompanies}
+        rowKey={(company) => company.id}
+        onRowClick={(company) => navigate('/clients/companies/' + company.id)}
+        sortField={sortField}
+        sortDirection={sortDirection}
+        onSort={handleSort}
+        filters={
+          <div className="space-y-4">
+            {/* Search and Filter Row */}
+            <div className="flex flex-wrap items-center gap-3">
+              <SearchInput
+                value={search}
+                onChange={setSearch}
+                placeholder="Search companies..."
+                className="w-full sm:w-64"
+              />
+              <SelectFilter
+                label="Location"
+                value={locationFilter}
+                options={locationOptions}
+                onChange={setLocationFilter}
+                icon={<MapPin className="w-4 h-4" />}
+              />
+              <SelectFilter
+                label="Sales Rep"
+                value={salesRepFilter}
+                options={salesRepOptions}
+                onChange={setSalesRepFilter}
+                icon={<User className="w-4 h-4" />}
+              />
+              {hasActiveFilters && (
+                <Button variant="ghost" size="sm" onClick={clearFilters}>
+                  Clear filters
+                </Button>
+              )}
+            </div>
 
-      {/* A-Z Filter Bar */}
-      <div className="mb-6">
-        <AlphabetFilter
-          selected={letterFilter}
-          onSelect={setLetterFilter}
-          items={companyNames}
-        />
-      </div>
-
-      {filteredAndSortedCompanies.length === 0 ? (
-        <Card>
+            {/* Alphabet Filter */}
+            <AlphabetFilter
+              selected={letterFilter}
+              onSelect={setLetterFilter}
+              items={companyNames}
+            />
+          </div>
+        }
+        emptyState={
           <CardContent className="p-12 text-center">
             <Building2 className="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600" />
             <h3 className="mt-4 text-lg font-medium text-slate-900 dark:text-white">
-              {search || letterFilter ? 'No companies found' : 'No companies yet'}
+              {hasActiveFilters ? 'No companies found' : 'No companies yet'}
             </h3>
             <p className="mt-2 text-slate-500 dark:text-slate-400">
-              {search || letterFilter 
-                ? 'Try a different search term or filter' 
+              {hasActiveFilters
+                ? 'Try adjusting your filters or search term'
                 : 'Get started by adding your first company'}
             </p>
-            {!search && !letterFilter && (
+            {!hasActiveFilters && (
               <Button variant="primary" className="mt-4" onClick={openAddModal}>
                 <Plus className="w-4 h-4 mr-2" />
                 Add Company
               </Button>
             )}
           </CardContent>
-        </Card>
-      ) : (
-        <Card>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-700">
-                  <th
-                    className="text-left px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800"
-                    onClick={() => handleSort('name')}
-                  >
-                    <div className="flex items-center gap-1">
-                      Company Name
-                      <SortIcon field="name" />
-                    </div>
-                  </th>
-                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300">
-                    Phone
-                  </th>
-                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300">
-                    Website
-                  </th>
-                  <th
-                    className="text-left px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800"
-                    onClick={() => handleSort('location')}
-                  >
-                    <div className="flex items-center gap-1">
-                      Location
-                      <SortIcon field="location" />
-                    </div>
-                  </th>
-                  <th
-                    className="text-left px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800"
-                    onClick={() => handleSort('salesRep')}
-                  >
-                    <div className="flex items-center gap-1">
-                      Sales Rep
-                      <SortIcon field="salesRep" />
-                    </div>
-                  </th>
-                  <th
-                    className="text-center px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800"
-                    onClick={() => handleSort('contacts')}
-                  >
-                    <div className="flex items-center justify-center gap-1">
-                      Contacts
-                      <SortIcon field="contacts" />
-                    </div>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredAndSortedCompanies.map((company) => {
-                  const websiteUrl = company.website
-                    ? company.website.startsWith('http')
-                      ? company.website
-                      : 'https://' + company.website
-                    : '';
-                  const websiteDisplay = company.website
-                    ? company.website.replace(/^https?:\/\//, '')
-                    : '';
-
-                  return (
-                    <tr
-                      key={company.id}
-                      className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
-                    >
-                      <td className="px-4 py-3">
-                        <button
-                          onClick={() => navigate('/clients/companies/' + company.id)}
-                          className="flex items-center gap-3 text-left hover:text-brand-600 dark:hover:text-brand-400 transition-colors"
-                        >
-                          <div className="w-8 h-8 rounded-lg bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center flex-shrink-0">
-                            <Building2 className="w-4 h-4 text-brand-600 dark:text-brand-400" />
-                          </div>
-                          <span className="font-medium text-slate-900 dark:text-white hover:text-brand-600 dark:hover:text-brand-400">
-                            {company.name}
-                          </span>
-                        </button>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">
-                        {company.phone || '—'}
-                      </td>
-                      <td className="px-4 py-3 text-sm">
-                        {company.website ? (
-                          <a
-                            href={websiteUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-brand-600 dark:text-brand-400 hover:underline flex items-center gap-1"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <Globe className="w-3 h-3" />
-                            {websiteDisplay}
-                          </a>
-                        ) : (
-                          <span className="text-slate-400">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">
-                        {getLocation(company) || '—'}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">
-                        {getSalesRepName(company.salesRepId) || '—'}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-center text-slate-600 dark:text-slate-400">
-                        {getContactCount(company.id)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      )}
+        }
+      />
 
       {/* Add Company Modal */}
       <Modal

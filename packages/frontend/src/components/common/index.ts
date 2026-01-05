@@ -9,3 +9,5 @@ export { AlphabetFilter } from './AlphabetFilter';
 export { CollapsibleSection } from './CollapsibleSection';
 export { DuplicateContactModal } from './DuplicateContactModal';
 export { DuplicateCompanyModal } from './DuplicateCompanyModal';
+export { DataTable, type DataTableColumn, type DataTableProps } from './DataTable';
+export { SelectFilter, type SelectFilterOption, type SelectFilterProps } from './SelectFilter';

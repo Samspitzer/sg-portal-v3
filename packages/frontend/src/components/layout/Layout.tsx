@@ -34,9 +34,20 @@ interface PageProps {
   children: ReactNode;
   className?: string;
   centered?: boolean;
+  /**
+   * When true, children fill remaining viewport height and handle their own scrolling.
+   * The page itself won't scroll - useful for pages with DataTable.
+   * Other pages without fillHeight will scroll normally.
+   */
+  fillHeight?: boolean;
 }
 
-export function Page({ title, description, actions, children, className, centered }: PageProps) {
+export function Page({ title, description, actions, children, className, centered, fillHeight }: PageProps) {
+  // Calculate available height for content when fillHeight is true
+  // This accounts for: header (var(--header-height)) + page padding (24px top + 24px gap) + title area (~60px) + divider
+  // Approximate: header + 24px padding + 60px title + 16px gap + 1px divider = ~100px below header
+  const contentHeight = fillHeight ? 'calc(100vh - var(--header-height) - 130px)' : undefined;
+
   return (
     <div className={clsx('p-6 space-y-6', className)}>
       {/* Page header */}
@@ -65,7 +76,11 @@ export function Page({ title, description, actions, children, className, centere
       <div className="h-px bg-gradient-to-r from-slate-200 via-slate-300 to-slate-200 dark:from-slate-800 dark:via-slate-700 dark:to-slate-800" />
 
       {/* Page content */}
-      <div>{children}</div>
+      <div 
+        style={contentHeight ? { height: contentHeight } : undefined}
+      >
+        {children}
+      </div>
     </div>
   );
 }
