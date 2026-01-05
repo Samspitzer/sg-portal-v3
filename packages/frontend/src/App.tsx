@@ -202,7 +202,7 @@ export function App() {
   return (
     <MsalProvider instance={msalInstance}>
       <QueryClientProvider client={queryClient}>
-        <BrowserRouter>
+        <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <AppRoutes />
           <PageNavigationGuard />
           <ToastContainer />

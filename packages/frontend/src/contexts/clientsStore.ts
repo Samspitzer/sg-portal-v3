@@ -14,6 +14,17 @@ export const CONTACT_ROLES = [
 
 export type ContactRole = (typeof CONTACT_ROLES)[number];
 
+// Additional contact method types
+export const CONTACT_METHOD_TYPES = ['phone', 'fax', 'email'] as const;
+export type ContactMethodType = (typeof CONTACT_METHOD_TYPES)[number];
+
+export interface AdditionalContact {
+  id: string;
+  type: ContactMethodType;
+  label?: string;  // Optional label like "Work", "Home", "Assistant"
+  value: string;
+}
+
 export interface Company {
   id: string;
   name: string;
@@ -41,6 +52,7 @@ export interface Contact {
   phoneMobile?: string;
   role?: ContactRole;
   notes?: string;
+  additionalContacts?: AdditionalContact[]; // Dynamic contact methods
   createdAt: string;
   updatedAt: string;
 }
@@ -62,6 +74,11 @@ interface ClientsStore extends ClientsState {
   updateContact: (id: string, data: Partial<Contact>) => void;
   deleteContact: (id: string) => void;
   getContactsByCompany: (companyId: string) => Contact[];
+  
+  // Additional contact method actions
+  addContactMethod: (contactId: string, method: Omit<AdditionalContact, 'id'>) => void;
+  updateContactMethod: (contactId: string, methodId: string, data: Partial<AdditionalContact>) => void;
+  deleteContactMethod: (contactId: string, methodId: string) => void;
 }
 
 export const useClientsStore = create<ClientsStore>()(
@@ -135,6 +152,57 @@ export const useClientsStore = create<ClientsStore>()(
 
         getContactsByCompany: (companyId) => {
           return get().contacts.filter((contact) => contact.companyId === companyId);
+        },
+
+        // Additional contact method actions
+        addContactMethod: (contactId, methodData) => {
+          const newMethod: AdditionalContact = {
+            ...methodData,
+            id: `method-${Date.now()}`,
+          };
+          set((state) => ({
+            contacts: state.contacts.map((contact) =>
+              contact.id === contactId
+                ? {
+                    ...contact,
+                    additionalContacts: [...(contact.additionalContacts || []), newMethod],
+                    updatedAt: new Date().toISOString(),
+                  }
+                : contact
+            ),
+          }));
+        },
+
+        updateContactMethod: (contactId, methodId, data) => {
+          set((state) => ({
+            contacts: state.contacts.map((contact) =>
+              contact.id === contactId
+                ? {
+                    ...contact,
+                    additionalContacts: (contact.additionalContacts || []).map((method) =>
+                      method.id === methodId ? { ...method, ...data } : method
+                    ),
+                    updatedAt: new Date().toISOString(),
+                  }
+                : contact
+            ),
+          }));
+        },
+
+        deleteContactMethod: (contactId, methodId) => {
+          set((state) => ({
+            contacts: state.contacts.map((contact) =>
+              contact.id === contactId
+                ? {
+                    ...contact,
+                    additionalContacts: (contact.additionalContacts || []).filter(
+                      (method) => method.id !== methodId
+                    ),
+                    updatedAt: new Date().toISOString(),
+                  }
+                : contact
+            ),
+          }));
         },
       }),
       { name: 'sg-portal-clients' }

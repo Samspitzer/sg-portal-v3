@@ -49,34 +49,37 @@ export function Page({ title, description, actions, children, className, centere
   const contentHeight = fillHeight ? 'calc(100vh - var(--header-height) - 130px)' : undefined;
 
   return (
-    <div className={clsx('p-6 space-y-6', className)}>
-      {/* Page header */}
-      <div className={clsx(
-        centered ? 'text-center' : 'flex items-start justify-between gap-4'
-      )}>
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-            {title}
-          </h1>
-          {description && (
-            <p className={clsx(
-              'mt-1 text-slate-500 dark:text-slate-400',
-              centered && 'text-brand-500 dark:text-brand-400'
-            )}>
-              {description}
-            </p>
+    <div className={clsx('', className)}>
+      {/* Sticky Page header - stays at top while content scrolls */}
+      <div className="sticky top-0 z-10 bg-slate-50 dark:bg-slate-950 px-6 pt-6 pb-6">
+        <div className={clsx(
+          centered ? 'text-center' : 'flex items-start justify-between gap-4'
+        )}>
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
+              {title}
+            </h1>
+            {description && (
+              <p className={clsx(
+                'mt-1 text-slate-500 dark:text-slate-400',
+                centered && 'text-brand-500 dark:text-brand-400'
+              )}>
+                {description}
+              </p>
+            )}
+          </div>
+          {!centered && actions && (
+            <div className="flex items-center gap-3">{actions}</div>
           )}
         </div>
-        {!centered && actions && (
-          <div className="flex items-center gap-3">{actions}</div>
-        )}
+
+        {/* Gradient divider */}
+        <div className="mt-6 h-px bg-gradient-to-r from-slate-200 via-slate-300 to-slate-200 dark:from-slate-800 dark:via-slate-700 dark:to-slate-800" />
       </div>
 
-      {/* Gradient divider */}
-      <div className="h-px bg-gradient-to-r from-slate-200 via-slate-300 to-slate-200 dark:from-slate-800 dark:via-slate-700 dark:to-slate-800" />
-
-      {/* Page content */}
+      {/* Page content - scrolls under the sticky header */}
       <div 
+        className="px-6 pb-6"
         style={contentHeight ? { height: contentHeight } : undefined}
       >
         {children}

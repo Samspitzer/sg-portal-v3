@@ -6,6 +6,7 @@ interface CollapsibleSectionProps {
   title: string;
   icon?: React.ReactNode;
   badge?: string | number;
+  action?: React.ReactNode;
   defaultOpen?: boolean;
   children: React.ReactNode;
   className?: string;
@@ -15,6 +16,7 @@ export function CollapsibleSection({
   title,
   icon,
   badge,
+  action,
   defaultOpen = true,
   children,
   className,
@@ -23,12 +25,12 @@ export function CollapsibleSection({
 
   return (
     <div className={clsx('border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden', className)}>
-      <button
-        type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-      >
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between px-4 py-3 bg-slate-50 dark:bg-slate-800/50">
+        <button
+          type="button"
+          onClick={() => setIsOpen(!isOpen)}
+          className="flex-1 flex items-center gap-2 hover:opacity-80 transition-opacity"
+        >
           {icon}
           <span className="text-sm font-semibold text-slate-900 dark:text-white">
             {title}
@@ -38,13 +40,22 @@ export function CollapsibleSection({
               {badge}
             </span>
           )}
+        </button>
+        <div className="flex items-center gap-2">
+          {action}
+          <button
+            type="button"
+            onClick={() => setIsOpen(!isOpen)}
+            className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors"
+          >
+            {isOpen ? (
+              <ChevronDown className="w-4 h-4 text-slate-400" />
+            ) : (
+              <ChevronRight className="w-4 h-4 text-slate-400" />
+            )}
+          </button>
         </div>
-        {isOpen ? (
-          <ChevronDown className="w-4 h-4 text-slate-400" />
-        ) : (
-          <ChevronRight className="w-4 h-4 text-slate-400" />
-        )}
-      </button>
+      </div>
       {isOpen && (
         <div className="p-4 bg-white dark:bg-slate-900">
           {children}

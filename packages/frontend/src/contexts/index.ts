@@ -6,4 +6,13 @@ export { useDepartmentsStore, type Department, type Position } from './departmen
 export { useRolesStore, type Role, type Permission } from './rolesStore';
 export { useNavigationGuardStore } from './navigationGuardStore';
 export { useUsersStore, type User } from './usersStore';
-export { useClientsStore, type Company, type Contact, type ContactRole, CONTACT_ROLES } from './clientsStore';
+export { 
+  useClientsStore, 
+  type Company, 
+  type Contact, 
+  type ContactRole, 
+  type AdditionalContact,
+  type ContactMethodType,
+  CONTACT_ROLES,
+  CONTACT_METHOD_TYPES,
+} from './clientsStore';

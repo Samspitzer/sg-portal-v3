@@ -9,12 +9,12 @@ import {
   Phone,
   Shield,
   UserCheck,
-  ChevronUp,
-  ChevronDown,
   Trash2,
 } from 'lucide-react';
 import { Page } from '@/components/layout';
-import { Card, CardContent, Button, Input, Modal, ConfirmModal, SearchInput } from '@/components/common';
+import { CardContent, Button, Input, Modal, ConfirmModal, SearchInput } from '@/components/common';
+import { DataTable, type DataTableColumn } from '@/components/common/DataTable';
+import { SelectFilter } from '@/components/common/SelectFilter';
 import { useToast, useDepartmentsStore, useUsersStore, type User } from '@/contexts';
 import { useFormChanges } from '@/hooks';
 
@@ -304,7 +304,8 @@ function UserModal({
 // Main Page Component
 export function ManageUsersPage() {
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [departmentFilter, setDepartmentFilter] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -329,15 +330,40 @@ export function ManageUsersPage() {
     return pos?.name || '—';
   };
 
+  // Status filter options
+  const statusOptions = [
+    { value: 'active', label: 'Active' },
+    { value: 'inactive', label: 'Inactive' },
+  ];
+
+  // Department filter options
+  const departmentOptions = useMemo(() => {
+    const deptCounts = new Map<string, number>();
+    users.forEach((user) => {
+      if (user.departmentId) {
+        deptCounts.set(user.departmentId, (deptCounts.get(user.departmentId) || 0) + 1);
+      }
+    });
+    return departments
+      .filter((d) => deptCounts.has(d.id))
+      .map((dept) => ({
+        value: dept.id,
+        label: dept.name,
+        count: deptCounts.get(dept.id),
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [departments, users]);
+
   // Filter and sort users
   const filteredAndSortedUsers = useMemo(() => {
     let result = users.filter((user) => {
       const matchesSearch = user.name.toLowerCase().includes(search.toLowerCase()) ||
         user.email.toLowerCase().includes(search.toLowerCase());
-      const matchesStatus = statusFilter === 'all' ||
+      const matchesStatus = !statusFilter ||
         (statusFilter === 'active' && user.isActive) ||
         (statusFilter === 'inactive' && !user.isActive);
-      return matchesSearch && matchesStatus;
+      const matchesDepartment = !departmentFilter || user.departmentId === departmentFilter;
+      return matchesSearch && matchesStatus && matchesDepartment;
     });
 
     result = [...result].sort((a, b) => {
@@ -361,24 +387,15 @@ export function ManageUsersPage() {
     });
 
     return result;
-  }, [users, search, statusFilter, sortField, sortDirection, departments]);
+  }, [users, search, statusFilter, departmentFilter, sortField, sortDirection, departments]);
 
-  const handleSort = (field: SortField) => {
+  const handleSort = (field: string) => {
     if (sortField === field) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
     } else {
-      setSortField(field);
+      setSortField(field as SortField);
       setSortDirection('asc');
     }
-  };
-
-  const SortIcon = ({ field }: { field: SortField }) => {
-    if (sortField !== field) return null;
-    return sortDirection === 'asc' ? (
-      <ChevronUp className="w-4 h-4" />
-    ) : (
-      <ChevronDown className="w-4 h-4" />
-    );
   };
 
   const handleSave = async (formData: UserFormData) => {
@@ -414,7 +431,8 @@ export function ManageUsersPage() {
     }
   };
 
-  const handleToggleClick = (user: User) => {
+  const handleToggleClick = (user: User, e: React.MouseEvent) => {
+    e.stopPropagation();
     setUserToToggle(user);
   };
 
@@ -434,10 +452,119 @@ export function ManageUsersPage() {
     setIsModalOpen(true);
   };
 
+  // Clear all filters
+  const clearFilters = () => {
+    setSearch('');
+    setStatusFilter('');
+    setDepartmentFilter('');
+  };
+
+  const hasActiveFilters = search || statusFilter || departmentFilter;
+
+  // Table columns
+  const columns: DataTableColumn<User>[] = [
+    {
+      key: 'name',
+      header: 'Name',
+      sortable: true,
+      render: (user) => (
+        <div className="flex items-center gap-3">
+          <div className={clsx(
+            'w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold flex-shrink-0',
+            user.isActive
+              ? 'bg-brand-100 dark:bg-brand-900/30 text-brand-600 dark:text-brand-400'
+              : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500'
+          )}>
+            {user.name.split(' ').map(n => n[0]).join('')}
+          </div>
+          <span className="font-medium text-slate-900 dark:text-white hover:text-brand-600 dark:hover:text-brand-400">
+            {user.name}
+          </span>
+        </div>
+      ),
+    },
+    {
+      key: 'email',
+      header: 'Email',
+      render: (user) => (
+        <a
+          href={'mailto:' + user.email}
+          className="text-brand-600 dark:text-brand-400 hover:underline flex items-center gap-1"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <Mail className="w-3 h-3" />
+          {user.email}
+        </a>
+      ),
+      hideOnMobile: true,
+    },
+    {
+      key: 'phone',
+      header: 'Phone',
+      render: (user) => (
+        <span className="text-slate-600 dark:text-slate-400">
+          {user.phone ? (
+            <span className="flex items-center gap-1">
+              <Phone className="w-3 h-3" />
+              {user.phone}
+            </span>
+          ) : (
+            '—'
+          )}
+        </span>
+      ),
+      hideOnMobile: true,
+    },
+    {
+      key: 'department',
+      header: 'Department',
+      sortable: true,
+      render: (user) => (
+        <span className="text-slate-600 dark:text-slate-400">
+          {getDepartmentName(user.departmentId)}
+        </span>
+      ),
+      hideOnMobile: true,
+    },
+    {
+      key: 'position',
+      header: 'Position',
+      render: (user) => (
+        <span className="text-slate-600 dark:text-slate-400">
+          {getPositionName(user.departmentId, user.positionId)}
+        </span>
+      ),
+      hideOnMobile: true,
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      align: 'center',
+      render: (user) => (
+        <button
+          onClick={(e) => handleToggleClick(user, e)}
+          className={clsx(
+            'w-11 h-6 rounded-full transition-colors relative',
+            user.isActive ? 'bg-success-500' : 'bg-slate-300 dark:bg-slate-600'
+          )}
+          title={user.isActive ? 'Click to deactivate' : 'Click to activate'}
+        >
+          <div
+            className={clsx(
+              'absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform left-0.5',
+              user.isActive && 'translate-x-[22px]'
+            )}
+          />
+        </button>
+      ),
+    },
+  ];
+
   return (
     <Page
       title="Manage Users"
       description="Add, edit, and manage user accounts and permissions."
+      fillHeight
       actions={
         <Button
           variant="primary"
@@ -448,45 +575,57 @@ export function ManageUsersPage() {
         </Button>
       }
     >
-      {/* Search and Filters */}
-      <div className="mb-6 flex flex-col sm:flex-row gap-4">
-        <SearchInput
-          value={search}
-          onChange={setSearch}
-          placeholder="Search users..."
-          className="flex-1 max-w-md"
-        />
-
-        <div className="flex gap-2">
-          {(['all', 'active', 'inactive'] as const).map((status) => (
-            <button
-              key={status}
-              onClick={() => setStatusFilter(status)}
-              className={clsx(
-                'px-4 py-2 rounded-lg text-sm font-medium transition-colors',
-                statusFilter === status
-                  ? 'bg-brand-500 text-white'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
-              )}
-            >
-              {status.charAt(0).toUpperCase() + status.slice(1)}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Users Table */}
-      {filteredAndSortedUsers.length === 0 ? (
-        <Card>
+      <DataTable
+        columns={columns}
+        data={filteredAndSortedUsers}
+        rowKey={(user) => user.id}
+        onRowClick={(user) => openEditModal(user)}
+        sortField={sortField}
+        sortDirection={sortDirection}
+        onSort={handleSort}
+        filters={
+          <div className="flex flex-wrap items-center gap-3">
+            <SearchInput
+              value={search}
+              onChange={setSearch}
+              placeholder="Search users..."
+              className="w-full sm:w-64"
+            />
+            <SelectFilter
+              label="Status"
+              value={statusFilter}
+              options={statusOptions}
+              onChange={setStatusFilter}
+              icon={<UserCheck className="w-4 h-4" />}
+            />
+            {departmentOptions.length > 0 && (
+              <SelectFilter
+                label="Department"
+                value={departmentFilter}
+                options={departmentOptions}
+                onChange={setDepartmentFilter}
+                icon={<Users className="w-4 h-4" />}
+              />
+            )}
+            {hasActiveFilters && (
+              <Button variant="ghost" size="sm" onClick={clearFilters}>
+                Clear filters
+              </Button>
+            )}
+          </div>
+        }
+        emptyState={
           <CardContent className="p-12 text-center">
             <Users className="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600" />
             <h3 className="mt-4 text-lg font-medium text-slate-900 dark:text-white">
-              No users found
+              {hasActiveFilters ? 'No users found' : 'No users yet'}
             </h3>
             <p className="mt-2 text-slate-500 dark:text-slate-400">
-              {search ? 'Try different search terms' : 'Get started by adding your first user'}
+              {hasActiveFilters
+                ? 'Try adjusting your filters or search term'
+                : 'Get started by adding your first user'}
             </p>
-            {!search && (
+            {!hasActiveFilters && (
               <Button
                 variant="primary"
                 className="mt-4"
@@ -497,120 +636,8 @@ export function ManageUsersPage() {
               </Button>
             )}
           </CardContent>
-        </Card>
-      ) : (
-        <Card>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-700">
-                  <th
-                    className="text-left px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800"
-                    onClick={() => handleSort('name')}
-                  >
-                    <div className="flex items-center gap-1">
-                      Name
-                      <SortIcon field="name" />
-                    </div>
-                  </th>
-                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300">
-                    Email
-                  </th>
-                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300">
-                    Phone
-                  </th>
-                  <th
-                    className="text-left px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800"
-                    onClick={() => handleSort('department')}
-                  >
-                    <div className="flex items-center gap-1">
-                      Department
-                      <SortIcon field="department" />
-                    </div>
-                  </th>
-                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300">
-                    Position
-                  </th>
-                  <th className="text-center px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300">
-                    Status
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredAndSortedUsers.map((user) => (
-                  <tr
-                    key={user.id}
-                    className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
-                  >
-                    <td className="px-4 py-3">
-                      <button
-                        onClick={() => openEditModal(user)}
-                        className="flex items-center gap-3 text-left hover:text-brand-600 dark:hover:text-brand-400 transition-colors"
-                      >
-                        <div className={clsx(
-                          'w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold flex-shrink-0',
-                          user.isActive
-                            ? 'bg-brand-100 dark:bg-brand-900/30 text-brand-600 dark:text-brand-400'
-                            : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500'
-                        )}>
-                          {user.name.split(' ').map(n => n[0]).join('')}
-                        </div>
-                        <span className="font-medium text-slate-900 dark:text-white hover:text-brand-600 dark:hover:text-brand-400">
-                          {user.name}
-                        </span>
-                      </button>
-                    </td>
-                    <td className="px-4 py-3 text-sm">
-                      <a
-                        href={'mailto:' + user.email}
-                        className="text-brand-600 dark:text-brand-400 hover:underline flex items-center gap-1"
-                      >
-                        <Mail className="w-3 h-3" />
-                        {user.email}
-                      </a>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">
-                      {user.phone ? (
-                        <span className="flex items-center gap-1">
-                          <Phone className="w-3 h-3" />
-                          {user.phone}
-                        </span>
-                      ) : (
-                        '—'
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">
-                      {getDepartmentName(user.departmentId)}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">
-                      {getPositionName(user.departmentId, user.positionId)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex justify-center">
-                        <button
-                          onClick={() => handleToggleClick(user)}
-                          className={clsx(
-                            'w-11 h-6 rounded-full transition-colors relative',
-                            user.isActive ? 'bg-success-500' : 'bg-slate-300 dark:bg-slate-600'
-                          )}
-                          title={user.isActive ? 'Click to deactivate' : 'Click to activate'}
-                        >
-                          <div
-                            className={clsx(
-                              'absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform left-0.5',
-                              user.isActive && 'translate-x-[22px]'
-                            )}
-                          />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      )}
+        }
+      />
 
       {/* User Modal */}
       <UserModal

@@ -19,6 +19,9 @@ import {
   AlertCircle,
   Search,
   ChevronDown,
+  ArrowRightLeft,
+  AlertTriangle,
+  Printer,
 } from 'lucide-react';
 import { Page } from '@/components/layout';
 import { Card, CardContent, Button, ConfirmModal, Modal, Input } from '@/components/common';
@@ -122,6 +125,53 @@ function UnsavedChangesModal({
   );
 }
 
+// Company Change Review Modal
+function CompanyChangeReviewModal({
+  isOpen,
+  oldCompanyName,
+  newCompanyName,
+  onUpdateNow,
+  onUpdateLater,
+}: {
+  isOpen: boolean;
+  oldCompanyName: string;
+  newCompanyName: string;
+  onUpdateNow: () => void;
+  onUpdateLater: () => void;
+}) {
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onUpdateLater}
+      title="Review Contact Details"
+      size="md"
+      footer={
+        <div className="flex justify-end gap-3">
+          <Button variant="secondary" onClick={onUpdateLater}>
+            Update Later
+          </Button>
+          <Button variant="primary" onClick={onUpdateNow}>
+            Update Now
+          </Button>
+        </div>
+      }
+    >
+      <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+        <div className="flex items-center gap-2">
+          <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+          <p className="text-sm text-amber-800 dark:text-amber-300">
+            Company changed from <strong>{oldCompanyName || 'None'}</strong> to <strong>{newCompanyName}</strong>
+          </p>
+        </div>
+      </div>
+      
+      <p className="text-sm text-slate-600 dark:text-slate-400">
+        Please verify that the contact details (email, phone numbers) are still correct for this person at the new company.
+      </p>
+    </Modal>
+  );
+}
+
 // Compact Inline Editable Field Component
 function InlineField({
   label,
@@ -131,6 +181,8 @@ function InlineField({
   placeholder,
   icon: Icon,
   onEditingChange,
+  needsReview,
+  onConfirm,
 }: {
   label: string;
   value: string;
@@ -139,12 +191,17 @@ function InlineField({
   placeholder?: string;
   icon?: React.ElementType;
   onEditingChange?: (isEditing: boolean, hasChanges: boolean) => void;
+  needsReview?: boolean;
+  onConfirm?: () => void;
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(value);
   const [showModal, setShowModal] = useState(false);
   const [pendingTab, setPendingTab] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
   const fieldRef = useRef<HTMLDivElement>(null);
+  const onEditingChangeRef = useRef(onEditingChange);
+  onEditingChangeRef.current = onEditingChange;
 
   useEffect(() => {
     setEditValue(value);
@@ -153,8 +210,70 @@ function InlineField({
   const hasChanges = editValue !== value;
 
   useEffect(() => {
-    onEditingChange?.(isEditing, hasChanges);
-  }, [isEditing, hasChanges, onEditingChange]);
+    onEditingChangeRef.current?.(isEditing, hasChanges);
+  }, [isEditing, hasChanges]);
+
+  // Phone number formatting
+  const formatPhoneNumber = (input: string): string => {
+    // Remove all non-digit characters except #
+    const hasExtension = input.includes('#');
+    let extension = '';
+    let phoneDigits = input;
+    
+    if (hasExtension) {
+      const parts = input.split('#');
+      phoneDigits = parts[0] || '';
+      extension = parts.slice(1).join('');
+    }
+    
+    const digits = phoneDigits.replace(/\D/g, '');
+    
+    // Format as (XXX) XXX-XXXX
+    let formatted = '';
+    if (digits.length > 0) {
+      formatted = '(' + digits.substring(0, 3);
+    }
+    if (digits.length >= 3) {
+      formatted += ') ' + digits.substring(3, 6);
+    }
+    if (digits.length >= 6) {
+      formatted += '-' + digits.substring(6, 10);
+    }
+    
+    // Add extension if present
+    if (hasExtension && extension) {
+      formatted += ' #' + extension.replace(/\D/g, '');
+    } else if (hasExtension) {
+      formatted += ' #';
+    }
+    
+    return formatted;
+  };
+
+  // Email validation
+  const validateEmail = (email: string): boolean => {
+    if (!email) return true; // Empty is OK
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+
+  // Phone validation
+  const validatePhone = (phone: string): boolean => {
+    if (!phone) return true; // Empty is OK
+    const digits = phone.replace(/\D/g, '').replace(/#.*/, '');
+    return digits.length >= 10;
+  };
+
+  const handleInputChange = (newValue: string) => {
+    if (type === 'tel') {
+      const formatted = formatPhoneNumber(newValue);
+      setEditValue(formatted);
+      setValidationError(null);
+    } else {
+      setEditValue(newValue);
+      setValidationError(null);
+    }
+  };
 
   const moveToNextField = () => {
     const focusableElements = document.querySelectorAll('[data-inline-field="true"]');
@@ -169,9 +288,21 @@ function InlineField({
   };
 
   const handleSave = () => {
+    // Validate before saving
+    if (type === 'email' && !validateEmail(editValue)) {
+      setValidationError('Please enter a valid email address');
+      return;
+    }
+    if (type === 'tel' && !validatePhone(editValue)) {
+      setValidationError('Please enter a valid phone number');
+      return;
+    }
+    
     onSave(editValue);
     setIsEditing(false);
     setShowModal(false);
+    setValidationError(null);
+    onConfirm?.();
     if (pendingTab) {
       setPendingTab(false);
       setTimeout(moveToNextField, 0);
@@ -182,6 +313,7 @@ function InlineField({
     setEditValue(value);
     setIsEditing(false);
     setShowModal(false);
+    setValidationError(null);
     if (pendingTab) {
       setPendingTab(false);
       setTimeout(moveToNextField, 0);
@@ -232,6 +364,12 @@ function InlineField({
     }
   };
 
+  // Handle confirm without changes (just mark as reviewed)
+  const handleConfirmClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onConfirm?.();
+  };
+
   if (isEditing) {
     return (
       <>
@@ -241,22 +379,32 @@ function InlineField({
             {type === 'textarea' ? (
               <textarea
                 value={editValue}
-                onChange={(e) => setEditValue(e.target.value)}
+                onChange={(e) => handleInputChange(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder={placeholder}
                 rows={3}
                 autoFocus
-                className="flex-1 px-3 py-1.5 text-sm border border-brand-500 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                className={clsx(
+                  "flex-1 px-3 py-1.5 text-sm border rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2",
+                  validationError 
+                    ? "border-danger-500 focus:ring-danger-500" 
+                    : "border-brand-500 focus:ring-brand-500"
+                )}
               />
             ) : (
               <input
-                type={type}
+                type={type === 'tel' ? 'text' : type}
                 value={editValue}
-                onChange={(e) => setEditValue(e.target.value)}
+                onChange={(e) => handleInputChange(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder={placeholder}
                 autoFocus
-                className="flex-1 px-3 py-1.5 text-sm border border-brand-500 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                className={clsx(
+                  "flex-1 px-3 py-1.5 text-sm border rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2",
+                  validationError 
+                    ? "border-danger-500 focus:ring-danger-500" 
+                    : "border-brand-500 focus:ring-brand-500"
+                )}
               />
             )}
             <button
@@ -276,6 +424,9 @@ function InlineField({
               <X className="w-4 h-4" />
             </button>
           </div>
+          {validationError && (
+            <p className="text-xs text-danger-600 dark:text-danger-400">{validationError}</p>
+          )}
         </div>
 
         <UnsavedChangesModal
@@ -293,11 +444,30 @@ function InlineField({
       data-inline-field="true"
       ref={fieldRef}
       tabIndex={0}
-      className="group cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 focus:bg-slate-50 dark:focus:bg-slate-800/50 focus:outline-none focus:ring-2 focus:ring-brand-500 -mx-2 px-2 py-1 rounded-lg transition-colors"
+      className="group cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-500 -mx-2 px-2 py-1 rounded-lg transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50 focus:bg-slate-50 dark:focus:bg-slate-800/50"
       onClick={() => setIsEditing(true)}
       onKeyDown={handleViewKeyDown}
     >
-      <div className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</div>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</span>
+          {needsReview && (
+            <span className="px-1.5 py-0.5 text-[10px] font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 rounded">
+              Needs Review
+            </span>
+          )}
+        </div>
+        {needsReview && onConfirm && (
+          <button
+            onClick={handleConfirmClick}
+            className="text-xs text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 font-medium flex items-center gap-1"
+            title="Confirm this value is correct"
+          >
+            <Check className="w-3 h-3" />
+            Confirm
+          </button>
+        )}
+      </div>
       <div className="flex items-center gap-2 mt-0.5">
         {Icon && <Icon className="w-3.5 h-3.5 text-slate-400" />}
         <span className={clsx('text-sm', value ? 'text-slate-900 dark:text-white' : 'text-slate-400 italic')}>
@@ -315,11 +485,15 @@ function RoleField({
   value,
   onSave,
   onEditingChange,
+  needsReview,
+  onConfirm,
 }: {
   label: string;
   value: string;
   onSave: (value: string) => void;
   onEditingChange?: (isEditing: boolean, hasChanges: boolean) => void;
+  needsReview?: boolean;
+  onConfirm?: () => void;
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(value);
@@ -329,6 +503,8 @@ function RoleField({
   const fieldRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const onEditingChangeRef = useRef(onEditingChange);
+  onEditingChangeRef.current = onEditingChange;
 
   // Role options including "No role assigned"
   const roleOptions = useMemo(() => ['', ...CONTACT_ROLES], []);
@@ -340,8 +516,8 @@ function RoleField({
   const hasChanges = editValue !== value;
 
   useEffect(() => {
-    onEditingChange?.(isEditing, hasChanges);
-  }, [isEditing, hasChanges, onEditingChange]);
+    onEditingChangeRef.current?.(isEditing, hasChanges);
+  }, [isEditing, hasChanges]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -384,6 +560,7 @@ function RoleField({
     setIsEditing(false);
     setShowModal(false);
     setShowDropdown(false);
+    onConfirm?.(); // Mark as confirmed when saved
     if (pendingTab) {
       setPendingTab(false);
       setTimeout(moveToNextField, 0);
@@ -545,16 +722,41 @@ function RoleField({
     );
   }
 
+  // Handle confirm without changes (just mark as reviewed)
+  const handleConfirmClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onConfirm?.();
+  };
+
   return (
     <div
       data-inline-field="true"
       ref={fieldRef}
       tabIndex={0}
-      className="group cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 focus:bg-slate-50 dark:focus:bg-slate-800/50 focus:outline-none focus:ring-2 focus:ring-brand-500 -mx-2 px-2 py-1 rounded-lg transition-colors"
+      className="group cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-500 -mx-2 px-2 py-1 rounded-lg transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50 focus:bg-slate-50 dark:focus:bg-slate-800/50"
       onClick={() => setIsEditing(true)}
       onKeyDown={handleViewKeyDown}
     >
-      <div className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</div>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</span>
+          {needsReview && (
+            <span className="px-1.5 py-0.5 text-[10px] font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 rounded">
+              Needs Review
+            </span>
+          )}
+        </div>
+        {needsReview && onConfirm && (
+          <button
+            onClick={handleConfirmClick}
+            className="text-xs text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 font-medium flex items-center gap-1"
+            title="Confirm this value is correct"
+          >
+            <Check className="w-3 h-3" />
+            Confirm
+          </button>
+        )}
+      </div>
       <div className="flex items-center gap-2 mt-0.5">
         <Briefcase className="w-3.5 h-3.5 text-slate-400" />
         <span className={clsx('text-sm', value ? 'text-slate-900 dark:text-white' : 'text-slate-400 italic')}>
@@ -598,12 +800,14 @@ function CompanyField({
   onSave,
   companies,
   onEditingChange,
+  onCompanyChange,
 }: {
   label: string;
   value: string;
   onSave: (value: string) => void;
   companies: { id: string; name: string; phone?: string }[];
   onEditingChange?: (isEditing: boolean, hasChanges: boolean) => void;
+  onCompanyChange?: (oldCompanyId: string, newCompanyId: string) => void;
 }) {
   const { addCompany } = useClientsStore();
   const { users } = useUsersStore();
@@ -616,6 +820,8 @@ function CompanyField({
   const fieldRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const onEditingChangeRef = useRef(onEditingChange);
+  onEditingChangeRef.current = onEditingChange;
   
   // Company search state
   const [companySearch, setCompanySearch] = useState('');
@@ -639,8 +845,8 @@ function CompanyField({
   const hasChanges = editValue !== value;
 
   useEffect(() => {
-    onEditingChange?.(isEditing, hasChanges);
-  }, [isEditing, hasChanges, onEditingChange]);
+    onEditingChangeRef.current?.(isEditing, hasChanges);
+  }, [isEditing, hasChanges]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -696,10 +902,17 @@ function CompanyField({
   };
 
   const handleSave = (newValue: string) => {
+    const oldValue = value;
     onSave(newValue);
     setIsEditing(false);
     setShowModal(false);
     setShowDropdown(false);
+    
+    // Notify parent about company change
+    if (oldValue && newValue && oldValue !== newValue) {
+      onCompanyChange?.(oldValue, newValue);
+    }
+    
     if (pendingTab) {
       setPendingTab(false);
       setTimeout(moveToNextField, 0);
@@ -1074,13 +1287,58 @@ export function ContactDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const toast = useToast();
-  const { companies, contacts, updateContact, deleteContact } = useClientsStore();
+  const { companies, contacts, updateContact, deleteContact, addContactMethod, updateContactMethod, deleteContactMethod } = useClientsStore();
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [editingFields, setEditingFields] = useState<Map<string, boolean>>(new Map());
+  
+  // Company change review state
+  const [showCompanyChangeModal, setShowCompanyChangeModal] = useState(false);
+  const [companyChangeInfo, setCompanyChangeInfo] = useState<{ oldName: string; newName: string } | null>(null);
+  const [highlightedFields, setHighlightedFields] = useState<Set<string>>(new Set());
+
+  const [showCompanyEditor, setShowCompanyEditor] = useState(false);
+  
+  // Add Contact Method modal state
+  const [showAddContactMethodModal, setShowAddContactMethodModal] = useState(false);
+  const [newMethodType, setNewMethodType] = useState<'phone' | 'fax' | 'email'>('phone');
+  const [newMethodValue, setNewMethodValue] = useState('');
+  const [newMethodLabel, setNewMethodLabel] = useState('');
+  const [methodValidationError, setMethodValidationError] = useState<string | null>(null);
 
   const contact = contacts.find((c) => c.id === id);
   const company = contact ? companies.find((c) => c.id === contact.companyId) : null;
+
+  // Persist fieldsNeedingReview in localStorage so it survives navigation
+  const reviewStorageKey = `contact-fields-review-${id}`;
+  const [fieldsNeedingReview, setFieldsNeedingReviewState] = useState<Set<string>>(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem(reviewStorageKey);
+      if (stored) {
+        try {
+          return new Set(JSON.parse(stored));
+        } catch {
+          return new Set();
+        }
+      }
+    }
+    return new Set();
+  });
+
+  const setFieldsNeedingReview = useCallback((value: Set<string> | ((prev: Set<string>) => Set<string>)) => {
+    setFieldsNeedingReviewState(prev => {
+      const newValue = typeof value === 'function' ? value(prev) : value;
+      if (newValue.size > 0) {
+        localStorage.setItem(reviewStorageKey, JSON.stringify(Array.from(newValue)));
+      } else {
+        localStorage.removeItem(reviewStorageKey);
+      }
+      return newValue;
+    });
+  }, [reviewStorageKey]);
+
+  // Check if any fields need review (for showing banner)
+  const hasFieldsNeedingReview = fieldsNeedingReview.size > 0;
 
   const hasUnsavedEdits = Array.from(editingFields.values()).some((hasChanges) => hasChanges);
 
@@ -1090,6 +1348,17 @@ export function ContactDetailPage() {
     setGuard(hasUnsavedEdits);
     return () => clearGuard();
   }, [hasUnsavedEdits, setGuard, clearGuard]);
+
+  // Clear company editing state when editor closes (component unmounts)
+  useEffect(() => {
+    if (!showCompanyEditor) {
+      setEditingFields(prev => {
+        const next = new Map(prev);
+        next.delete('company');
+        return next;
+      });
+    }
+  }, [showCompanyEditor]);
 
   const handleEditingChange = useCallback((fieldName: string) => {
     return (isEditing: boolean, hasChanges: boolean) => {
@@ -1104,6 +1373,83 @@ export function ContactDetailPage() {
       });
     };
   }, []);
+
+  // Handle company change - show review modal
+  const handleCompanyChange = (oldCompanyId: string, newCompanyId: string) => {
+    const oldCompany = companies.find(c => c.id === oldCompanyId);
+    const newCompany = companies.find(c => c.id === newCompanyId);
+    setCompanyChangeInfo({
+      oldName: oldCompany?.name || 'Unknown',
+      newName: newCompany?.name || 'Unknown',
+    });
+    setShowCompanyChangeModal(true);
+  };
+
+  // Handle "Update Now" - highlight fields for review (not persisted)
+  const handleUpdateNow = () => {
+    setShowCompanyChangeModal(false);
+    setCompanyChangeInfo(null);
+    // Clear any persisted review state
+    setFieldsNeedingReview(new Set());
+    // Set temporary highlighted fields for immediate review
+    setHighlightedFields(new Set(['role', 'email', 'phoneOffice', 'phoneMobile']));
+    // Clear any editing state for company field so navigation guard doesn't trigger
+    setEditingFields(prev => {
+      const next = new Map(prev);
+      next.delete('company');
+      return next;
+    });
+  };
+
+  // Handle "Update Later" - persist fields needing review
+  const handleUpdateLater = () => {
+    setShowCompanyChangeModal(false);
+    setCompanyChangeInfo(null);
+    // Set fields needing review (persisted in localStorage)
+    const fields = new Set(['role', 'email', 'phoneOffice', 'phoneMobile']);
+    // Also add any additional contact methods
+    if (contact?.additionalContacts) {
+      contact.additionalContacts.forEach(method => {
+        fields.add(`additional-${method.id}`);
+      });
+    }
+    setFieldsNeedingReview(fields);
+    setHighlightedFields(new Set());
+    // Clear any editing state for company field so navigation guard doesn't trigger
+    setEditingFields(prev => {
+      const next = new Map(prev);
+      next.delete('company');
+      return next;
+    });
+  };
+
+  // Handle field confirmation (remove from review set)
+  const handleFieldConfirm = (fieldName: string) => {
+    // Remove from persisted review set
+    setFieldsNeedingReview(prev => {
+      const next = new Set(prev);
+      next.delete(fieldName);
+      return next;
+    });
+    // Remove from temporary highlighted set
+    setHighlightedFields(prev => {
+      const next = new Set(prev);
+      next.delete(fieldName);
+      return next;
+    });
+  };
+
+  // Clear the needs review flag and switch to Update Now mode
+  const handleClearReview = () => {
+    setFieldsNeedingReview(new Set());
+    setHighlightedFields(new Set(['role', 'email', 'phoneOffice', 'phoneMobile']));
+  };
+
+  const handleMarkAsReviewed = () => {
+    setFieldsNeedingReview(new Set());
+    setHighlightedFields(new Set());
+    toast.success('Reviewed', 'Contact details have been marked as reviewed');
+  };
 
   if (!contact) {
     return (
@@ -1136,6 +1482,91 @@ export function ContactDetailPage() {
     navigate('/clients/contacts');
   };
 
+  // Phone number formatting for add modal
+  const formatPhoneForModal = (input: string): string => {
+    const hasExtension = input.includes('#');
+    let extension = '';
+    let phoneDigits = input;
+    
+    if (hasExtension) {
+      const parts = input.split('#');
+      phoneDigits = parts[0] || '';
+      extension = parts.slice(1).join('');
+    }
+    
+    const digits = phoneDigits.replace(/\D/g, '');
+    
+    let formatted = '';
+    if (digits.length > 0) {
+      formatted = '(' + digits.substring(0, 3);
+    }
+    if (digits.length >= 3) {
+      formatted += ') ' + digits.substring(3, 6);
+    }
+    if (digits.length >= 6) {
+      formatted += '-' + digits.substring(6, 10);
+    }
+    
+    if (hasExtension && extension) {
+      formatted += ' #' + extension.replace(/\D/g, '');
+    } else if (hasExtension) {
+      formatted += ' #';
+    }
+    
+    return formatted;
+  };
+
+  const handleAddContactMethod = () => {
+    // Validate
+    if (!newMethodValue.trim()) {
+      setMethodValidationError('Please enter a value');
+      return;
+    }
+    
+    if (newMethodType === 'email') {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(newMethodValue)) {
+        setMethodValidationError('Please enter a valid email address');
+        return;
+      }
+    } else {
+      const digits = newMethodValue.replace(/\D/g, '').replace(/#.*/, '');
+      if (digits.length < 10) {
+        setMethodValidationError('Please enter a valid phone number');
+        return;
+      }
+    }
+    
+    addContactMethod(contact.id, {
+      type: newMethodType,
+      value: newMethodValue,
+      label: newMethodLabel || undefined,
+    });
+    
+    // Reset modal state
+    setShowAddContactMethodModal(false);
+    setNewMethodType('phone');
+    setNewMethodValue('');
+    setNewMethodLabel('');
+    setMethodValidationError(null);
+    toast.success('Added', 'Contact method has been added');
+  };
+
+  const handleNewMethodValueChange = (value: string) => {
+    if (newMethodType !== 'email') {
+      setNewMethodValue(formatPhoneForModal(value));
+    } else {
+      setNewMethodValue(value);
+    }
+    setMethodValidationError(null);
+  };
+
+  const handleMethodTypeChange = (type: 'phone' | 'fax' | 'email') => {
+    setNewMethodType(type);
+    setNewMethodValue('');
+    setMethodValidationError(null);
+  };
+
   return (
     <Page
       title={fullName}
@@ -1153,58 +1584,168 @@ export function ContactDetailPage() {
         </div>
       }
     >
+      {/* Needs Review Warning Banner */}
+      {hasFieldsNeedingReview && (
+        <div className="mb-4 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded-lg">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+              <div>
+                <p className="font-medium text-amber-800 dark:text-amber-300">Contact details need review</p>
+                <p className="text-sm text-amber-700 dark:text-amber-400">
+                  This contact was moved to a new company. Please verify the contact information is still correct.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="secondary" size="sm" onClick={handleClearReview}>
+                Review Now
+              </Button>
+              <Button variant="primary" size="sm" onClick={handleMarkAsReviewed}>
+                <Check className="w-4 h-4 mr-1" />
+                Mark Reviewed
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Left Column - Contact Info */}
         <div className="lg:col-span-2 space-y-4">
-          {/* Header Card - Compact */}
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-start gap-4">
-                <div className="w-12 h-12 rounded-full bg-accent-100 dark:bg-accent-900/30 flex items-center justify-center text-lg font-semibold text-accent-600 dark:text-accent-400 flex-shrink-0">
-                  {contact.firstName[0]}
-                  {contact.lastName[0]}
-                </div>
-                <div className="flex-1 min-w-0 grid grid-cols-2 gap-3">
-                  <InlineField
-                    label="First Name"
-                    value={contact.firstName}
-                    onSave={(v) => handleFieldSave('firstName', v)}
-                    placeholder="First name"
-                    onEditingChange={handleEditingChange('firstName')}
-                  />
-                  <InlineField
-                    label="Last Name"
-                    value={contact.lastName}
-                    onSave={(v) => handleFieldSave('lastName', v)}
-                    placeholder="Last name"
-                    onEditingChange={handleEditingChange('lastName')}
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+          {/* Contact Details - Non-collapsible but matching header style */}
+          <div className="border border-slate-200 dark:border-slate-700 rounded-lg">
+            <div className="flex items-center gap-2 px-4 py-3 bg-slate-50 dark:bg-slate-800/50 rounded-t-lg">
+              <User className="w-4 h-4 text-slate-500" />
+              <span className="text-sm font-semibold text-slate-900 dark:text-white">Contact Details</span>
+            </div>
+            <div className="p-4 bg-white dark:bg-slate-900 rounded-b-lg">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <InlineField
+                  label="First Name"
+                  value={contact.firstName}
+                  onSave={(v) => handleFieldSave('firstName', v)}
+                  placeholder="First name"
+                  onEditingChange={handleEditingChange('firstName')}
+                />
+                <InlineField
+                  label="Last Name"
+                  value={contact.lastName}
+                  onSave={(v) => handleFieldSave('lastName', v)}
+                  placeholder="Last name"
+                  onEditingChange={handleEditingChange('lastName')}
+                />
                 <RoleField
                   label="Role"
                   value={contact.role || ''}
                   onSave={(v) => handleFieldSave('role', v)}
                   onEditingChange={handleEditingChange('role')}
+                  needsReview={fieldsNeedingReview.has('role') || highlightedFields.has('role')}
+                  onConfirm={() => handleFieldConfirm('role')}
                 />
-                <CompanyField
-                  label="Company"
-                  value={contact.companyId}
-                  onSave={(v) => handleFieldSave('companyId', v)}
-                  companies={companies}
-                  onEditingChange={handleEditingChange('company')}
-                />
+                
+                {/* Company field with navigate + switch */}
+                <div
+                  data-inline-field="true"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setShowCompanyEditor(true);
+                    }
+                  }}
+                  className="group cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-500 -mx-2 px-2 py-1 rounded-lg transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50 focus:bg-slate-50 dark:focus:bg-slate-800/50"
+                >
+                  <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Company</div>
+                  {company ? (
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <Building2 className="w-3.5 h-3.5 text-slate-400" />
+                      <span
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate('/clients/companies/' + company.id);
+                        }}
+                        className="text-sm text-brand-600 dark:text-brand-400 hover:underline cursor-pointer"
+                      >
+                        {company.name}
+                      </span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowCompanyEditor(true);
+                        }}
+                        className="ml-auto p-1 text-slate-400 hover:text-brand-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors"
+                        title="Change company"
+                      >
+                        <ArrowRightLeft className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ) : contact.companyId ? (
+                    // Company was deleted - show warning and selector
+                    <div className="flex items-center gap-2 mt-0.5 rounded bg-danger-50 dark:bg-danger-900/20 border border-danger-200 dark:border-danger-800 px-2 py-1 -mx-2">
+                      <AlertCircle className="w-3.5 h-3.5 text-danger-500" />
+                      <span className="text-xs text-danger-600 dark:text-danger-400">Company deleted</span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowCompanyEditor(true);
+                        }}
+                        className="ml-auto text-xs text-brand-600 hover:text-brand-700 font-medium"
+                      >
+                        Reassign
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <Building2 className="w-3.5 h-3.5 text-slate-400" />
+                      <span className="text-sm text-slate-400 italic">
+                        Click to assign company...
+                      </span>
+                      <ArrowRightLeft className="w-3 h-3 text-slate-300 opacity-0 group-hover:opacity-100 group-focus:opacity-100 transition-opacity ml-auto" />
+                    </div>
+                  )}
+                </div>
               </div>
-            </CardContent>
-          </Card>
+              
+              {/* Company editor - full width below grid */}
+              {showCompanyEditor && (
+                <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
+                  <CompanyField
+                    label="Select Company"
+                    value={contact.companyId}
+                    onSave={(v) => {
+                      handleFieldSave('companyId', v);
+                      setShowCompanyEditor(false);
+                    }}
+                    companies={companies}
+                    onEditingChange={handleEditingChange('company')}
+                    onCompanyChange={handleCompanyChange}
+                  />
+                  <button
+                    onClick={() => setShowCompanyEditor(false)}
+                    className="mt-2 text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
 
-          {/* Contact Info Section - Collapsible */}
+          {/* Contact Information - Collapsible */}
           <CollapsibleSection
             title="Contact Information"
             icon={<Phone className="w-4 h-4 text-slate-500" />}
             defaultOpen={true}
+            action={
+              <button
+                onClick={() => setShowAddContactMethodModal(true)}
+                className="p-1 text-slate-400 hover:text-brand-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors"
+                title="Add contact method"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            }
           >
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <InlineField
@@ -1215,6 +1756,8 @@ export function ContactDetailPage() {
                 placeholder="email@example.com"
                 icon={Mail}
                 onEditingChange={handleEditingChange('email')}
+                needsReview={fieldsNeedingReview.has('email') || highlightedFields.has('email')}
+                onConfirm={() => handleFieldConfirm('email')}
               />
               <InlineField
                 label="Office Phone"
@@ -1224,6 +1767,8 @@ export function ContactDetailPage() {
                 placeholder="(555) 123-4567"
                 icon={Phone}
                 onEditingChange={handleEditingChange('phoneOffice')}
+                needsReview={fieldsNeedingReview.has('phoneOffice') || highlightedFields.has('phoneOffice')}
+                onConfirm={() => handleFieldConfirm('phoneOffice')}
               />
               <InlineField
                 label="Mobile Phone"
@@ -1233,15 +1778,46 @@ export function ContactDetailPage() {
                 placeholder="(555) 987-6543"
                 icon={Smartphone}
                 onEditingChange={handleEditingChange('phoneMobile')}
+                needsReview={fieldsNeedingReview.has('phoneMobile') || highlightedFields.has('phoneMobile')}
+                onConfirm={() => handleFieldConfirm('phoneMobile')}
               />
+              
+              {/* Dynamic additional contact methods */}
+              {contact.additionalContacts?.map((method) => (
+                <div key={method.id} className="relative group">
+                  <InlineField
+                    label={method.label || (method.type === 'phone' ? 'Phone' : method.type === 'fax' ? 'Fax' : 'Email')}
+                    value={method.value}
+                    onSave={(v) => updateContactMethod(contact.id, method.id, { value: v })}
+                    type={method.type === 'email' ? 'email' : 'tel'}
+                    placeholder={method.type === 'email' ? 'email@example.com' : '(555) 123-4567'}
+                    icon={method.type === 'phone' ? Phone : method.type === 'fax' ? Printer : Mail}
+                    onEditingChange={handleEditingChange(`additional-${method.id}`)}
+                    needsReview={fieldsNeedingReview.has(`additional-${method.id}`) || highlightedFields.has(`additional-${method.id}`)}
+                    onConfirm={() => handleFieldConfirm(`additional-${method.id}`)}
+                  />
+                  <button
+                    onClick={() => {
+                      deleteContactMethod(contact.id, method.id);
+                      // Also remove from review set if present
+                      handleFieldConfirm(`additional-${method.id}`);
+                      toast.success('Removed', 'Contact method has been deleted');
+                    }}
+                    className="absolute top-1 right-0 p-1 text-slate-300 hover:text-danger-600 opacity-0 group-hover:opacity-100 transition-opacity rounded"
+                    title="Delete"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
             </div>
           </CollapsibleSection>
 
-          {/* Notes Section - Collapsible */}
+          {/* Notes Section - Collapsible, closed by default */}
           <CollapsibleSection
             title="Notes"
             icon={<FileText className="w-4 h-4 text-slate-500" />}
-            defaultOpen={true}
+            defaultOpen={false}
           >
             <InlineField
               label="Notes"
@@ -1254,74 +1830,29 @@ export function ContactDetailPage() {
           </CollapsibleSection>
         </div>
 
-        {/* Right Column - Tasks & Company Info */}
+        {/* Right Column - Tasks only */}
         <div className="space-y-4">
-          {/* Upcoming Tasks */}
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold text-slate-900 dark:text-white flex items-center gap-2">
-                  <CalendarClock className="w-4 h-4 text-slate-500" />
+          {/* Upcoming Tasks - matching CollapsibleSection aesthetic */}
+          <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 bg-slate-50 dark:bg-slate-800/50">
+              <div className="flex items-center gap-2">
+                <CalendarClock className="w-4 h-4 text-slate-500" />
+                <span className="text-sm font-semibold text-slate-900 dark:text-white">
                   Upcoming Tasks
-                </h3>
-                <Button variant="secondary" size="sm">
-                  <Plus className="w-3 h-3" />
-                </Button>
+                </span>
               </div>
+              <Button variant="secondary" size="sm">
+                <Plus className="w-3 h-3" />
+              </Button>
+            </div>
+            <div className="p-4 bg-white dark:bg-slate-900">
               <div className="text-center py-8 text-slate-400">
                 <CalendarClock className="w-8 h-8 mx-auto mb-2 opacity-50" />
                 <p className="text-sm">No upcoming tasks</p>
                 <p className="text-xs mt-1">Tasks will appear here</p>
               </div>
-            </CardContent>
-          </Card>
-
-          {/* Company Card */}
-          <Card>
-            <CardContent className="p-4">
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-3">Company</h3>
-              {company ? (
-                <div
-                  onClick={() => navigate('/clients/companies/' + company.id)}
-                  className="flex items-center gap-3 p-3 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-brand-300 dark:hover:border-brand-700 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors"
-                >
-                  <div className="w-10 h-10 rounded-lg bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center">
-                    <Building2 className="w-5 h-5 text-brand-600 dark:text-brand-400" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium text-slate-900 dark:text-white truncate">{company.name}</div>
-                    {company.phone && (
-                      <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-0.5">
-                        <Phone className="w-3 h-3" />
-                        {company.phone}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                // Company was deleted or not assigned - show selector to reassign
-                <div className="space-y-3">
-                  {contact.companyId && (
-                    <div className="p-3 rounded-lg border border-danger-300 dark:border-danger-700 bg-danger-50 dark:bg-danger-900/20 mb-3">
-                      <div className="flex items-center gap-2">
-                        <AlertCircle className="w-4 h-4 text-danger-600 dark:text-danger-400 flex-shrink-0" />
-                        <span className="text-sm text-danger-700 dark:text-danger-400">
-                          Previous company was deleted
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                  <CompanyField
-                    label="Assign Company"
-                    value={contact.companyId}
-                    onSave={(v) => handleFieldSave('companyId', v)}
-                    companies={companies}
-                    onEditingChange={handleEditingChange('companyId')}
-                  />
-                </div>
-              )}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1335,6 +1866,122 @@ export function ContactDetailPage() {
         confirmText="Delete"
         variant="danger"
       />
+
+      {/* Company Change Review Modal */}
+      <CompanyChangeReviewModal
+        isOpen={showCompanyChangeModal}
+        oldCompanyName={companyChangeInfo?.oldName || ''}
+        newCompanyName={companyChangeInfo?.newName || ''}
+        onUpdateNow={handleUpdateNow}
+        onUpdateLater={handleUpdateLater}
+      />
+
+      {/* Add Contact Method Modal */}
+      <Modal
+        isOpen={showAddContactMethodModal}
+        onClose={() => {
+          setShowAddContactMethodModal(false);
+          setNewMethodType('phone');
+          setNewMethodValue('');
+          setNewMethodLabel('');
+          setMethodValidationError(null);
+        }}
+        title="Add Contact Method"
+        size="sm"
+        footer={
+          <div className="flex justify-end gap-3">
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setShowAddContactMethodModal(false);
+                setNewMethodType('phone');
+                setNewMethodValue('');
+                setNewMethodLabel('');
+                setMethodValidationError(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={handleAddContactMethod}>
+              Add
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          {/* Type Selection */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+              Type
+            </label>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => handleMethodTypeChange('phone')}
+                className={clsx(
+                  'flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border transition-colors',
+                  newMethodType === 'phone'
+                    ? 'bg-brand-50 dark:bg-brand-900/20 border-brand-500 text-brand-700 dark:text-brand-300'
+                    : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
+                )}
+              >
+                <Phone className="w-4 h-4" />
+                Phone
+              </button>
+              <button
+                type="button"
+                onClick={() => handleMethodTypeChange('fax')}
+                className={clsx(
+                  'flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border transition-colors',
+                  newMethodType === 'fax'
+                    ? 'bg-brand-50 dark:bg-brand-900/20 border-brand-500 text-brand-700 dark:text-brand-300'
+                    : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
+                )}
+              >
+                <Printer className="w-4 h-4" />
+                Fax
+              </button>
+              <button
+                type="button"
+                onClick={() => handleMethodTypeChange('email')}
+                className={clsx(
+                  'flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border transition-colors',
+                  newMethodType === 'email'
+                    ? 'bg-brand-50 dark:bg-brand-900/20 border-brand-500 text-brand-700 dark:text-brand-300'
+                    : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
+                )}
+              >
+                <Mail className="w-4 h-4" />
+                Email
+              </button>
+            </div>
+          </div>
+
+          {/* Label (optional) */}
+          <Input
+            label="Label (optional)"
+            value={newMethodLabel}
+            onChange={(e) => setNewMethodLabel(e.target.value)}
+            placeholder="e.g., Work, Home, Assistant"
+          />
+
+          {/* Value */}
+          <div>
+            <Input
+              label={newMethodType === 'email' ? 'Email Address' : newMethodType === 'fax' ? 'Fax Number' : 'Phone Number'}
+              value={newMethodValue}
+              onChange={(e) => handleNewMethodValueChange(e.target.value)}
+              placeholder={newMethodType === 'email' ? 'email@example.com' : '(555) 123-4567'}
+              error={methodValidationError || undefined}
+            />
+            {newMethodType !== 'email' && (
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                Use # for extension (e.g., (555) 123-4567 #123)
+              </p>
+            )}
+          </div>
+        </div>
+      </Modal>
     </Page>
   );
 }
