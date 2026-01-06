@@ -1,5 +1,11 @@
-import { forwardRef, type InputHTMLAttributes, type ReactNode } from 'react';
+import { forwardRef, useState, type InputHTMLAttributes, type ReactNode, type ChangeEvent, type FocusEvent } from 'react';
 import { clsx } from 'clsx';
+import {
+  formatPhoneNumber,
+  validatePhone,
+  validateEmail,
+  validateWebsite,
+} from '../../utils/validation';
 
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string;
@@ -9,6 +15,8 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   rightIcon?: ReactNode;
   leftAddon?: string;
   rightAddon?: string;
+  /** Disable built-in validation (use external error prop only) */
+  disableAutoValidation?: boolean;
 }
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
@@ -16,18 +24,109 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
     {
       className,
       label,
-      error,
+      error: externalError,
       hint,
       leftIcon,
       rightIcon,
       leftAddon,
       rightAddon,
       id,
+      type,
+      value,
+      onChange,
+      onBlur,
+      disableAutoValidation = false,
       ...props
     },
     ref
   ) => {
     const inputId = id ?? label?.toLowerCase().replace(/\s+/g, '-');
+    
+    // Internal state for validation
+    const [internalValue, setInternalValue] = useState<string>('');
+    const [validationError, setValidationError] = useState<string | null>(null);
+    
+    // Use controlled value if provided, otherwise use internal state
+    const currentValue = value !== undefined ? String(value) : internalValue;
+    
+    // Determine the actual error to display (external takes priority)
+    const error = externalError || validationError;
+
+    // Validate based on input type
+    const validateValue = (val: string): string | null => {
+      if (!val || disableAutoValidation) return null;
+      
+      switch (type) {
+        case 'email':
+          return validateEmail(val) ? null : 'Invalid email address';
+        case 'tel':
+          return validatePhone(val) ? null : 'Invalid phone number';
+        case 'url':
+          return validateWebsite(val) ? null : 'Invalid website URL';
+        default:
+          return null;
+      }
+    };
+
+    // Handle change with formatting for phone numbers
+    const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
+      let newValue = e.target.value;
+      
+      // Auto-format phone numbers as user types
+      if (type === 'tel' && !disableAutoValidation) {
+        const currentDigits = currentValue.replace(/\D/g, '').length;
+        const newDigits = newValue.replace(/\D/g, '').length;
+        
+        // Only format when ADDING digits, not when deleting
+        if (newDigits > currentDigits) {
+          newValue = formatPhoneNumber(newValue);
+        }
+        // When deleting, just accept the raw value as-is (don't re-format)
+        
+        // Create a new event with the formatted value
+        const formattedEvent = {
+          ...e,
+          target: {
+            ...e.target,
+            value: newValue,
+          },
+        } as ChangeEvent<HTMLInputElement>;
+        
+        // Validate and set error
+        setValidationError(validateValue(newValue));
+        setInternalValue(newValue);
+        
+        if (onChange) {
+          onChange(formattedEvent);
+        }
+        return;
+      }
+      
+      // For email and url types, validate in real-time
+      if (type === 'email' || type === 'url') {
+        setValidationError(validateValue(newValue));
+      }
+      
+      setInternalValue(newValue);
+      
+      if (onChange) {
+        onChange(e);
+      }
+    };
+
+    // Handle blur - validate on blur for all validatable types
+    const handleBlur = (e: FocusEvent<HTMLInputElement>) => {
+      const val = e.target.value;
+      
+      // Validate on blur
+      if (!disableAutoValidation && val) {
+        setValidationError(validateValue(val));
+      }
+      
+      if (onBlur) {
+        onBlur(e);
+      }
+    };
 
     return (
       <div className="w-full">
@@ -73,6 +172,10 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
             <input
               ref={ref}
               id={inputId}
+              type={type === 'tel' ? 'text' : type} // Use text for tel to allow formatting
+              value={currentValue}
+              onChange={handleChange}
+              onBlur={handleBlur}
               className={clsx(
                 'w-full px-3 py-2',
                 'bg-white dark:bg-slate-800',

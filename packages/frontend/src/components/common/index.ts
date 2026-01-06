@@ -11,3 +11,5 @@ export { DuplicateContactModal } from './DuplicateContactModal';
 export { DuplicateCompanyModal } from './DuplicateCompanyModal';
 export { DataTable, type DataTableColumn, type DataTableProps } from './DataTable';
 export { SelectFilter, type SelectFilterOption, type SelectFilterProps } from './SelectFilter';
+export { AddressInput } from './AddressInput';
+export { UnsavedChangesModal } from './UnsavedChangesModal';

@@ -19,6 +19,7 @@
     "typecheck": "npm run typecheck --workspaces"
   },
   "devDependencies": {
+    "@types/google.maps": "^3.58.1",
     "concurrently": "^8.2.2",
     "rimraf": "^5.0.5",
     "typescript": "^5.4.5"

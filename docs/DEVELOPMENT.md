@@ -55,28 +55,135 @@ import { Button } from '@/components/common';
 ### Input
 **File:** `Input.tsx`
 
-**Purpose:** Form input with label, error states, icons, and addons.
+**Purpose:** Form input with label, error states, icons, addons, and **automatic validation** for common field types.
 
 **Props:**
 - `label`: string (optional)
-- `error`: string (optional)
+- `error`: string (optional) - External error takes priority over auto-validation
 - `hint`: string (optional)
 - `leftIcon` / `rightIcon`: ReactNode
 - `leftAddon` / `rightAddon`: string
 - `required`: boolean
+- `disableAutoValidation`: boolean (optional) - Disable built-in validation
+- `type`: string - Supports auto-validation for `'email'`, `'tel'`, `'url'`
 - All standard input HTML attributes
+
+**Auto-Validation Features:**
+- `type="email"` → Validates email format, shows "Invalid email address"
+- `type="tel"` → Validates 10-digit phone, auto-formats as `(555) 123-4567`
+- `type="url"` → Validates URL format (must have TLD), shows "Invalid website URL"
+
+**Phone Formatting Behavior:**
+- Formats automatically while typing digits
+- Backspace works normally (no re-formatting on delete)
+- Supports extensions: `(555) 123-4567 #ext`
 
 **Usage:**
 ```tsx
 import { Input } from '@/components/common';
 
+// With auto-validation (default)
 <Input 
   label="Email" 
   type="email" 
   value={email} 
   onChange={(e) => setEmail(e.target.value)}
-  error={errors.email}
-  required
+/>
+
+// With auto-formatting phone
+<Input 
+  label="Phone" 
+  type="tel" 
+  value={phone} 
+  onChange={(e) => setPhone(e.target.value)}
+/>
+
+// Disable auto-validation when needed
+<Input 
+  label="ZIP Code" 
+  value={zip} 
+  onChange={(e) => setZip(e.target.value)}
+  disableAutoValidation
+/>
+```
+
+---
+
+### AddressInput
+**File:** `AddressInput.tsx`
+
+**Purpose:** Address input with Radar.io autocomplete and Save/Discard pattern.
+
+**Props:**
+- `street`: string
+- `city`: string
+- `state`: string
+- `zip`: string
+- `onSave`: (address: AddressData) => void - Called when user clicks Save
+- `disabled`: boolean (optional)
+- `required`: boolean (optional)
+- `className`: string (optional)
+
+**Features:**
+- Radar.io autocomplete on street field (type 3+ chars)
+- Auto-populates City, State, ZIP when address selected
+- Local state - changes don't save until "Save Address" clicked
+- Unsaved changes modal when clicking outside with changes
+- Keyboard navigation for suggestions (Arrow keys, Enter, Escape)
+- Falls back to manual input if API not configured
+
+**Setup:**
+Add to `packages/frontend/.env`:
+```
+VITE_RADAR_PUBLISHABLE_KEY=prj_test_pk_xxxxxxxxxxxxx
+```
+
+**Usage:**
+```tsx
+import { AddressInput } from '@/components/common';
+
+<AddressInput
+  street={company.address?.street || ''}
+  city={company.address?.city || ''}
+  state={company.address?.state || ''}
+  zip={company.address?.zip || ''}
+  onSave={(address) => {
+    updateCompany(company.id, { address });
+    toast.success('Updated', 'Address saved');
+  }}
+/>
+```
+
+---
+
+### UnsavedChangesModal
+**File:** `UnsavedChangesModal.tsx`
+
+**Purpose:** Reusable modal dialog for confirming unsaved changes. Can be used standalone.
+
+**Props:**
+- `isOpen`: boolean
+- `onSave`: () => void
+- `onDiscard`: () => void
+- `onCancel`: () => void - "Keep Editing" action
+- `title`: string (optional, default: "Unsaved Changes")
+- `message`: string (optional)
+
+**Features:**
+- Focus trapping
+- Keyboard navigation (Tab cycles buttons, Escape = Keep Editing)
+- Framer Motion animations
+- Renders via portal (always on top)
+
+**Usage:**
+```tsx
+import { UnsavedChangesModal } from '@/components/common';
+
+<UnsavedChangesModal
+  isOpen={showModal}
+  onSave={handleSave}
+  onDiscard={handleDiscard}
+  onCancel={() => setShowModal(false)}
 />
 ```
 
@@ -447,6 +554,75 @@ import { PageNavigationGuard } from '@/components/common';
 
 ---
 
+## Utilities
+
+Location: `src/utils/`
+
+### validation.ts
+**File:** `validation.ts`
+
+**Purpose:** Validation and formatting utilities for common field types.
+
+**Functions:**
+
+```tsx
+import { 
+  validateEmail, 
+  validatePhone, 
+  validateWebsite,
+  formatPhoneNumber 
+} from '@/utils/validation';
+
+// Email validation
+validateEmail('test@example.com');  // true
+validateEmail('invalid');           // false
+
+// Phone validation (10 digits required)
+validatePhone('(555) 123-4567');    // true
+validatePhone('555-1234');          // false (only 7 digits)
+
+// Website validation (must have TLD)
+validateWebsite('example.com');     // true
+validateWebsite('https://test.org'); // true
+validateWebsite('test');            // false (no TLD)
+
+// Phone formatting
+formatPhoneNumber('5551234567');    // '(555) 123-4567'
+formatPhoneNumber('5551234567x123'); // '(555) 123-4567 #123'
+```
+
+---
+
+### addressAutocomplete.ts
+**File:** `addressAutocomplete.ts`
+
+**Purpose:** Radar.io address autocomplete API integration.
+
+**Setup:**
+Add to `packages/frontend/.env`:
+```
+VITE_RADAR_PUBLISHABLE_KEY=prj_test_pk_xxxxxxxxxxxxx
+```
+
+**Functions:**
+
+```tsx
+import { 
+  searchAddresses, 
+  isRadarConfigured,
+  type AddressComponents 
+} from '@/utils/addressAutocomplete';
+
+// Check if API is configured
+if (isRadarConfigured()) {
+  // Search for addresses (debounce recommended)
+  const results = await searchAddresses('123 Main St');
+  // Returns: AddressComponents[] with street, city, state, zip, country, fullAddress
+}
+```
+
+---
+
 ## Custom Hooks
 
 Location: `src/hooks/`
@@ -637,7 +813,15 @@ import { Page } from '@/components/layout';
 Used in detail pages for editable fields. Pattern includes:
 - Click to edit
 - Tab/Enter/Escape keyboard handling
+- Validation errors show inline (red border + message)
+- Toast notifications for validation errors on Tab/Escape
 - Unsaved changes modal on navigation away
+
+**Validation Behavior:**
+- Real-time validation while typing
+- Tab with error → Shows toast, stays on field
+- Escape with error → Shows toast "Not Saved", discards changes
+- Enter/✓ with error → Won't save, error stays visible
 
 **Components:** `InlineField`, `RoleField`, `CompanyField` in `ContactDetailPage.tsx`
 
@@ -780,6 +964,32 @@ Standard pattern for pages displaying lists of items:
 
 ---
 
+### 7. Address Input with Autocomplete
+
+Pattern for address fields with Radar.io autocomplete:
+
+```tsx
+<AddressInput
+  street={record.address?.street || ''}
+  city={record.address?.city || ''}
+  state={record.address?.state || ''}
+  zip={record.address?.zip || ''}
+  onSave={(address) => {
+    updateRecord(record.id, { address });
+    toast.success('Updated', 'Address saved');
+  }}
+/>
+```
+
+**Behavior:**
+- Type in street field → suggestions appear after 3 chars
+- Select suggestion → City, State, ZIP auto-fill
+- Edit any field manually
+- Click "Save Address" to persist
+- Click outside with changes → Unsaved changes modal
+
+---
+
 ## Keyboard Navigation Standards
 
 ### Dropdowns (Custom) - Use `useDropdownKeyboard`
@@ -794,9 +1004,9 @@ Standard pattern for pages displaying lists of items:
 ### Inline Edit Fields
 | Key | Action |
 |-----|--------|
-| Enter | Show unsaved changes modal (if changed) |
-| Escape | Show unsaved changes modal (if changed), else close |
-| Tab | Show unsaved changes modal (if changed), then move to next field |
+| Enter | Save (if valid) or show error |
+| Escape | Discard changes (with toast if invalid) |
+| Tab | Save and move to next field, or show error toast and stay |
 
 ### Unsaved Changes Modal
 | Key | Action |
@@ -814,19 +1024,21 @@ src/
 ├── components/
 │   ├── common/
 │   │   ├── index.ts           # Exports all common components
+│   │   ├── AddressInput.tsx   # Address with Radar.io autocomplete
 │   │   ├── AlphabetFilter.tsx
 │   │   ├── Button.tsx
 │   │   ├── Card.tsx
 │   │   ├── CollapsibleSection.tsx
-│   │   ├── DataTable.tsx      # NEW - Reusable data table
+│   │   ├── DataTable.tsx
 │   │   ├── DuplicateCompanyModal.tsx
 │   │   ├── DuplicateContactModal.tsx
-│   │   ├── Input.tsx
+│   │   ├── Input.tsx          # With auto-validation for email/phone/url
 │   │   ├── Modal.tsx
 │   │   ├── PageNavigationGuard.tsx
 │   │   ├── SearchInput.tsx
-│   │   ├── SelectFilter.tsx   # NEW - Dropdown filter
-│   │   └── Toast.tsx
+│   │   ├── SelectFilter.tsx
+│   │   ├── Toast.tsx
+│   │   └── UnsavedChangesModal.tsx  # Standalone unsaved changes modal
 │   ├── layout/
 │   │   ├── index.ts
 │   │   ├── Layout.tsx         # Contains Page component
@@ -846,6 +1058,9 @@ src/
 │   ├── useFormChanges.ts
 │   ├── useNavigationGuard.ts
 │   └── useSafeNavigate.ts
+├── utils/
+│   ├── validation.ts          # Email/phone/website validation & formatting
+│   └── addressAutocomplete.ts # Radar.io address autocomplete
 └── contexts/
     ├── index.ts
     ├── clientsStore.ts        # Companies & Contacts data
@@ -862,14 +1077,16 @@ When adding new features, **ALWAYS check if these exist first:**
 
 ### Components
 - [ ] Need a button? → Use `Button` component
-- [ ] Need form inputs? → Use `Input` component
+- [ ] Need form inputs? → Use `Input` component (has auto-validation!)
 - [ ] Need search input? → Use `SearchInput` component
 - [ ] Need a dropdown filter? → Use `SelectFilter` component
 - [ ] Need a data table/list? → Use `DataTable` component
 - [ ] Need A-Z filtering? → Use `AlphabetFilter` component
 - [ ] Need modal? → Use `Modal` or `ConfirmModal`
+- [ ] Need unsaved changes confirmation? → Use `UnsavedChangesModal`
 - [ ] Need collapsible sections? → Use `CollapsibleSection`
 - [ ] Need toast notifications? → Use `useToast()`
+- [ ] Need address input? → Use `AddressInput` component
 
 ### Hooks
 - [ ] **ANY dropdown/select/autocomplete?** → **⚠️ MUST use `useDropdownKeyboard`**
@@ -877,11 +1094,18 @@ When adding new features, **ALWAYS check if these exist first:**
 - [ ] Need to prevent navigation with unsaved changes? → Use `useNavigationGuardStore`
 - [ ] Need safe navigation? → Use `useSafeNavigate`
 
+### Validation
+- [ ] Need email validation? → Use `Input type="email"` (auto-validates)
+- [ ] Need phone validation? → Use `Input type="tel"` (auto-validates & formats)
+- [ ] Need URL validation? → Use `Input type="url"` (auto-validates)
+- [ ] Need custom validation? → Use functions from `@/utils/validation`
+
 ### Patterns
 - [ ] Need duplicate detection? → Follow duplicate detection pattern
 - [ ] Need back navigation? → Use `navigate(-1)`
 - [ ] Creating a list page? → Use `DataTable` with `Page fillHeight`
 - [ ] Need inline editing? → Follow inline editing pattern from ContactDetailPage
+- [ ] Need address with autocomplete? → Use `AddressInput` component
 
 ### Layout
 - [ ] Page with DataTable? → Add `fillHeight` prop to `Page`
@@ -889,4 +1113,4 @@ When adding new features, **ALWAYS check if these exist first:**
 
 ---
 
-*Last updated: January 5 2026*
+*Last updated: January 6, 2026*
