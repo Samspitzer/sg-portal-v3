@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { Page } from '@/components/layout';
 import { useClientsStore, useUsersStore, useToast, type Company } from '@/contexts';
-import { CardContent, Button, Input, Modal, SearchInput } from '@/components/common';
+import { CardContent, Button, Input, Modal, SearchInput, Select, Textarea } from '@/components/common';
 import { AlphabetFilter } from '@/components/common/AlphabetFilter';
 import { DataTable, type DataTableColumn } from '@/components/common/DataTable';
 import { SelectFilter } from '@/components/common/SelectFilter';
@@ -75,6 +75,12 @@ export function CompaniesPage() {
 
   const activeUsers = useMemo(() => users.filter((u) => u.isActive), [users]);
 
+  // Sales rep options for Select component
+  const salesRepSelectOptions = useMemo(() => 
+    activeUsers.map((user) => ({ value: user.id, label: user.name })),
+    [activeUsers]
+  );
+
   // Helper functions
   const getSalesRepName = (salesRepId?: string) => {
     if (!salesRepId) return '';
@@ -86,19 +92,43 @@ export function CompaniesPage() {
     return contacts.filter((c) => c.companyId === companyId).length;
   };
 
+  // Get primary location (main office) for display
   const getLocation = (company: Company) => {
     if (!company.address?.city && !company.address?.state) return '';
     return [company.address.city, company.address.state].filter(Boolean).join(', ');
   };
 
-  // Get unique locations for filter
+  // Get all locations for a company (main office + additional addresses)
+  const getAllLocations = (company: Company): string[] => {
+    const locations: string[] = [];
+    
+    // Main office address
+    if (company.address?.city || company.address?.state) {
+      const mainLoc = [company.address.city, company.address.state].filter(Boolean).join(', ');
+      if (mainLoc) locations.push(mainLoc);
+    }
+    
+    // Additional addresses
+    if (company.addresses) {
+      company.addresses.forEach((addr) => {
+        if (addr.city || addr.state) {
+          const loc = [addr.city, addr.state].filter(Boolean).join(', ');
+          if (loc && !locations.includes(loc)) locations.push(loc);
+        }
+      });
+    }
+    
+    return locations;
+  };
+
+  // Get unique locations for filter (from all addresses)
   const locationOptions = useMemo(() => {
     const locations = new Map<string, number>();
     companies.forEach((company) => {
-      const loc = getLocation(company);
-      if (loc) {
+      const companyLocations = getAllLocations(company);
+      companyLocations.forEach((loc) => {
         locations.set(loc, (locations.get(loc) || 0) + 1);
-      }
+      });
     });
     return Array.from(locations.entries())
       .map(([value, count]) => ({ value, label: value, count }))
@@ -140,7 +170,7 @@ export function CompaniesPage() {
         !letterFilter || company.name?.charAt(0)?.toUpperCase() === letterFilter;
 
       // Location filter
-      const matchesLocation = !locationFilter || getLocation(company) === locationFilter;
+      const matchesLocation = !locationFilter || getAllLocations(company).includes(locationFilter);
 
       // Sales rep filter
       const matchesSalesRep = !salesRepFilter || company.salesRepId === salesRepFilter;
@@ -481,23 +511,13 @@ export function CompaniesPage() {
           />
 
           {activeUsers.length > 0 && (
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                Sales Rep
-              </label>
-              <select
-                value={formData.salesRepId}
-                onChange={(e) => setFormData({ ...formData, salesRepId: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
-              >
-                <option value="">Select a sales rep...</option>
-                {activeUsers.map((user) => (
-                  <option key={user.id} value={user.id}>
-                    {user.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <Select
+              label="Sales Rep"
+              value={formData.salesRepId}
+              onChange={(e) => setFormData({ ...formData, salesRepId: e.target.value })}
+              options={salesRepSelectOptions}
+              placeholder="Select a sales rep..."
+            />
           )}
 
           <div className="grid grid-cols-2 gap-4">
@@ -543,18 +563,13 @@ export function CompaniesPage() {
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-              Notes
-            </label>
-            <textarea
-              value={formData.notes}
-              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-              rows={3}
-              placeholder="Any additional notes..."
-              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
-            />
-          </div>
+          <Textarea
+            label="Notes"
+            value={formData.notes}
+            onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+            rows={3}
+            placeholder="Any additional notes..."
+          />
         </div>
       </Modal>
 

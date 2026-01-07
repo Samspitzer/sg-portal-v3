@@ -1,4 +1,4 @@
-import { useState,  } from 'react';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   Plus,
@@ -287,18 +287,21 @@ export function ManageDepartmentsPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
-                  <button
+                  <Button
+                    size="sm"
+                    variant="ghost"
                     onClick={startEditDeptName}
-                    className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600"
                   >
                     <Edit className="w-4 h-4" />
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
                     onClick={() => setDeleteTarget({ type: 'department', id: currentDept.id, name: currentDept.name })}
-                    className="p-2 rounded-lg hover:bg-danger-50 dark:hover:bg-danger-900/20 text-slate-400 hover:text-danger-600"
+                    className="text-slate-400 hover:text-danger-600 hover:bg-danger-50 dark:hover:bg-danger-900/20"
                   >
                     <Trash2 className="w-4 h-4" />
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}
@@ -384,18 +387,22 @@ export function ManageDepartmentsPage() {
                           <span className="flex-1 text-slate-700 dark:text-slate-300 text-sm">
                             {position.name}
                           </span>
-                          <button
+                          <Button
+                            size="sm"
+                            variant="ghost"
                             onClick={() => startEditPosition(position)}
-                            className="p-1.5 rounded opacity-0 group-hover:opacity-100 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-600 transition-opacity"
+                            className="opacity-0 group-hover:opacity-100 transition-opacity"
                           >
                             <Edit className="w-3.5 h-3.5" />
-                          </button>
-                          <button
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
                             onClick={() => setDeleteTarget({ type: 'position', id: position.id, name: position.name })}
-                            className="p-1.5 rounded opacity-0 group-hover:opacity-100 hover:bg-danger-50 dark:hover:bg-danger-900/20 text-slate-400 hover:text-danger-600 transition-opacity"
+                            className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-danger-600 hover:bg-danger-50 dark:hover:bg-danger-900/20"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          </Button>
                         </>
                       )}
                     </div>

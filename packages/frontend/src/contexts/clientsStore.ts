@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
+import { registerUserDependency } from './userDependencyRegistry';
 
 // Contact Role options
 export const CONTACT_ROLES = [
@@ -25,21 +26,122 @@ export interface AdditionalContact {
   value: string;
 }
 
+// Company address with label support for multiple offices
+export interface CompanyAddress {
+  id: string;
+  label: string;  // "Main Office", "Branch Office", etc.
+  street: string;
+  suite?: string;  // Suite, Unit, Apt, etc.
+  city: string;
+  state: string;
+  zip: string;
+  salesRepId?: string;  // Optional sales rep for this specific location
+}
+
 export interface Company {
   id: string;
   name: string;
   phone?: string;
   website?: string;
+  // Legacy single address (for backward compatibility) - now includes salesRepId
   address?: {
     street: string;
+    suite?: string;
     city: string;
     state: string;
     zip: string;
+    salesRepId?: string;  // Sales rep for main office location
   };
+  // New: Multiple addresses support
+  addresses?: CompanyAddress[];
   notes?: string;
-  salesRepId?: string; // Optional - links to user
+  // Multiple sales reps at company level (shared account)
+  // If empty, sales reps are set per-location instead
+  salesRepIds?: string[];
+  // Legacy single sales rep (for backward compatibility - will migrate to salesRepIds)
+  salesRepId?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+// Helper to get all sales rep IDs for a company (both company-level and location-level)
+export function getCompanySalesRepIds(company: Company): string[] {
+  // If company has company-level sales reps, return those
+  if (company.salesRepIds && company.salesRepIds.length > 0) {
+    return company.salesRepIds;
+  }
+  
+  // Legacy single sales rep support
+  if (company.salesRepId) {
+    return [company.salesRepId];
+  }
+  
+  // Otherwise, collect from locations
+  const locationReps: string[] = [];
+  
+  // Main office
+  if (company.address?.salesRepId) {
+    locationReps.push(company.address.salesRepId);
+  }
+  
+  // Additional addresses
+  if (company.addresses) {
+    for (const addr of company.addresses) {
+      if (addr.salesRepId && !locationReps.includes(addr.salesRepId)) {
+        locationReps.push(addr.salesRepId);
+      }
+    }
+  }
+  
+  return locationReps;
+}
+
+// Helper to check if a company is assigned to a specific sales rep
+export function isCompanyAssignedToRep(company: Company, salesRepId: string): boolean {
+  return getCompanySalesRepIds(company).includes(salesRepId);
+}
+
+// Helper to check for duplicate address (ignores suite)
+export function isDuplicateAddress(
+  company: Company,
+  street: string,
+  city: string,
+  state: string,
+  zip: string,
+  excludeAddressId?: string // Optional: exclude this address from check (for updates)
+): { isDuplicate: boolean; existingLabel?: string } {
+  const normalizeStr = (s: string) => s.toLowerCase().trim();
+  
+  // Check main office
+  if (company.address?.street) {
+    if (
+      normalizeStr(company.address.street) === normalizeStr(street) &&
+      normalizeStr(company.address.city) === normalizeStr(city) &&
+      normalizeStr(company.address.state) === normalizeStr(state) &&
+      normalizeStr(company.address.zip) === normalizeStr(zip) &&
+      excludeAddressId !== 'main-office'
+    ) {
+      return { isDuplicate: true, existingLabel: 'Main Office' };
+    }
+  }
+  
+  // Check additional addresses
+  if (company.addresses) {
+    for (const addr of company.addresses) {
+      if (addr.id === excludeAddressId) continue;
+      
+      if (
+        normalizeStr(addr.street) === normalizeStr(street) &&
+        normalizeStr(addr.city) === normalizeStr(city) &&
+        normalizeStr(addr.state) === normalizeStr(state) &&
+        normalizeStr(addr.zip) === normalizeStr(zip)
+      ) {
+        return { isDuplicate: true, existingLabel: addr.label };
+      }
+    }
+  }
+  
+  return { isDuplicate: false };
 }
 
 export interface Contact {
@@ -53,6 +155,7 @@ export interface Contact {
   role?: ContactRole;
   notes?: string;
   additionalContacts?: AdditionalContact[]; // Dynamic contact methods
+  officeAddressId?: string; // Optional - links to specific company address (main office or additional)
   createdAt: string;
   updatedAt: string;
 }
@@ -68,6 +171,11 @@ interface ClientsStore extends ClientsState {
   updateCompany: (id: string, data: Partial<Company>) => void;
   deleteCompany: (id: string) => void;
   getCompanyById: (id: string) => Company | undefined;
+
+  // Company address actions
+  addCompanyAddress: (companyId: string, address: Omit<CompanyAddress, 'id'>) => void;
+  updateCompanyAddress: (companyId: string, addressId: string, data: Partial<CompanyAddress>) => void;
+  deleteCompanyAddress: (companyId: string, addressId: string) => void;
 
   // Contact actions
   addContact: (contact: Omit<Contact, 'id' | 'createdAt' | 'updatedAt'>) => void;
@@ -120,6 +228,57 @@ export const useClientsStore = create<ClientsStore>()(
 
         getCompanyById: (id) => {
           return get().companies.find((company) => company.id === id);
+        },
+
+        // Company address actions
+        addCompanyAddress: (companyId, addressData) => {
+          const newAddress: CompanyAddress = {
+            ...addressData,
+            id: `addr-${Date.now()}`,
+          };
+          set((state) => ({
+            companies: state.companies.map((company) =>
+              company.id === companyId
+                ? {
+                    ...company,
+                    addresses: [...(company.addresses || []), newAddress],
+                    updatedAt: new Date().toISOString(),
+                  }
+                : company
+            ),
+          }));
+        },
+
+        updateCompanyAddress: (companyId, addressId, data) => {
+          set((state) => ({
+            companies: state.companies.map((company) =>
+              company.id === companyId
+                ? {
+                    ...company,
+                    addresses: (company.addresses || []).map((addr) =>
+                      addr.id === addressId ? { ...addr, ...data } : addr
+                    ),
+                    updatedAt: new Date().toISOString(),
+                  }
+                : company
+            ),
+          }));
+        },
+
+        deleteCompanyAddress: (companyId, addressId) => {
+          set((state) => ({
+            companies: state.companies.map((company) =>
+              company.id === companyId
+                ? {
+                    ...company,
+                    addresses: (company.addresses || []).filter(
+                      (addr) => addr.id !== addressId
+                    ),
+                    updatedAt: new Date().toISOString(),
+                  }
+                : company
+            ),
+          }));
         },
 
         // Contact actions
@@ -210,3 +369,33 @@ export const useClientsStore = create<ClientsStore>()(
     { name: 'ClientsStore' }
   )
 );
+
+// Register user dependencies for this store
+// This allows the system to automatically track user assignments across modules
+// Note: For companies with multiple sales reps, each rep assignment is tracked separately
+registerUserDependency({
+  module: 'companies',
+  label: 'Companies (Sales Rep)',
+  icon: 'Building2',
+  field: 'salesRepIds',
+  getItems: () => useClientsStore.getState().companies,
+  // Return first sales rep for legacy compatibility, but the system should check salesRepIds
+  getUserId: (company) => {
+    // Check new salesRepIds array first
+    if (company.salesRepIds && company.salesRepIds.length > 0) {
+      return company.salesRepIds[0];
+    }
+    // Fall back to legacy salesRepId
+    return company.salesRepId;
+  },
+  getItemId: (company) => company.id,
+  getItemName: (company) => company.name,
+  getItemUrl: (company) => `/clients/companies/${company.id}`,
+  reassign: (companyId, newUserId) => {
+    // When reassigning, set as the only sales rep (replaces all)
+    useClientsStore.getState().updateCompany(companyId, { 
+      salesRepIds: newUserId ? [newUserId] : [],
+      salesRepId: undefined // Clear legacy field
+    });
+  },
+});

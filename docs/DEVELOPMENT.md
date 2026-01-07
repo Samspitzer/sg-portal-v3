@@ -24,6 +24,7 @@
 2. **ALWAYS use `useDropdownKeyboard` hook** for ANY dropdown, select, or autocomplete component
 3. **ALWAYS use existing common components** - Don't recreate buttons, inputs, modals, etc.
 4. **ALWAYS follow keyboard navigation standards** - Arrow keys, Enter, Escape must work consistently
+5. **ALWAYS register user dependencies** - When creating stores with user assignments, register with `userDependencyRegistry`
 
 ---
 
@@ -37,7 +38,7 @@ Location: `src/components/common/`
 **Purpose:** Standardized button component with variants and sizes.
 
 **Props:**
-- `variant`: `'primary'` | `'secondary'` | `'danger'` | `'ghost'`
+- `variant`: `'primary'` | `'secondary'` | `'danger'` | `'ghost'` | `'accent'` | `'outline'`
 - `size`: `'sm'` | `'md'` | `'lg'`
 - `disabled`: boolean
 - `children`: ReactNode
@@ -105,6 +106,109 @@ import { Input } from '@/components/common';
   onChange={(e) => setZip(e.target.value)}
   disableAutoValidation
 />
+```
+
+---
+
+### Select
+**File:** `Select.tsx`
+
+**Purpose:** Styled native select dropdown with label and error support.
+
+**Props:**
+- `label`: string (optional)
+- `options`: SelectOption[] - `{ value: string, label: string }`
+- `placeholder`: string (optional) - Shows as first disabled option
+- `error`: string (optional)
+- `hint`: string (optional)
+- `disabled`: boolean (optional)
+- All standard select HTML attributes
+
+**Usage:**
+```tsx
+import { Select } from '@/components/common';
+
+const roleOptions = [
+  { value: 'admin', label: 'Administrator' },
+  { value: 'user', label: 'Standard User' },
+];
+
+<Select
+  label="Role"
+  value={formData.role}
+  onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+  options={roleOptions}
+  placeholder="Select a role..."
+/>
+```
+
+---
+
+### Textarea
+**File:** `Textarea.tsx`
+
+**Purpose:** Multi-line text input with label and error support.
+
+**Props:**
+- `label`: string (optional)
+- `error`: string (optional)
+- `hint`: string (optional)
+- `rows`: number (default: 3)
+- All standard textarea HTML attributes
+
+**Usage:**
+```tsx
+import { Textarea } from '@/components/common';
+
+<Textarea
+  label="Notes"
+  value={formData.notes}
+  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+  rows={4}
+  placeholder="Add any additional notes..."
+/>
+```
+
+---
+
+### Toggle
+**File:** `Toggle.tsx`
+
+**Purpose:** Toggle/switch component for boolean values.
+
+**Props:**
+- `checked`: boolean - Whether the toggle is on
+- `onChange`: (checked: boolean) => void
+- `onClick`: (e: React.MouseEvent) => void (optional) - For intercepting clicks
+- `label`: string (optional)
+- `labelPosition`: `'left'` | `'right'` (default: 'right')
+- `size`: `'sm'` | `'md'` | `'lg'` (default: 'md')
+- `disabled`: boolean (optional)
+- `activeColor`: `'brand'` | `'success'` | `'warning'` | `'danger'` (default: 'brand')
+- `className`: string (optional)
+
+**Usage:**
+```tsx
+import { Toggle } from '@/components/common';
+
+// Basic usage
+<Toggle
+  checked={isActive}
+  onChange={(checked) => setIsActive(checked)}
+  label="Active"
+/>
+
+// In a table (with click handler for confirmation)
+<Toggle
+  checked={user.isActive}
+  onChange={() => {}}
+  onClick={(e) => handleToggleClick(user, e)}
+  activeColor="success"
+/>
+
+// Different sizes
+<Toggle checked={value} onChange={setValue} size="sm" />
+<Toggle checked={value} onChange={setValue} size="lg" />
 ```
 
 ---
@@ -189,6 +293,45 @@ import { UnsavedChangesModal } from '@/components/common';
 
 ---
 
+### UserDeactivationModal
+**File:** `UserDeactivationModal.tsx`
+
+**Purpose:** Modal for deactivating/deleting users with dependency checking and reassignment.
+
+**Props:**
+- `isOpen`: boolean
+- `onClose`: () => void
+- `onConfirm`: (reassignToUserId: string | null) => void
+- `user`: { id: string, name: string } | null
+- `mode`: `'deactivate'` | `'delete'`
+
+**Features:**
+- Automatically scans all registered modules for user assignments
+- Shows categorized list of affected items (expandable)
+- Links to view each affected item
+- Two reassignment options:
+  - Reassign to another user (with user selector)
+  - Leave unassigned (to be handled later)
+- Works with the User Dependency Registry system
+
+**Usage:**
+```tsx
+import { UserDeactivationModal } from '@/components/common';
+
+<UserDeactivationModal
+  isOpen={!!userToDeactivate}
+  onClose={() => setUserToDeactivate(null)}
+  onConfirm={(reassignToUserId) => {
+    deactivateUser(userToDeactivate.id);
+    toast.success('Deactivated', 'User has been deactivated');
+  }}
+  user={userToDeactivate}
+  mode="deactivate"
+/>
+```
+
+---
+
 ### SearchInput
 **File:** `SearchInput.tsx`
 
@@ -223,7 +366,7 @@ import { SearchInput } from '@/components/common';
 ### SelectFilter
 **File:** `SelectFilter.tsx`
 
-**Purpose:** Dropdown filter button with keyboard navigation built-in. Uses `useDropdownKeyboard` internally.
+**Purpose:** Dropdown filter button with keyboard navigation, search (for 5+ options), and ESC to clear.
 
 **Props:**
 - `label`: string - Label shown when nothing is selected
@@ -234,8 +377,13 @@ import { SearchInput } from '@/components/common';
 - `showAllOption`: boolean (default: true)
 - `allLabel`: string (default: "All")
 - `className`: string (optional)
+- `searchThreshold`: number (default: 5) - Min options to show search
 
-**Keyboard Support:** Arrow Up/Down, Enter, Escape (built-in)
+**Features:**
+- Keyboard navigation: Arrow Up/Down, Enter, Escape
+- Search input appears when > 5 options
+- ESC clears filter when focused
+- Max height with scroll for long lists
 
 **Usage:**
 ```tsx
@@ -681,6 +829,55 @@ const dropdownKeyboard = useDropdownKeyboard({
 
 ---
 
+### useUserDependencies
+**File:** `useUserDependencies.ts`
+
+**Purpose:** Get all items assigned to a user across all registered modules.
+
+**Returns:**
+- `UserDependencies` object with:
+  - `userId`: string
+  - `userName`: string
+  - `totalCount`: number
+  - `categories`: DependencyCategory[] - grouped by module
+  - `hasItems`: boolean
+
+**Usage:**
+```tsx
+import { useUserDependencies } from '@/hooks';
+
+const dependencies = useUserDependencies(user.id, user.name);
+
+if (dependencies.hasItems) {
+  console.log(`User has ${dependencies.totalCount} assigned items`);
+  dependencies.categories.forEach(cat => {
+    console.log(`${cat.label}: ${cat.items.length} items`);
+  });
+}
+```
+
+---
+
+### useReassignUserItems
+**File:** `useUserDependencies.ts`
+
+**Purpose:** Reassign items from one user to another (or unassign).
+
+**Usage:**
+```tsx
+import { useReassignUserItems } from '@/hooks';
+
+const { reassignItems } = useReassignUserItems();
+
+// Reassign to another user
+const results = reassignItems(fromUserId, toUserId, categories);
+
+// Unassign (leave empty)
+const results = reassignItems(fromUserId, null, categories);
+```
+
+---
+
 ### useFormChanges
 **File:** `useFormChanges.ts`
 
@@ -740,6 +937,53 @@ import { useSafeNavigate } from '@/hooks';
 const safeNavigate = useSafeNavigate();
 safeNavigate('/some-path');
 ```
+
+---
+
+## User Dependency Registry
+
+Location: `src/contexts/userDependencyRegistry.ts`
+
+**Purpose:** Centralized system for tracking user assignments across all modules. When a user is deactivated/deleted, this system automatically shows all affected items and handles reassignment.
+
+### Registering a Module
+
+When creating a store with user assignments, register it:
+
+```tsx
+import { registerUserDependency } from '@/contexts/userDependencyRegistry';
+
+// After creating your store...
+
+registerUserDependency({
+  module: 'projects',           // Unique identifier
+  label: 'Projects (Manager)',  // Display label
+  icon: 'FolderKanban',        // Lucide icon name
+  field: 'managerId',          // Field that holds user ID
+  getItems: () => useProjectsStore.getState().projects,
+  getUserId: (project) => project.managerId,
+  getItemId: (project) => project.id,
+  getItemName: (project) => project.name,
+  getItemUrl: (project) => `/projects/${project.id}`,
+  reassign: (projectId, newUserId) => {
+    useProjectsStore.getState().updateProject(projectId, { managerId: newUserId });
+  },
+});
+```
+
+### Currently Registered Modules
+
+| Module | Field | Label |
+|--------|-------|-------|
+| `companies` | `salesRepId` | Companies (Sales Rep) |
+
+### Adding New Modules
+
+When you create a new store with user assignments:
+
+1. Add the `registerUserDependency` call after store creation
+2. The `UserDeactivationModal` will automatically pick up the new module
+3. No other code changes needed!
 
 ---
 
@@ -990,6 +1234,85 @@ Pattern for address fields with Radar.io autocomplete:
 
 ---
 
+### 8. User Deactivation with Dependency Check
+
+When deactivating or deleting a user, use the `UserDeactivationModal`:
+
+```tsx
+import { UserDeactivationModal } from '@/components/common';
+
+// State
+const [userToDeactivate, setUserToDeactivate] = useState<User | null>(null);
+
+// Handler
+const handleDeactivateClick = (user: User) => {
+  if (user.isActive) {
+    setUserToDeactivate(user);  // Show modal for deactivation
+  } else {
+    // Directly activate (no dependencies to check)
+    activateUser(user.id);
+  }
+};
+
+// Modal
+<UserDeactivationModal
+  isOpen={!!userToDeactivate}
+  onClose={() => setUserToDeactivate(null)}
+  onConfirm={(reassignToUserId) => {
+    deactivateUser(userToDeactivate.id);
+    setUserToDeactivate(null);
+  }}
+  user={userToDeactivate}
+  mode="deactivate"
+/>
+```
+
+---
+
+### 9. Multiple Office Addresses
+
+Companies can have multiple addresses (Main Office + additional locations):
+
+```tsx
+// Data structure
+interface Company {
+  address?: { street, city, state, zip };  // Main office (legacy)
+  addresses?: CompanyAddress[];  // Additional locations
+}
+
+interface CompanyAddress {
+  id: string;
+  label: string;  // "Branch Office", "Warehouse", etc.
+  street: string;
+  city: string;
+  state: string;
+  zip: string;
+}
+
+// Store actions
+addCompanyAddress(companyId, { label, street, city, state, zip });
+updateCompanyAddress(companyId, addressId, data);
+deleteCompanyAddress(companyId, addressId);
+```
+
+---
+
+### 10. Contact Office Assignment
+
+Contacts can be assigned to a specific company office:
+
+```tsx
+interface Contact {
+  officeAddressId?: string;  // 'main-office' or address ID
+}
+
+// Filter behavior:
+// - If contact has officeAddressId → Only show for that location filter
+// - If contact has no officeAddressId → Show for ALL company locations
+```
+
+---
+
 ## Keyboard Navigation Standards
 
 ### Dropdowns (Custom) - Use `useDropdownKeyboard`
@@ -1000,6 +1323,14 @@ Pattern for address fields with Radar.io autocomplete:
 | Enter | Select highlighted item |
 | Escape | Close dropdown |
 | Tab | Close dropdown, move focus |
+
+### SelectFilter (with search)
+| Key | Action |
+|-----|--------|
+| Arrow Down | Highlight next item |
+| Arrow Up | Highlight previous item |
+| Enter | Select highlighted item |
+| Escape | Clear search OR clear filter OR close |
 
 ### Inline Edit Fields
 | Key | Action |
@@ -1036,9 +1367,13 @@ src/
 │   │   ├── Modal.tsx
 │   │   ├── PageNavigationGuard.tsx
 │   │   ├── SearchInput.tsx
-│   │   ├── SelectFilter.tsx
+│   │   ├── Select.tsx         # Native select wrapper
+│   │   ├── SelectFilter.tsx   # Filter dropdown with search
+│   │   ├── Textarea.tsx       # Multi-line text input
 │   │   ├── Toast.tsx
-│   │   └── UnsavedChangesModal.tsx  # Standalone unsaved changes modal
+│   │   ├── Toggle.tsx         # Toggle/switch component
+│   │   ├── UnsavedChangesModal.tsx
+│   │   └── UserDeactivationModal.tsx  # User deactivation with dependencies
 │   ├── layout/
 │   │   ├── index.ts
 │   │   ├── Layout.tsx         # Contains Page component
@@ -1047,17 +1382,20 @@ src/
 │   │   ├── Sidebar.tsx
 │   │   └── SideRibbon.tsx
 │   └── panels/
-│       └── customers/
-│           ├── ContactsPage.tsx
-│           ├── ContactDetailPage.tsx
-│           ├── CompaniesPage.tsx
-│           └── CompanyDetailPage.tsx
+│       ├── customers/
+│       │   ├── ContactsPage.tsx
+│       │   ├── ContactDetailPage.tsx
+│       │   ├── CompaniesPage.tsx
+│       │   └── CompanyDetailPage.tsx
+│       └── admin/
+│           └── ManageUsersPage.tsx
 ├── hooks/
 │   ├── index.ts               # Exports all hooks
 │   ├── useDropdownKeyboard.ts # ⚠️ USE FOR ALL DROPDOWNS
 │   ├── useFormChanges.ts
 │   ├── useNavigationGuard.ts
-│   └── useSafeNavigate.ts
+│   ├── useSafeNavigate.ts
+│   └── useUserDependencies.ts # User dependency hooks
 ├── utils/
 │   ├── validation.ts          # Email/phone/website validation & formatting
 │   └── addressAutocomplete.ts # Radar.io address autocomplete
@@ -1065,8 +1403,10 @@ src/
     ├── index.ts
     ├── clientsStore.ts        # Companies & Contacts data
     ├── usersStore.ts          # Users data
+    ├── departmentsStore.ts    # Departments & Positions
     ├── toastStore.ts          # Toast notifications
-    └── navigationGuardStore.ts
+    ├── navigationGuardStore.ts
+    └── userDependencyRegistry.ts  # User dependency tracking
 ```
 
 ---
@@ -1078,12 +1418,16 @@ When adding new features, **ALWAYS check if these exist first:**
 ### Components
 - [ ] Need a button? → Use `Button` component
 - [ ] Need form inputs? → Use `Input` component (has auto-validation!)
+- [ ] Need a dropdown select? → Use `Select` component
+- [ ] Need multi-line text? → Use `Textarea` component
+- [ ] Need a toggle/switch? → Use `Toggle` component
 - [ ] Need search input? → Use `SearchInput` component
 - [ ] Need a dropdown filter? → Use `SelectFilter` component
 - [ ] Need a data table/list? → Use `DataTable` component
 - [ ] Need A-Z filtering? → Use `AlphabetFilter` component
 - [ ] Need modal? → Use `Modal` or `ConfirmModal`
 - [ ] Need unsaved changes confirmation? → Use `UnsavedChangesModal`
+- [ ] Need user deactivation? → Use `UserDeactivationModal`
 - [ ] Need collapsible sections? → Use `CollapsibleSection`
 - [ ] Need toast notifications? → Use `useToast()`
 - [ ] Need address input? → Use `AddressInput` component
@@ -1093,6 +1437,7 @@ When adding new features, **ALWAYS check if these exist first:**
 - [ ] Need to track form changes? → Use `useFormChanges`
 - [ ] Need to prevent navigation with unsaved changes? → Use `useNavigationGuardStore`
 - [ ] Need safe navigation? → Use `useSafeNavigate`
+- [ ] Need user dependency info? → Use `useUserDependencies`
 
 ### Validation
 - [ ] Need email validation? → Use `Input type="email"` (auto-validates)
@@ -1100,12 +1445,17 @@ When adding new features, **ALWAYS check if these exist first:**
 - [ ] Need URL validation? → Use `Input type="url"` (auto-validates)
 - [ ] Need custom validation? → Use functions from `@/utils/validation`
 
+### User Assignment Tracking
+- [ ] Creating a store with user assignments? → **Register with `userDependencyRegistry`**
+- [ ] Deactivating/deleting users? → Use `UserDeactivationModal`
+
 ### Patterns
 - [ ] Need duplicate detection? → Follow duplicate detection pattern
 - [ ] Need back navigation? → Use `navigate(-1)`
 - [ ] Creating a list page? → Use `DataTable` with `Page fillHeight`
 - [ ] Need inline editing? → Follow inline editing pattern from ContactDetailPage
 - [ ] Need address with autocomplete? → Use `AddressInput` component
+- [ ] Need multiple addresses? → Follow CompanyDetailPage pattern
 
 ### Layout
 - [ ] Page with DataTable? → Add `fillHeight` prop to `Page`

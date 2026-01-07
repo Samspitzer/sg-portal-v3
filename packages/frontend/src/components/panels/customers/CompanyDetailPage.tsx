@@ -21,9 +21,10 @@ import {
   Info,
 } from 'lucide-react';
 import { Page } from '@/components/layout';
-import { Button, ConfirmModal, Modal, Input, AddressInput, UnsavedChangesModal } from '@/components/common';
+import { Button, ConfirmModal, Modal, Input, AddressInput, UnsavedChangesModal, Select, Textarea } from '@/components/common';
+import { MultiSelectUsers } from '@/components/common/MultiSelectUsers';
 import { CollapsibleSection } from '@/components/common/CollapsibleSection';
-import { useClientsStore, useUsersStore, useToast, useNavigationGuardStore, CONTACT_ROLES, type Company, type ContactRole } from '@/contexts';
+import { useClientsStore, useUsersStore, useToast, useNavigationGuardStore, CONTACT_ROLES, type Company, type ContactRole, type CompanyAddress, isDuplicateAddress } from '@/contexts';
 import {
   formatPhoneNumber,
   validatePhone,
@@ -353,31 +354,32 @@ function InlineField({
 }
 
 // Sales Rep Selector
-function SalesRepField({
+// Multi-Select Sales Rep Field for Company Level
+function MultiSalesRepField({
   label,
   value,
   onSave,
   onEditingChange,
+  showLocationHint = false,
 }: {
   label: string;
-  value: string;
-  onSave: (value: string) => void;
+  value: string[];
+  onSave: (value: string[]) => void;
   onEditingChange?: (isEditing: boolean, hasChanges: boolean) => void;
+  showLocationHint?: boolean;
 }) {
   const [isEditing, setIsEditing] = useState(false);
-  const [editValue, setEditValue] = useState(value);
+  const [editValue, setEditValue] = useState<string[]>(value);
   const [showModal, setShowModal] = useState(false);
-  const [pendingTab, setPendingTab] = useState(false);
   const fieldRef = useRef<HTMLDivElement>(null);
   const { users } = useUsersStore();
-  const activeUsers = users.filter((u) => u.isActive);
-  const selectedUser = users.find((u) => u.id === value);
+  const selectedUsers = users.filter((u) => value.includes(u.id));
 
   useEffect(() => {
     setEditValue(value);
   }, [value]);
 
-  const hasChanges = editValue !== value;
+  const hasChanges = JSON.stringify(editValue.sort()) !== JSON.stringify(value.sort());
 
   // Use ref to avoid infinite loops with onEditingChange callback
   const onEditingChangeRef = useRef(onEditingChange);
@@ -387,70 +389,20 @@ function SalesRepField({
     onEditingChangeRef.current?.(isEditing, hasChanges);
   }, [isEditing, hasChanges]);
 
-  const moveToNextField = () => {
-    const focusableElements = document.querySelectorAll('[data-inline-field="true"]');
-    const currentIndex = Array.from(focusableElements).findIndex(
-      (el) => el === fieldRef.current || el.contains(fieldRef.current)
-    );
-    const nextElement = focusableElements[currentIndex + 1] as HTMLElement;
-    if (nextElement) {
-      nextElement.focus();
-      nextElement.click();
-    }
-  };
-
-  const handleSave = (newValue: string) => {
-    onSave(newValue);
+  const handleSave = () => {
+    onSave(editValue);
     setIsEditing(false);
     setShowModal(false);
-    if (pendingTab) {
-      setPendingTab(false);
-      setTimeout(moveToNextField, 0);
-    }
   };
 
   const handleDiscard = () => {
     setEditValue(value);
     setIsEditing(false);
     setShowModal(false);
-    if (pendingTab) {
-      setPendingTab(false);
-      setTimeout(moveToNextField, 0);
-    }
   };
 
   const handleKeepEditing = () => {
     setShowModal(false);
-    setPendingTab(false);
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (showModal) {
-      e.preventDefault();
-      e.stopPropagation();
-      return;
-    }
-
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      e.stopPropagation();
-      setPendingTab(false);
-      if (hasChanges) {
-        setShowModal(true);
-      } else {
-        setIsEditing(false);
-      }
-    } else if (e.key === 'Tab' && !e.shiftKey) {
-      e.preventDefault();
-      e.stopPropagation();
-      if (hasChanges) {
-        setPendingTab(true);
-        setShowModal(true);
-      } else {
-        setIsEditing(false);
-        moveToNextField();
-      }
-    }
   };
 
   const handleViewKeyDown = (e: React.KeyboardEvent) => {
@@ -463,40 +415,38 @@ function SalesRepField({
   if (isEditing) {
     return (
       <>
-        <div className="space-y-1" data-inline-field="true" ref={fieldRef}>
+        <div className="space-y-2" data-inline-field="true" ref={fieldRef}>
           <label className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</label>
-          <div className="flex items-center gap-2">
-            <select
-              value={editValue}
-              onChange={(e) => {
-                setEditValue(e.target.value);
-                handleSave(e.target.value);
-              }}
-              onKeyDown={handleKeyDown}
-              autoFocus
-              className="flex-1 px-3 py-1.5 text-sm border border-brand-500 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
-            >
-              <option value="">No sales rep assigned</option>
-              {activeUsers.map((user) => (
-                <option key={user.id} value={user.id}>
-                  {user.name}
-                </option>
-              ))}
-            </select>
-            <button
+          <MultiSelectUsers
+            value={editValue}
+            onChange={setEditValue}
+            placeholder="Select sales reps..."
+            size="sm"
+          />
+          {showLocationHint && editValue.length === 0 && (
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Leave empty to set sales reps per location instead
+            </p>
+          )}
+          <div className="flex items-center gap-2 pt-1">
+            <Button variant="primary" size="sm" onClick={handleSave}>
+              <Check className="w-3 h-3 mr-1" />
+              Save
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={() => (hasChanges ? setShowModal(true) : setIsEditing(false))}
-              tabIndex={-1}
-              className="p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"
-              title="Cancel (Esc)"
             >
-              <X className="w-4 h-4" />
-            </button>
+              <X className="w-3 h-3 mr-1" />
+              Cancel
+            </Button>
           </div>
         </div>
 
         <UnsavedChangesModal
           isOpen={showModal}
-          onSave={() => handleSave(editValue)}
+          onSave={handleSave}
           onDiscard={handleDiscard}
           onCancel={handleKeepEditing}
         />
@@ -515,21 +465,80 @@ function SalesRepField({
     >
       <div className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</div>
       <div className="flex items-center gap-2 mt-0.5">
-        <User className="w-3.5 h-3.5 text-slate-400" />
-        <span className={clsx('text-sm', selectedUser ? 'text-slate-900 dark:text-white' : 'text-slate-400 italic')}>
-          {selectedUser?.name || 'Click to assign...'}
-        </span>
+        <Users className="w-3.5 h-3.5 text-slate-400" />
+        {selectedUsers.length === 0 ? (
+          <span className="text-sm text-slate-400 italic">
+            {showLocationHint ? 'Set by location' : 'Click to assign...'}
+          </span>
+        ) : selectedUsers.length === 1 ? (
+          <span className="text-sm text-slate-900 dark:text-white">{selectedUsers[0]?.name}</span>
+        ) : (
+          <div className="flex flex-wrap gap-1">
+            {selectedUsers.map((user) => (
+              <span
+                key={user.id}
+                className="inline-flex items-center px-1.5 py-0.5 bg-brand-50 dark:bg-brand-900/20 text-brand-700 dark:text-brand-300 rounded text-xs"
+              >
+                {user.name}
+              </span>
+            ))}
+          </div>
+        )}
         <Pencil className="w-3 h-3 text-slate-300 opacity-0 group-hover:opacity-100 group-focus:opacity-100 transition-opacity ml-auto" />
       </div>
     </div>
   );
 }
 
+// Single Sales Rep Field for Address Level
+function AddressSalesRepField({
+  value,
+  onChange,
+  disabled = false,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+}) {
+  const { users } = useUsersStore();
+  const activeUsers = users.filter((u) => u.isActive);
+
+  return (
+    <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+      <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
+        Location Sales Rep
+      </label>
+      <select
+        value={value || ''}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+        className={clsx(
+          'w-full px-2 py-1.5 text-sm rounded-lg border',
+          'bg-white dark:bg-slate-800 text-slate-900 dark:text-white',
+          'border-slate-200 dark:border-slate-700',
+          'focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent',
+          disabled && 'opacity-50 cursor-not-allowed'
+        )}
+      >
+        <option value="">No sales rep assigned</option>
+        {activeUsers.map((user) => (
+          <option key={user.id} value={user.id}>
+            {user.name}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+// Role options for contact form
+const roleOptions = CONTACT_ROLES.map((role) => ({ value: role, label: role }));
+
 export function CompanyDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const toast = useToast();
-  const { companies, contacts, updateCompany, deleteCompany, addContact } = useClientsStore();
+  const { companies, contacts, updateCompany, deleteCompany, addContact, addCompanyAddress, updateCompanyAddress, deleteCompanyAddress } = useClientsStore();
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [editingFields, setEditingFields] = useState<Map<string, boolean>>(new Map());
@@ -537,6 +546,21 @@ export function CompanyDetailPage() {
   // Add Contact Modal state
   const [showAddContactModal, setShowAddContactModal] = useState(false);
   const [contactFormData, setContactFormData] = useState<ContactFormData>(initialContactFormData);
+
+  // Add Address Modal state
+  const [showAddAddressModal, setShowAddAddressModal] = useState(false);
+  const [newAddressLabel, setNewAddressLabel] = useState('');
+  const [newAddressData, setNewAddressData] = useState<{ street: string; suite?: string; city: string; state: string; zip: string }>({ street: '', suite: '', city: '', state: '', zip: '' });
+  
+  // Delete address confirmation
+  const [addressToDelete, setAddressToDelete] = useState<CompanyAddress | null>(null);
+  
+  // Main office delete confirmation
+  const [showDeleteMainOfficeModal, setShowDeleteMainOfficeModal] = useState(false);
+  
+  // Main office deletion - promote selection modal
+  const [showPromoteModal, setShowPromoteModal] = useState(false);
+  const [selectedPromoteAddressId, setSelectedPromoteAddressId] = useState<string>('');
 
   const company = companies.find((c) => c.id === id);
   const companyContacts = contacts.filter((c) => c.companyId === id);
@@ -648,6 +672,143 @@ export function CompanyDetailPage() {
     contactFormData.role !== '' ||
     contactFormData.notes !== '') && !hasValidationErrors();
 
+  // Address handlers
+  const openAddAddressModal = () => {
+    setNewAddressLabel('');
+    setNewAddressData({ street: '', suite: '', city: '', state: '', zip: '' });
+    setShowAddAddressModal(true);
+  };
+
+  const closeAddAddressModal = () => {
+    setShowAddAddressModal(false);
+    setNewAddressLabel('');
+    setNewAddressData({ street: '', suite: '', city: '', state: '', zip: '' });
+  };
+
+  const handleAddAddress = () => {
+    // Check for duplicate address (if there's actually an address to add)
+    if (newAddressData.street) {
+      const dupCheck = isDuplicateAddress(
+        company,
+        newAddressData.street,
+        newAddressData.city,
+        newAddressData.state,
+        newAddressData.zip
+      );
+      if (dupCheck.isDuplicate) {
+        toast.error('Duplicate Address', `This address already exists as "${dupCheck.existingLabel}"`);
+        return;
+      }
+    }
+
+    // If main office is empty, set this as main office instead
+    const mainOfficeIsEmpty = !company.address?.street;
+    
+    if (mainOfficeIsEmpty) {
+      // Set as main office - no label required
+      updateCompany(company.id, {
+        address: {
+          street: newAddressData.street,
+          suite: newAddressData.suite,
+          city: newAddressData.city,
+          state: newAddressData.state,
+          zip: newAddressData.zip,
+        },
+      });
+      toast.success('Added', 'Main office address saved');
+    } else {
+      // Add as additional address - label required
+      if (!newAddressLabel.trim()) {
+        toast.error('Error', 'Please enter a name for the location');
+        return;
+      }
+      addCompanyAddress(company.id, {
+        label: newAddressLabel.trim(),
+        street: newAddressData.street,
+        suite: newAddressData.suite,
+        city: newAddressData.city,
+        state: newAddressData.state,
+        zip: newAddressData.zip,
+      });
+      toast.success('Added', `${newAddressLabel.trim()} location added`);
+    }
+    
+    closeAddAddressModal();
+  };
+
+  const handleDeleteAddress = () => {
+    if (addressToDelete) {
+      deleteCompanyAddress(company.id, addressToDelete.id);
+      toast.success('Deleted', `${addressToDelete.label} address removed`);
+      setAddressToDelete(null);
+    }
+  };
+
+  // Handle confirming main office deletion (called after user confirms)
+  const handleConfirmClearMainOffice = () => {
+    setShowDeleteMainOfficeModal(false);
+    
+    const otherAddresses = company.addresses || [];
+    
+    if (otherAddresses.length === 0) {
+      // No other addresses, just clear main office
+      updateCompany(company.id, { address: undefined });
+      toast.success('Cleared', 'Main office address removed');
+    } else if (otherAddresses.length === 1) {
+      // Exactly one other address - auto-promote it to main office
+      const addressToPromote = otherAddresses[0];
+      if (addressToPromote) {
+        promoteAddressToMainOffice(addressToPromote);
+      }
+    } else {
+      // Multiple other addresses - ask user which to promote
+      setSelectedPromoteAddressId('');
+      setShowPromoteModal(true);
+    }
+  };
+
+  // Promote an address to main office
+  const promoteAddressToMainOffice = (addressToPromote: CompanyAddress) => {
+    // Set the selected address as main office
+    updateCompany(company.id, {
+      address: {
+        street: addressToPromote.street,
+        suite: addressToPromote.suite,
+        city: addressToPromote.city,
+        state: addressToPromote.state,
+        zip: addressToPromote.zip,
+      },
+    });
+    // Remove it from additional addresses
+    deleteCompanyAddress(company.id, addressToPromote.id);
+    toast.success('Updated', `${addressToPromote.label} is now the main office`);
+    setShowPromoteModal(false);
+    setSelectedPromoteAddressId('');
+  };
+
+  const handleConfirmPromotion = () => {
+    if (!selectedPromoteAddressId) {
+      toast.error('Error', 'Please select an address to promote to main office');
+      return;
+    }
+    const addressToPromote = (company.addresses || []).find(a => a.id === selectedPromoteAddressId);
+    if (addressToPromote) {
+      promoteAddressToMainOffice(addressToPromote);
+    }
+  };
+
+  // Get all addresses - main office (from legacy address) + additional addresses
+  const mainOfficeAddress = company.address && company.address.street ? {
+    id: 'main-office',
+    label: 'Main Office',
+    ...company.address,
+  } : null;
+
+  const additionalAddresses = company.addresses || [];
+  
+  // Count only addresses with actual street data
+  const addressCount = (mainOfficeAddress ? 1 : 0) + additionalAddresses.filter(addr => addr.street).length;
+
   return (
     <Page
       title={company.name}
@@ -702,40 +863,168 @@ export function CompanyDetailPage() {
                     icon={Globe}
                     onEditingChange={handleEditingChange('website')}
                   />
-                  <SalesRepField
-                    label="Sales Rep"
-                    value={company.salesRepId || ''}
-                    onSave={(v) => handleFieldSave('salesRepId', v)}
+                  <MultiSalesRepField
+                    label="Sales Reps"
+                    value={company.salesRepIds || (company.salesRepId ? [company.salesRepId] : [])}
+                    onSave={(ids) => updateCompany(company.id, { salesRepIds: ids, salesRepId: undefined })}
                     onEditingChange={handleEditingChange('salesRep')}
+                    showLocationHint
                   />
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Address Section - Collapsible with Google Places Autocomplete */}
+          {/* Addresses Section - Collapsible with add button */}
           <CollapsibleSection
-            title="Address"
+            title="Addresses"
             icon={<MapPin className="w-4 h-4 text-slate-500" />}
+            badge={addressCount > 0 ? addressCount : undefined}
             defaultOpen={true}
+            action={
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openAddAddressModal();
+                }}
+                className="p-1 text-slate-400 hover:text-brand-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors"
+                title="Add address"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            }
           >
-            <AddressInput
-              street={company.address?.street || ''}
-              city={company.address?.city || ''}
-              state={company.address?.state || ''}
-              zip={company.address?.zip || ''}
-              onSave={(address) => {
-                updateCompany(company.id, {
-                  address: {
-                    street: address.street,
-                    city: address.city,
-                    state: address.state,
-                    zip: address.zip,
-                  },
-                });
-                toast.success('Updated', 'Address saved');
-              }}
-            />
+            <div className="space-y-4">
+              {/* Main Office Address */}
+              <div className="relative group">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide">
+                    Main Office
+                  </span>
+                  {mainOfficeAddress && (
+                    <button
+                      onClick={() => setShowDeleteMainOfficeModal(true)}
+                      className="p-1 text-slate-300 hover:text-danger-600 opacity-0 group-hover:opacity-100 transition-opacity rounded"
+                      title="Clear main office address"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+                <AddressInput
+                  street={company.address?.street || ''}
+                  suite={company.address?.suite || ''}
+                  city={company.address?.city || ''}
+                  state={company.address?.state || ''}
+                  zip={company.address?.zip || ''}
+                  onSave={(address) => {
+                    // Check for duplicate (exclude main office itself)
+                    if (address.street) {
+                      const dupCheck = isDuplicateAddress(
+                        company,
+                        address.street,
+                        address.city,
+                        address.state,
+                        address.zip,
+                        'main-office'
+                      );
+                      if (dupCheck.isDuplicate) {
+                        toast.error('Duplicate Address', `This address already exists as "${dupCheck.existingLabel}"`);
+                        return;
+                      }
+                    }
+                    updateCompany(company.id, {
+                      address: {
+                        street: address.street,
+                        suite: address.suite,
+                        city: address.city,
+                        state: address.state,
+                        zip: address.zip,
+                        salesRepId: company.address?.salesRepId, // Preserve existing sales rep
+                      },
+                    });
+                    toast.success('Updated', 'Main Office address saved');
+                  }}
+                />
+                {/* Per-location sales rep (only show if no company-level reps) */}
+                {(!company.salesRepIds || company.salesRepIds.length === 0) && company.address?.street && (
+                  <AddressSalesRepField
+                    value={company.address?.salesRepId || ''}
+                    onChange={(salesRepId) => {
+                      updateCompany(company.id, {
+                        address: {
+                          ...company.address!,
+                          salesRepId: salesRepId || undefined,
+                        },
+                      });
+                      toast.success('Updated', 'Sales rep updated for Main Office');
+                    }}
+                  />
+                )}
+              </div>
+
+              {/* Additional Addresses */}
+              {additionalAddresses.map((addr) => (
+                <div key={addr.id} className="relative group pt-4 border-t border-slate-200 dark:border-slate-700">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide">
+                      {addr.label}
+                    </span>
+                    <button
+                      onClick={() => setAddressToDelete(addr)}
+                      className="p-1 text-slate-300 hover:text-danger-600 opacity-0 group-hover:opacity-100 transition-opacity rounded"
+                      title="Delete address"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <AddressInput
+                    street={addr.street}
+                    suite={addr.suite || ''}
+                    city={addr.city}
+                    state={addr.state}
+                    zip={addr.zip}
+                    onSave={(address) => {
+                      // Check for duplicate (exclude this address itself)
+                      if (address.street) {
+                        const dupCheck = isDuplicateAddress(
+                          company,
+                          address.street,
+                          address.city,
+                          address.state,
+                          address.zip,
+                          addr.id
+                        );
+                        if (dupCheck.isDuplicate) {
+                          toast.error('Duplicate Address', `This address already exists as "${dupCheck.existingLabel}"`);
+                          return;
+                        }
+                      }
+                      updateCompanyAddress(company.id, addr.id, {
+                        street: address.street,
+                        suite: address.suite,
+                        city: address.city,
+                        state: address.state,
+                        zip: address.zip,
+                      });
+                      toast.success('Updated', `${addr.label} address saved`);
+                    }}
+                  />
+                  {/* Per-location sales rep (only show if no company-level reps) */}
+                  {(!company.salesRepIds || company.salesRepIds.length === 0) && addr.street && (
+                    <AddressSalesRepField
+                      value={addr.salesRepId || ''}
+                      onChange={(salesRepId) => {
+                        updateCompanyAddress(company.id, addr.id, {
+                          salesRepId: salesRepId || undefined,
+                        });
+                        toast.success('Updated', `Sales rep updated for ${addr.label}`);
+                      }}
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
           </CollapsibleSection>
 
           {/* Contacts Section - Collapsible */}
@@ -866,7 +1155,7 @@ export function CompanyDetailPage() {
         </div>
       </div>
 
-      {/* Delete Confirmation Modal */}
+      {/* Delete Company Confirmation Modal */}
       <ConfirmModal
         isOpen={showDeleteModal}
         onClose={() => setShowDeleteModal(false)}
@@ -884,6 +1173,141 @@ export function CompanyDetailPage() {
         confirmText="Delete"
         variant="danger"
       />
+
+      {/* Delete Address Confirmation Modal */}
+      <ConfirmModal
+        isOpen={!!addressToDelete}
+        onClose={() => setAddressToDelete(null)}
+        onConfirm={handleDeleteAddress}
+        title="Delete Address"
+        message={`Are you sure you want to delete the "${addressToDelete?.label}" address?`}
+        confirmText="Delete"
+        variant="danger"
+      />
+
+      {/* Delete Main Office Confirmation Modal */}
+      <ConfirmModal
+        isOpen={showDeleteMainOfficeModal}
+        onClose={() => setShowDeleteMainOfficeModal(false)}
+        onConfirm={handleConfirmClearMainOffice}
+        title="Delete Main Office Address"
+        message={
+          (company.addresses?.length || 0) > 0
+            ? "Are you sure you want to delete the main office address? Another address will be promoted to main office."
+            : "Are you sure you want to delete the main office address?"
+        }
+        confirmText="Delete"
+        variant="danger"
+      />
+
+      {/* Add Office Location Modal */}
+      <Modal
+        isOpen={showAddAddressModal}
+        onClose={closeAddAddressModal}
+        title={!company.address?.street ? "Add Main Office Address" : "Add Office Location"}
+        size="lg"
+        footer={
+          <>
+            <Button variant="secondary" onClick={closeAddAddressModal}>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={handleAddAddress}>
+              {!company.address?.street ? "Set Main Office" : "Add Location"}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          {/* Only show label field if main office already exists */}
+          {company.address?.street && (
+            <Input
+              label="Location Name"
+              value={newAddressLabel}
+              onChange={(e) => setNewAddressLabel(e.target.value)}
+              placeholder="e.g., Branch Office, Warehouse, Job Site"
+              autoFocus
+            />
+          )}
+          <div className={company.address?.street ? "pt-2 border-t border-slate-200 dark:border-slate-700" : ""}>
+            {company.address?.street && (
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">
+                Address
+              </label>
+            )}
+            <AddressInput
+              street={newAddressData.street}
+              suite={newAddressData.suite}
+              city={newAddressData.city}
+              state={newAddressData.state}
+              zip={newAddressData.zip}
+              autoSave
+              onSave={(address) => {
+                setNewAddressData(address);
+              }}
+            />
+          </div>
+        </div>
+      </Modal>
+
+      {/* Promote Address to Main Office Modal */}
+      <Modal
+        isOpen={showPromoteModal}
+        onClose={() => {
+          setShowPromoteModal(false);
+          setSelectedPromoteAddressId('');
+        }}
+        title="Select New Main Office"
+        size="md"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => {
+              setShowPromoteModal(false);
+              setSelectedPromoteAddressId('');
+            }}>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={handleConfirmPromotion}>
+              Set as Main Office
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-slate-600 dark:text-slate-400">
+            You're removing the main office address. Please select which location should become the new main office:
+          </p>
+          <div className="space-y-2">
+            {(company.addresses || []).map((addr) => (
+              <label
+                key={addr.id}
+                className={clsx(
+                  'flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors',
+                  selectedPromoteAddressId === addr.id
+                    ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20'
+                    : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                )}
+              >
+                <input
+                  type="radio"
+                  name="promoteAddress"
+                  value={addr.id}
+                  checked={selectedPromoteAddressId === addr.id}
+                  onChange={(e) => setSelectedPromoteAddressId(e.target.value)}
+                  className="mt-1"
+                />
+                <div>
+                  <div className="font-medium text-slate-900 dark:text-white text-sm">
+                    {addr.label}
+                  </div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400">
+                    {addr.street}{addr.suite ? `, ${addr.suite}` : ''}, {addr.city}, {addr.state} {addr.zip}
+                  </div>
+                </div>
+              </label>
+            ))}
+          </div>
+        </div>
+      </Modal>
 
       {/* Add Contact Modal */}
       <Modal
@@ -936,23 +1360,13 @@ export function CompanyDetailPage() {
           </div>
 
           {/* Role */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-              Role
-            </label>
-            <select
-              value={contactFormData.role}
-              onChange={(e) => setContactFormData({ ...contactFormData, role: e.target.value as ContactRole | '' })}
-              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
-            >
-              <option value="">Select a role...</option>
-              {CONTACT_ROLES.map((role) => (
-                <option key={role} value={role}>
-                  {role}
-                </option>
-              ))}
-            </select>
-          </div>
+          <Select
+            label="Role"
+            value={contactFormData.role}
+            onChange={(e) => setContactFormData({ ...contactFormData, role: e.target.value as ContactRole | '' })}
+            options={roleOptions}
+            placeholder="Select a role..."
+          />
 
           {/* Email */}
           <Input
@@ -982,18 +1396,13 @@ export function CompanyDetailPage() {
           </div>
 
           {/* Notes */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-              Notes
-            </label>
-            <textarea
-              value={contactFormData.notes}
-              onChange={(e) => setContactFormData({ ...contactFormData, notes: e.target.value })}
-              rows={3}
-              placeholder="Additional notes..."
-              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
-            />
-          </div>
+          <Textarea
+            label="Notes"
+            value={contactFormData.notes}
+            onChange={(e) => setContactFormData({ ...contactFormData, notes: e.target.value })}
+            placeholder="Additional notes..."
+            rows={3}
+          />
         </div>
       </Modal>
     </Page>

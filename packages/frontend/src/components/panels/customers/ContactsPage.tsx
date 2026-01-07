@@ -9,14 +9,15 @@ import {
   Smartphone,
   AlertCircle,
   AlertTriangle,
+  MapPin,
 } from 'lucide-react';
 import { Page } from '@/components/layout';
-import { CardContent, Button, Input, Modal, SearchInput } from '@/components/common';
+import { CardContent, Button, Input, Modal, SearchInput, Select, Textarea } from '@/components/common';
 import { AlphabetFilter } from '@/components/common/AlphabetFilter';
 import { DataTable, type DataTableColumn } from '@/components/common/DataTable';
 import { SelectFilter } from '@/components/common/SelectFilter';
 import { DuplicateContactModal } from '@/components/common/DuplicateContactModal';
-import { useClientsStore, useUsersStore, useToast, CONTACT_ROLES, type ContactRole, type Contact } from '@/contexts';
+import { useClientsStore, useUsersStore, useToast, CONTACT_ROLES, type ContactRole, type Contact, type Company } from '@/contexts';
 import { useDropdownKeyboard } from '@/hooks';
 
 interface ContactFormData {
@@ -77,6 +78,8 @@ export function ContactsPage() {
   const [search, setSearch] = useState('');
   const [letterFilter, setLetterFilter] = useState<string | null>(null);
   const [companyFilter, setCompanyFilter] = useState('');
+  const [locationFilter, setLocationFilter] = useState('');
+  const [salesRepFilter, setSalesRepFilter] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [formData, setFormData] = useState<ContactFormData>(initialContactFormData);
   const [companySearch, setCompanySearch] = useState('');
@@ -115,9 +118,25 @@ export function ContactsPage() {
 
   const activeUsers = useMemo(() => users.filter((u) => u.isActive), [users]);
 
+  // Role options for Select component
+  const roleOptions = useMemo(() => 
+    CONTACT_ROLES.map((role) => ({ value: role, label: role })),
+    []
+  );
+
+  // Sales rep options for Select component
+  const salesRepOptions = useMemo(() => 
+    activeUsers.map((user) => ({ value: user.id, label: user.name })),
+    [activeUsers]
+  );
+
   const getCompanyName = (companyId: string) => {
     const company = companies.find((c) => c.id === companyId);
     return company?.name || null;
+  };
+
+  const getCompany = (companyId: string) => {
+    return companies.find((c) => c.id === companyId);
   };
 
   const isOrphanedContact = (companyId: string) => {
@@ -159,6 +178,102 @@ export function ContactsPage() {
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [companies, contacts]);
 
+  // Get all locations for a company (main office + additional addresses)
+  const getAllCompanyLocations = (company: Company | undefined): string[] => {
+    if (!company) return [];
+    const locations: string[] = [];
+    
+    // Main office address
+    if (company.address?.city || company.address?.state) {
+      const mainLoc = [company.address.city, company.address.state].filter(Boolean).join(', ');
+      if (mainLoc) locations.push(mainLoc);
+    }
+    
+    // Additional addresses
+    if (company.addresses) {
+      company.addresses.forEach((addr) => {
+        if (addr.city || addr.state) {
+          const loc = [addr.city, addr.state].filter(Boolean).join(', ');
+          if (loc && !locations.includes(loc)) locations.push(loc);
+        }
+      });
+    }
+    
+    return locations;
+  };
+
+  // Get the location for a contact's assigned office
+  const getContactAssignedLocation = (contact: Contact, company: Company | undefined): string | null => {
+    if (!company || !contact.officeAddressId) return null;
+    
+    // Check if assigned to main office
+    if (contact.officeAddressId === 'main-office') {
+      if (company.address?.city || company.address?.state) {
+        return [company.address.city, company.address.state].filter(Boolean).join(', ');
+      }
+      return null;
+    }
+    
+    // Check additional addresses
+    const addr = company.addresses?.find((a) => a.id === contact.officeAddressId);
+    if (addr && (addr.city || addr.state)) {
+      return [addr.city, addr.state].filter(Boolean).join(', ');
+    }
+    
+    return null;
+  };
+
+  // Location filter options (based on contact's assigned office or all company locations if not assigned)
+  const locationFilterOptions = useMemo(() => {
+    const locationCounts = new Map<string, number>();
+    contacts.forEach((contact) => {
+      const company = getCompany(contact.companyId);
+      
+      if (contact.officeAddressId) {
+        // Contact has assigned office - only count that location
+        const assignedLocation = getContactAssignedLocation(contact, company);
+        if (assignedLocation) {
+          locationCounts.set(assignedLocation, (locationCounts.get(assignedLocation) || 0) + 1);
+        }
+      } else {
+        // No assigned office - count all company locations
+        const companyLocations = getAllCompanyLocations(company);
+        companyLocations.forEach((loc) => {
+          locationCounts.set(loc, (locationCounts.get(loc) || 0) + 1);
+        });
+      }
+    });
+    return Array.from(locationCounts.entries())
+      .map(([loc, count]) => ({
+        value: loc,
+        label: loc,
+        count,
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [contacts, companies]);
+
+  // Sales rep filter options (based on company salesRepId)
+  const salesRepFilterOptions = useMemo(() => {
+    const repCounts = new Map<string, number>();
+    contacts.forEach((contact) => {
+      const company = getCompany(contact.companyId);
+      if (company?.salesRepId) {
+        repCounts.set(company.salesRepId, (repCounts.get(company.salesRepId) || 0) + 1);
+      }
+    });
+    return Array.from(repCounts.entries())
+      .map(([repId, count]) => {
+        const user = users.find((u) => u.id === repId);
+        return {
+          value: repId,
+          label: user?.name || 'Unknown',
+          count,
+        };
+      })
+      .filter((opt) => opt.label !== 'Unknown')
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [contacts, companies, users]);
+
   const filteredAndSortedContacts = useMemo(() => {
     let result = contacts.filter((contact) => {
       const matchesSearch =
@@ -168,7 +283,25 @@ export function ContactsPage() {
       const matchesCompany = !companyFilter || contact.companyId === companyFilter;
       const matchesLetter = !letterFilter || 
         (contact.firstName?.charAt(0)?.toUpperCase() === letterFilter);
-      return matchesSearch && matchesCompany && matchesLetter;
+      
+      // Location filter - check contact's assigned office or all company locations
+      const company = getCompany(contact.companyId);
+      let matchesLocation = true;
+      if (locationFilter) {
+        if (contact.officeAddressId) {
+          // Contact has assigned office - get that specific location
+          const assignedLocation = getContactAssignedLocation(contact, company);
+          matchesLocation = assignedLocation === locationFilter;
+        } else {
+          // No assigned office - match any company location
+          matchesLocation = getAllCompanyLocations(company).includes(locationFilter);
+        }
+      }
+      
+      // Sales rep filter - based on company salesRepId
+      const matchesSalesRep = !salesRepFilter || company?.salesRepId === salesRepFilter;
+      
+      return matchesSearch && matchesCompany && matchesLetter && matchesLocation && matchesSalesRep;
     });
 
     result = [...result].sort((a, b) => {
@@ -198,7 +331,7 @@ export function ContactsPage() {
     });
 
     return result;
-  }, [contacts, search, companyFilter, letterFilter, sortField, sortDirection, companies]);
+  }, [contacts, search, companyFilter, letterFilter, locationFilter, salesRepFilter, sortField, sortDirection, companies]);
 
   // Companies for modal dropdown
   const filteredCompanies = useMemo(() => {
@@ -561,9 +694,11 @@ export function ContactsPage() {
     setSearch('');
     setLetterFilter(null);
     setCompanyFilter('');
+    setLocationFilter('');
+    setSalesRepFilter('');
   };
 
-  const hasActiveFilters = search || letterFilter || companyFilter;
+  const hasActiveFilters = search || letterFilter || companyFilter || locationFilter || salesRepFilter;
 
   const hasContactChanges = formData.companyId !== '' || formData.firstName.trim() !== '' || formData.lastName.trim() !== '' || formData.email !== '' || formData.phoneOffice !== '' || formData.phoneMobile !== '' || formData.role !== '' || formData.notes !== '';
   const hasCompanyChanges = companyFormData.name.trim() !== '' || companyFormData.phone !== '' || companyFormData.website !== '' || companyFormData.street !== '' || companyFormData.city !== '' || companyFormData.state !== '' || companyFormData.zip !== '' || companyFormData.notes !== '' || companyFormData.salesRepId !== '';
@@ -604,6 +739,20 @@ export function ContactsPage() {
                 options={companyFilterOptions}
                 onChange={setCompanyFilter}
                 icon={<Building2 className="w-4 h-4" />}
+              />
+              <SelectFilter
+                label="Location"
+                value={locationFilter}
+                options={locationFilterOptions}
+                onChange={setLocationFilter}
+                icon={<MapPin className="w-4 h-4" />}
+              />
+              <SelectFilter
+                label="Sales Rep"
+                value={salesRepFilter}
+                options={salesRepFilterOptions}
+                onChange={setSalesRepFilter}
+                icon={<User className="w-4 h-4" />}
               />
               {hasActiveFilters && (
                 <Button variant="ghost" size="sm" onClick={clearFilters}>
@@ -750,23 +899,13 @@ export function ContactsPage() {
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-              Role
-            </label>
-            <select
-              value={formData.role}
-              onChange={(e) => setFormData({ ...formData, role: e.target.value as ContactRole | '' })}
-              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
-            >
-              <option value="">Select a role...</option>
-              {CONTACT_ROLES.map((role) => (
-                <option key={role} value={role}>
-                  {role}
-                </option>
-              ))}
-            </select>
-          </div>
+          <Select
+            label="Role"
+            value={formData.role}
+            onChange={(e) => setFormData({ ...formData, role: e.target.value as ContactRole | '' })}
+            options={roleOptions}
+            placeholder="Select a role..."
+          />
 
           <Input
             label="Email"
@@ -779,30 +918,27 @@ export function ContactsPage() {
           <div className="grid grid-cols-2 gap-4">
             <Input
               label="Phone (Office)"
+              type="tel"
               value={formData.phoneOffice}
               onChange={(e) => setFormData({ ...formData, phoneOffice: e.target.value })}
               placeholder="(555) 123-4567"
             />
             <Input
               label="Phone (Mobile)"
+              type="tel"
               value={formData.phoneMobile}
               onChange={(e) => setFormData({ ...formData, phoneMobile: e.target.value })}
               placeholder="(555) 987-6543"
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-              Notes
-            </label>
-            <textarea
-              value={formData.notes}
-              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-              rows={3}
-              placeholder="Any additional notes..."
-              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
-            />
-          </div>
+          <Textarea
+            label="Notes"
+            value={formData.notes}
+            onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+            placeholder="Any additional notes..."
+            rows={3}
+          />
         </div>
       </Modal>
 
@@ -836,34 +972,26 @@ export function ContactsPage() {
           />
 
           {activeUsers.length > 0 && (
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                Sales Rep
-              </label>
-              <select
-                value={companyFormData.salesRepId}
-                onChange={(e) => setCompanyFormData({ ...companyFormData, salesRepId: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
-              >
-                <option value="">Select a sales rep...</option>
-                {activeUsers.map((user) => (
-                  <option key={user.id} value={user.id}>
-                    {user.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <Select
+              label="Sales Rep"
+              value={companyFormData.salesRepId}
+              onChange={(e) => setCompanyFormData({ ...companyFormData, salesRepId: e.target.value })}
+              options={salesRepOptions}
+              placeholder="Select a sales rep..."
+            />
           )}
 
           <div className="grid grid-cols-2 gap-4">
             <Input
               label="Phone"
+              type="tel"
               value={companyFormData.phone}
               onChange={(e) => setCompanyFormData({ ...companyFormData, phone: e.target.value })}
               placeholder="(555) 123-4567"
             />
             <Input
               label="Website"
+              type="url"
               value={companyFormData.website}
               onChange={(e) => setCompanyFormData({ ...companyFormData, website: e.target.value })}
               placeholder="https://example.com"
@@ -898,18 +1026,13 @@ export function ContactsPage() {
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-              Notes
-            </label>
-            <textarea
-              value={companyFormData.notes}
-              onChange={(e) => setCompanyFormData({ ...companyFormData, notes: e.target.value })}
-              rows={3}
-              placeholder="Any additional notes..."
-              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
-            />
-          </div>
+          <Textarea
+            label="Notes"
+            value={companyFormData.notes}
+            onChange={(e) => setCompanyFormData({ ...companyFormData, notes: e.target.value })}
+            placeholder="Any additional notes..."
+            rows={3}
+          />
         </div>
       </Modal>
 

@@ -12,9 +12,10 @@ import {
   Trash2,
 } from 'lucide-react';
 import { Page } from '@/components/layout';
-import { CardContent, Button, Input, Modal, ConfirmModal, SearchInput } from '@/components/common';
+import { CardContent, Button, Input, Modal, SearchInput, Select, Toggle } from '@/components/common';
 import { DataTable, type DataTableColumn } from '@/components/common/DataTable';
 import { SelectFilter } from '@/components/common/SelectFilter';
+import { UserDeactivationModal } from '@/components/common/UserDeactivationModal';
 import { useToast, useDepartmentsStore, useUsersStore, type User } from '@/contexts';
 import { useFormChanges } from '@/hooks';
 
@@ -77,6 +78,18 @@ function UserModal({
   // Get positions for selected department
   const selectedDepartment = departments.find(d => d.id === formData.departmentId);
   const availablePositions = selectedDepartment?.positions || [];
+
+  // Department options for Select
+  const departmentOptions = useMemo(() => 
+    departments.map((dept) => ({ value: dept.id, label: dept.name })),
+    [departments]
+  );
+
+  // Position options for Select
+  const positionOptions = useMemo(() => 
+    availablePositions.map((pos) => ({ value: pos.id, label: pos.name })),
+    [availablePositions]
+  );
 
   // Reset form when user changes or modal opens
   useState(() => {
@@ -197,21 +210,13 @@ function UserModal({
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                Department
-              </label>
-              <select
+              <Select
+                label="Department"
                 value={formData.departmentId}
                 onChange={(e) => handleDepartmentChange(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg
-                  bg-white dark:bg-slate-800 text-slate-900 dark:text-white
-                  focus:outline-none focus:ring-2 focus:ring-brand-500"
-              >
-                <option value="">Select Department</option>
-                {departments.map((dept) => (
-                  <option key={dept.id} value={dept.id}>{dept.name}</option>
-                ))}
-              </select>
+                options={departmentOptions}
+                placeholder="Select Department"
+              />
               {departments.length === 0 && (
                 <p className="text-xs text-slate-400 mt-1">
                   No departments available. <a href="/admin/departments" className="text-brand-500 hover:underline">Add departments</a>
@@ -219,27 +224,14 @@ function UserModal({
               )}
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                Position
-              </label>
-              <select
+              <Select
+                label="Position"
                 value={formData.positionId}
                 onChange={(e) => setFormData({ ...formData, positionId: e.target.value })}
+                options={positionOptions}
+                placeholder={formData.departmentId ? 'Select Position' : 'Select a department first'}
                 disabled={!formData.departmentId}
-                className={clsx(
-                  "w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg",
-                  "bg-white dark:bg-slate-800 text-slate-900 dark:text-white",
-                  "focus:outline-none focus:ring-2 focus:ring-brand-500",
-                  !formData.departmentId && "opacity-50 cursor-not-allowed"
-                )}
-              >
-                <option value="">
-                  {formData.departmentId ? 'Select Position' : 'Select a department first'}
-                </option>
-                {availablePositions.map((pos) => (
-                  <option key={pos.id} value={pos.id}>{pos.name}</option>
-                ))}
-              </select>
+              />
               {formData.departmentId && availablePositions.length === 0 && (
                 <p className="text-xs text-slate-400 mt-1">
                   No positions in this department. <a href="/admin/departments" className="text-brand-500 hover:underline">Add positions</a>
@@ -254,25 +246,12 @@ function UserModal({
           <h3 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-4">
             Status
           </h3>
-          <label className="flex items-center gap-3 cursor-pointer">
-            <div
-              className={clsx(
-                'w-11 h-6 rounded-full transition-colors relative cursor-pointer',
-                formData.isActive ? 'bg-brand-500' : 'bg-slate-300 dark:bg-slate-600'
-              )}
-              onClick={() => setFormData({ ...formData, isActive: !formData.isActive })}
-            >
-              <div
-                className={clsx(
-                  'absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform left-0.5',
-                  formData.isActive && 'translate-x-[22px]'
-                )}
-              />
-            </div>
-            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-              {formData.isActive ? 'Active' : 'Inactive'}
-            </span>
-          </label>
+          <Toggle
+            checked={formData.isActive}
+            onChange={(checked) => setFormData({ ...formData, isActive: checked })}
+            label={formData.isActive ? 'Active' : 'Inactive'}
+            activeColor="brand"
+          />
         </div>
 
         {/* Permission Overrides - Placeholder */}
@@ -422,10 +401,13 @@ export function ManageUsersPage() {
     }
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = (reassignToUserId: string | null) => {
     if (userToDelete) {
       deleteUser(userToDelete.id);
-      toast.success('Deleted', userToDelete.name + ' has been removed');
+      const message = reassignToUserId 
+        ? `${userToDelete.name} has been removed and items reassigned`
+        : `${userToDelete.name} has been removed`;
+      toast.success('Deleted', message);
       setUserToDelete(null);
       setEditingUser(null);
     }
@@ -433,16 +415,23 @@ export function ManageUsersPage() {
 
   const handleToggleClick = (user: User, e: React.MouseEvent) => {
     e.stopPropagation();
-    setUserToToggle(user);
+    // Only show deactivation modal when deactivating (not activating)
+    if (user.isActive) {
+      setUserToToggle(user);
+    } else {
+      // Directly activate without modal
+      toggleUserActive(user.id);
+      toast.success('Activated', user.name + ' has been activated');
+    }
   };
 
-  const confirmToggle = () => {
+  const confirmToggle = (reassignToUserId: string | null) => {
     if (userToToggle) {
       toggleUserActive(userToToggle.id);
-      toast.success(
-        userToToggle.isActive ? 'Deactivated' : 'Activated',
-        userToToggle.name + ' has been ' + (userToToggle.isActive ? 'deactivated' : 'activated')
-      );
+      const message = reassignToUserId 
+        ? `${userToToggle.name} has been deactivated and items reassigned`
+        : `${userToToggle.name} has been deactivated`;
+      toast.success('Deactivated', message);
       setUserToToggle(null);
     }
   };
@@ -541,21 +530,13 @@ export function ManageUsersPage() {
       header: 'Status',
       align: 'center',
       render: (user) => (
-        <button
-          onClick={(e) => handleToggleClick(user, e)}
-          className={clsx(
-            'w-11 h-6 rounded-full transition-colors relative',
-            user.isActive ? 'bg-success-500' : 'bg-slate-300 dark:bg-slate-600'
-          )}
-          title={user.isActive ? 'Click to deactivate' : 'Click to activate'}
-        >
-          <div
-            className={clsx(
-              'absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform left-0.5',
-              user.isActive && 'translate-x-[22px]'
-            )}
-          />
-        </button>
+        <Toggle
+          checked={user.isActive}
+          onChange={() => {}}
+          onClick={(e) => handleToggleClick(user, e as unknown as React.MouseEvent)}
+          activeColor="success"
+          size="md"
+        />
       ),
     },
   ];
@@ -649,28 +630,22 @@ export function ManageUsersPage() {
         isLoading={isLoading}
       />
 
-      {/* Delete Confirmation Modal */}
-      <ConfirmModal
+      {/* Delete User Modal - with dependency check */}
+      <UserDeactivationModal
         isOpen={!!userToDelete}
         onClose={() => setUserToDelete(null)}
         onConfirm={confirmDelete}
-        title="Delete User"
-        message={'Are you sure you want to delete "' + (userToDelete?.name || '') + '"? This action cannot be undone.'}
-        confirmText="Delete"
-        cancelText="Cancel"
-        variant="danger"
+        user={userToDelete}
+        mode="delete"
       />
 
-      {/* Toggle Status Confirmation Modal */}
-      <ConfirmModal
+      {/* Deactivate User Modal - with dependency check */}
+      <UserDeactivationModal
         isOpen={!!userToToggle}
         onClose={() => setUserToToggle(null)}
         onConfirm={confirmToggle}
-        title={userToToggle?.isActive ? 'Deactivate User' : 'Activate User'}
-        message={'Are you sure you want to ' + (userToToggle?.isActive ? 'deactivate' : 'activate') + ' "' + (userToToggle?.name || '') + '"?'}
-        confirmText={userToToggle?.isActive ? 'Deactivate' : 'Activate'}
-        cancelText="Cancel"
-        variant={userToToggle?.isActive ? 'warning' : 'primary'}
+        user={userToToggle}
+        mode="deactivate"
       />
     </Page>
   );

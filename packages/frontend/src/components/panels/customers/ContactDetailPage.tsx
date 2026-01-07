@@ -22,12 +22,34 @@ import {
   ArrowRightLeft,
   AlertTriangle,
   Printer,
+  MapPin,
 } from 'lucide-react';
 import { Page } from '@/components/layout';
 import { Card, CardContent, Button, ConfirmModal, Modal, Input } from '@/components/common';
 import { CollapsibleSection } from '@/components/common/CollapsibleSection';
-import { useClientsStore, useUsersStore, useToast, useNavigationGuardStore, CONTACT_ROLES, type Contact } from '@/contexts';
+import { useClientsStore, useUsersStore, useToast, useNavigationGuardStore, CONTACT_ROLES, type Contact, } from '@/contexts';
 import { useDropdownKeyboard } from '@/hooks';
+
+// Non-collapsible Section Header (matches CollapsibleSection style)
+function SectionHeader({
+  title,
+  icon,
+  action,
+}: {
+  title: string;
+  icon?: React.ReactNode;
+  action?: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center justify-between px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
+      <div className="flex items-center gap-2">
+        {icon}
+        <span className="text-sm font-semibold text-slate-900 dark:text-white">{title}</span>
+      </div>
+      {action}
+    </div>
+  );
+}
 
 // Unsaved Changes Modal with Save option and focus trapping
 function UnsavedChangesModal({
@@ -1309,6 +1331,30 @@ export function ContactDetailPage() {
   const contact = contacts.find((c) => c.id === id);
   const company = contact ? companies.find((c) => c.id === contact.companyId) : null;
 
+  // Build list of company addresses for office location selector
+  const companyAddressOptions = useMemo(() => {
+    if (!company) return [];
+    const options: { id: string; label: string; location: string }[] = [];
+    
+    // Main office
+    if (company.address?.city || company.address?.state) {
+      const location = [company.address.city, company.address.state].filter(Boolean).join(', ');
+      options.push({ id: 'main-office', label: 'Main Office', location });
+    }
+    
+    // Additional addresses
+    if (company.addresses) {
+      company.addresses.forEach((addr) => {
+        if (addr.city || addr.state) {
+          const location = [addr.city, addr.state].filter(Boolean).join(', ');
+          options.push({ id: addr.id, label: addr.label, location });
+        }
+      });
+    }
+    
+    return options;
+  }, [company]);
+
   // Persist fieldsNeedingReview in localStorage so it survives navigation
   const reviewStorageKey = `contact-fields-review-${id}`;
   const [fieldsNeedingReview, setFieldsNeedingReviewState] = useState<Set<string>>(() => {
@@ -1731,6 +1777,41 @@ export function ContactDetailPage() {
               )}
             </div>
           </div>
+
+          {/* Office Location - Only show if company has multiple addresses */}
+          {company && companyAddressOptions.length > 1 && (
+            <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
+              <SectionHeader
+                title="Office Location"
+                icon={<MapPin className="w-4 h-4 text-slate-500" />}
+              />
+              <div className="p-4 bg-white dark:bg-slate-900">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                    Assigned Office
+                  </label>
+                  <select
+                    value={contact.officeAddressId || ''}
+                    onChange={(e) => {
+                      updateContact(contact.id, { officeAddressId: e.target.value || undefined });
+                      toast.success('Updated', 'Office location saved');
+                    }}
+                    className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  >
+                    <option value="">All locations (not assigned)</option>
+                    {companyAddressOptions.map((addr) => (
+                      <option key={addr.id} value={addr.id}>
+                        {addr.label} - {addr.location}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Select which office this contact is located at
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Contact Information - Collapsible */}
           <CollapsibleSection

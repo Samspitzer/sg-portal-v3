@@ -13,6 +13,10 @@ export {
   type ContactRole, 
   type AdditionalContact,
   type ContactMethodType,
+  type CompanyAddress,
   CONTACT_ROLES,
   CONTACT_METHOD_TYPES,
+  isDuplicateAddress,
+  getCompanySalesRepIds,
+  isCompanyAssignedToRep,
 } from './clientsStore';

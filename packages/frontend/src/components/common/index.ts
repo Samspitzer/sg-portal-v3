@@ -1,5 +1,7 @@
 export { Button } from './Button';
 export { Input } from './Input';
+export { Select, type SelectOption } from './Select';
+export { Textarea } from './Textarea';
 export { Card, CardHeader, CardContent, CardFooter } from './Card';
 export { Modal, ConfirmModal } from './Modal';
 export { ToastContainer } from './Toast';
@@ -13,3 +15,5 @@ export { DataTable, type DataTableColumn, type DataTableProps } from './DataTabl
 export { SelectFilter, type SelectFilterOption, type SelectFilterProps } from './SelectFilter';
 export { AddressInput } from './AddressInput';
 export { UnsavedChangesModal } from './UnsavedChangesModal';
+export { Toggle, type ToggleProps } from './Toggle';
+export { MultiSelectUsers } from './MultiSelectUsers';
