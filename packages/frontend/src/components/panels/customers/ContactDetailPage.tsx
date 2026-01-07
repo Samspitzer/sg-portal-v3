@@ -25,9 +25,9 @@ import {
   MapPin,
 } from 'lucide-react';
 import { Page } from '@/components/layout';
-import { Card, CardContent, Button, ConfirmModal, Modal, Input } from '@/components/common';
+import { Card, CardContent, Button, ConfirmModal, Modal, Input, UnsavedChangesModal } from '@/components/common';
 import { CollapsibleSection } from '@/components/common/CollapsibleSection';
-import { useClientsStore, useUsersStore, useToast, useNavigationGuardStore, CONTACT_ROLES, type Contact, } from '@/contexts';
+import { useClientsStore, useUsersStore, useToast, useNavigationGuardStore, CONTACT_ROLES, type Contact } from '@/contexts';
 import { useDropdownKeyboard } from '@/hooks';
 
 // Non-collapsible Section Header (matches CollapsibleSection style)
@@ -47,102 +47,6 @@ function SectionHeader({
         <span className="text-sm font-semibold text-slate-900 dark:text-white">{title}</span>
       </div>
       {action}
-    </div>
-  );
-}
-
-// Unsaved Changes Modal with Save option and focus trapping
-function UnsavedChangesModal({
-  isOpen,
-  onSave,
-  onDiscard,
-  onCancel,
-}: {
-  isOpen: boolean;
-  onSave: () => void;
-  onDiscard: () => void;
-  onCancel: () => void;
-}) {
-  const discardRef = useRef<HTMLButtonElement>(null);
-  const keepEditingRef = useRef<HTMLButtonElement>(null);
-  const saveRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (isOpen && keepEditingRef.current) {
-      keepEditingRef.current.focus();
-    }
-  }, [isOpen]);
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      e.stopPropagation();
-      onCancel();
-    } else if (e.key === 'Tab') {
-      e.preventDefault();
-      e.stopPropagation();
-      if (document.activeElement === discardRef.current) {
-        keepEditingRef.current?.focus();
-      } else if (document.activeElement === keepEditingRef.current) {
-        saveRef.current?.focus();
-      } else {
-        discardRef.current?.focus();
-      }
-    } else if (e.key === 'Enter') {
-      e.preventDefault();
-      e.stopPropagation();
-      if (document.activeElement === discardRef.current) {
-        onDiscard();
-      } else if (document.activeElement === keepEditingRef.current) {
-        onCancel();
-      } else if (document.activeElement === saveRef.current) {
-        onSave();
-      }
-    }
-  };
-
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" onKeyDown={handleKeyDown}>
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onCancel} />
-      <div
-        className="relative z-10 bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 max-w-md w-full p-6"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
-            <FileText className="w-5 h-5 text-amber-600 dark:text-amber-400" />
-          </div>
-          <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Unsaved Changes</h3>
-        </div>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
-          You have unsaved changes. What would you like to do?
-        </p>
-        <div className="flex justify-end gap-3">
-          <button
-            ref={discardRef}
-            onClick={onDiscard}
-            className="px-4 py-2 text-sm font-medium rounded-lg text-danger-600 hover:bg-danger-50 dark:hover:bg-danger-900/20 focus:outline-none focus:ring-2 focus:ring-danger-500 transition-colors"
-          >
-            Discard
-          </button>
-          <button
-            ref={keepEditingRef}
-            onClick={onCancel}
-            className="px-4 py-2 text-sm font-medium rounded-lg text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-500 transition-colors"
-          >
-            Keep Editing
-          </button>
-          <button
-            ref={saveRef}
-            onClick={onSave}
-            className="px-4 py-2 text-sm font-medium rounded-lg text-white bg-brand-500 hover:bg-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-500 transition-colors"
-          >
-            Save Changes
-          </button>
-        </div>
-      </div>
     </div>
   );
 }

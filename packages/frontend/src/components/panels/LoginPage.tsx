@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { clsx } from 'clsx';
 import { LogIn, Loader2, Shield } from 'lucide-react';
 import { useAuthStore, useToast } from '@/contexts';
+import { Button } from '@/components/common';
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -68,34 +68,18 @@ export function LoginPage() {
             </p>
           </div>
 
-          {/* Login Button */}
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
+          {/* Login Button - Using common Button component */}
+          <Button
+            variant="primary"
+            size="lg"
+            fullWidth
             onClick={handleLogin}
             disabled={isLoading}
-            className={clsx(
-              'w-full flex items-center justify-center gap-3',
-              'px-6 py-4 rounded-xl',
-              'bg-brand-600 hover:bg-brand-700',
-              'text-white font-semibold',
-              'transition-colors',
-              'disabled:opacity-50 disabled:cursor-not-allowed',
-              'shadow-lg'
-            )}
+            leftIcon={isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <LogIn className="w-5 h-5" />}
+            className="shadow-lg"
           >
-            {isLoading ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                Signing in...
-              </>
-            ) : (
-              <>
-                <LogIn className="w-5 h-5" />
-                Sign in as Admin
-              </>
-            )}
-          </motion.button>
+            {isLoading ? 'Signing in...' : 'Sign in as Admin'}
+          </Button>
 
           {/* Security note */}
           <div className="mt-6 flex items-center justify-center gap-2 text-xs text-slate-400 dark:text-slate-500">

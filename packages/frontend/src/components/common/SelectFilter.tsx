@@ -186,6 +186,13 @@ export function SelectFilter({
       if (highlighted) {
         handleSelect(highlighted.value);
       }
+    } else if (e.key === ' ' && dropdownKeyboard.highlightedIndex >= 0) {
+      // Space selects when an item is highlighted via arrow keys
+      e.preventDefault();
+      const highlighted = allOptions[dropdownKeyboard.highlightedIndex];
+      if (highlighted) {
+        handleSelect(highlighted.value);
+      }
     }
   };
 

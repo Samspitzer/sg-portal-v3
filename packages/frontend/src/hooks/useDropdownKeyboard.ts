@@ -71,6 +71,30 @@ export function useDropdownKeyboard<T>({
     setHighlightedIndex(-1);
   }, []);
 
+  // Helper function to select the highlighted item
+  const selectHighlightedItem = useCallback(() => {
+    if (highlightedIndex >= 0) {
+      // If hasAddOption, index 0 is the "add" option, so items start at index 1
+      if (hasAddOption) {
+        if (highlightedIndex === 0) {
+          // The "add new" option is selected - handled by calling code via index -1
+          onSelect(null as T, -1);
+        } else {
+          const itemIndex = highlightedIndex - 1;
+          const item = items[itemIndex];
+          if (item !== undefined) {
+            onSelect(item, itemIndex);
+          }
+        }
+      } else {
+        const item = items[highlightedIndex];
+        if (item !== undefined) {
+          onSelect(item, highlightedIndex);
+        }
+      }
+    }
+  }, [highlightedIndex, hasAddOption, items, onSelect]);
+
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (!isOpen) return;
@@ -102,28 +126,10 @@ export function useDropdownKeyboard<T>({
           break;
 
         case 'Enter':
+        case ' ': // Space key also selects
           e.preventDefault();
           e.stopPropagation();
-          if (highlightedIndex >= 0) {
-            // If hasAddOption, index 0 is the "add" option, so items start at index 1
-            if (hasAddOption) {
-              if (highlightedIndex === 0) {
-                // The "add new" option is selected - handled by calling code via index -1
-                onSelect(null as T, -1);
-              } else {
-                const itemIndex = highlightedIndex - 1;
-                const item = items[itemIndex];
-                if (item !== undefined) {
-                  onSelect(item, itemIndex);
-                }
-              }
-            } else {
-              const item = items[highlightedIndex];
-              if (item !== undefined) {
-                onSelect(item, highlightedIndex);
-              }
-            }
-          }
+          selectHighlightedItem();
           break;
 
         case 'Escape':
@@ -140,7 +146,7 @@ export function useDropdownKeyboard<T>({
           break;
       }
     },
-    [isOpen, totalCount, highlightedIndex, items, onSelect, onClose, loop, hasAddOption]
+    [isOpen, totalCount, loop, selectHighlightedItem, onClose]
   );
 
   return {

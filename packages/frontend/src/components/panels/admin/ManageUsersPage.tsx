@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { clsx } from 'clsx';
 import {
   Plus,
@@ -10,14 +10,16 @@ import {
   Shield,
   UserCheck,
   Trash2,
+  MapPin,
 } from 'lucide-react';
 import { Page } from '@/components/layout';
 import { CardContent, Button, Input, Modal, SearchInput, Select, Toggle } from '@/components/common';
 import { DataTable, type DataTableColumn } from '@/components/common/DataTable';
 import { SelectFilter } from '@/components/common/SelectFilter';
 import { UserDeactivationModal } from '@/components/common/UserDeactivationModal';
-import { useToast, useDepartmentsStore, useUsersStore, type User } from '@/contexts';
+import { useToast, useDepartmentsStore, useUsersStore, useCompanyStore, type User } from '@/contexts';
 import { useFormChanges } from '@/hooks';
+import { validateEmail, validatePhone } from '@/utils/validation';
 
 interface UserFormData {
   name: string;
@@ -25,6 +27,7 @@ interface UserFormData {
   phone: string;
   departmentId: string;
   positionId: string;
+  officeId: string;
   isActive: boolean;
 }
 
@@ -34,6 +37,7 @@ const initialFormData: UserFormData = {
   phone: '',
   departmentId: '',
   positionId: '',
+  officeId: '',
   isActive: true,
 };
 
@@ -58,6 +62,11 @@ function UserModal({
 }) {
   const toast = useToast();
   const { departments } = useDepartmentsStore();
+  const { company } = useCompanyStore();
+
+  // Get offices - only show selector if 2+ offices
+  const offices = company.offices || [];
+  const showOfficeSelector = offices.length >= 2;
 
   const getInitialData = (): UserFormData => {
     if (user) {
@@ -67,6 +76,7 @@ function UserModal({
         phone: user.phone,
         departmentId: user.departmentId,
         positionId: user.positionId,
+        officeId: user.officeId || '',
         isActive: user.isActive,
       };
     }
@@ -91,28 +101,50 @@ function UserModal({
     [availablePositions]
   );
 
-  // Reset form when user changes or modal opens
-  useState(() => {
+  // Office options for Select
+  const officeOptions = useMemo(() => 
+    offices.map((office) => ({ 
+      value: office.id, 
+      label: office.isMain ? `${office.label} (Main)` : office.label 
+    })),
+    [offices]
+  );
+
+  // Reset form when modal opens or user changes
+  useEffect(() => {
     if (isOpen) {
       initializeForm(getInitialData());
     }
-  });
+  }, [isOpen, user?.id]); // Re-initialize when modal opens or different user is selected
 
   // Reset position when department changes (if position not in new department)
-  useState(() => {
+  useEffect(() => {
     if (formData.departmentId && formData.positionId) {
       const positionExists = availablePositions.some(p => p.id === formData.positionId);
       if (!positionExists) {
         setFormData({ ...formData, positionId: '' });
       }
     }
-  });
+  }, [formData.departmentId]); // Only run when department changes
+
+  // Validation checks
+  const hasEmailError = formData.email !== '' && !validateEmail(formData.email);
+  const hasPhoneError = formData.phone !== '' && !validatePhone(formData.phone);
+  const hasValidationErrors = hasEmailError || hasPhoneError;
 
   const handleSubmit = async () => {
+    // Check required fields
     if (!formData.name || !formData.email) {
       toast.error('Error', 'Name and email are required');
       return;
     }
+
+    // Check validation errors
+    if (hasValidationErrors) {
+      toast.error('Validation Error', 'Please fix the errors before saving');
+      return;
+    }
+
     onSave(formData);
   };
 
@@ -155,7 +187,7 @@ function UserModal({
               type="button"
               variant="primary"
               onClick={handleSubmit}
-              disabled={isLoading || !formData.name || !formData.email}
+              disabled={isLoading || !formData.name || !formData.email || hasValidationErrors}
             >
               {isLoading ? (
                 <>
@@ -241,6 +273,27 @@ function UserModal({
           </div>
         </div>
 
+        {/* Office Location - Only show if 2+ offices */}
+        {showOfficeSelector && (
+          <div>
+            <h3 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-4">
+              Office Location
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Select
+                label="Office"
+                value={formData.officeId}
+                onChange={(e) => setFormData({ ...formData, officeId: e.target.value })}
+                options={officeOptions}
+                placeholder="Select Office"
+              />
+            </div>
+            <p className="text-xs text-slate-400 mt-2">
+              Select which office location this user works from.
+            </p>
+          </div>
+        )}
+
         {/* Status */}
         <div>
           <h3 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-4">
@@ -285,6 +338,7 @@ export function ManageUsersPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('');
+  const [officeFilter, setOfficeFilter] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -297,6 +351,11 @@ export function ManageUsersPage() {
   // Use the shared stores
   const { users, addUser, updateUser, deleteUser, toggleUserActive } = useUsersStore();
   const { departments } = useDepartmentsStore();
+  const { company } = useCompanyStore();
+
+  // Get offices - only show filter/column if 2+ offices
+  const offices = company.offices || [];
+  const showOfficeColumn = offices.length >= 2;
 
   const getDepartmentName = (departmentId: string) => {
     const dept = departments.find(d => d.id === departmentId);
@@ -307,6 +366,12 @@ export function ManageUsersPage() {
     const dept = departments.find(d => d.id === departmentId);
     const pos = dept?.positions.find(p => p.id === positionId);
     return pos?.name || '—';
+  };
+
+  const getOfficeName = (officeId?: string) => {
+    if (!officeId) return '—';
+    const office = offices.find(o => o.id === officeId);
+    return office?.label || '—';
   };
 
   // Status filter options
@@ -333,6 +398,24 @@ export function ManageUsersPage() {
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [departments, users]);
 
+  // Office filter options (only if 2+ offices)
+  const officeFilterOptions = useMemo(() => {
+    if (!showOfficeColumn) return [];
+    const officeCounts = new Map<string, number>();
+    users.forEach((user) => {
+      if (user.officeId) {
+        officeCounts.set(user.officeId, (officeCounts.get(user.officeId) || 0) + 1);
+      }
+    });
+    return offices
+      .map((office) => ({
+        value: office.id,
+        label: office.isMain ? `${office.label} (Main)` : office.label,
+        count: officeCounts.get(office.id) || 0,
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [offices, users, showOfficeColumn]);
+
   // Filter and sort users
   const filteredAndSortedUsers = useMemo(() => {
     let result = users.filter((user) => {
@@ -342,7 +425,8 @@ export function ManageUsersPage() {
         (statusFilter === 'active' && user.isActive) ||
         (statusFilter === 'inactive' && !user.isActive);
       const matchesDepartment = !departmentFilter || user.departmentId === departmentFilter;
-      return matchesSearch && matchesStatus && matchesDepartment;
+      const matchesOffice = !officeFilter || user.officeId === officeFilter;
+      return matchesSearch && matchesStatus && matchesDepartment && matchesOffice;
     });
 
     result = [...result].sort((a, b) => {
@@ -446,9 +530,10 @@ export function ManageUsersPage() {
     setSearch('');
     setStatusFilter('');
     setDepartmentFilter('');
+    setOfficeFilter('');
   };
 
-  const hasActiveFilters = search || statusFilter || departmentFilter;
+  const hasActiveFilters = search || statusFilter || departmentFilter || officeFilter;
 
   // Table columns
   const columns: DataTableColumn<User>[] = [
@@ -504,6 +589,18 @@ export function ManageUsersPage() {
       ),
       hideOnMobile: true,
     },
+    // Office column - only shown if 2+ offices
+    ...(showOfficeColumn ? [{
+      key: 'office',
+      header: 'Office',
+      render: (user: User) => (
+        <span className="text-slate-600 dark:text-slate-400 flex items-center gap-1">
+          <MapPin className="w-3 h-3" />
+          {getOfficeName(user.officeId)}
+        </span>
+      ),
+      hideOnMobile: true,
+    }] : []),
     {
       key: 'department',
       header: 'Department',
@@ -586,6 +683,15 @@ export function ManageUsersPage() {
                 options={departmentOptions}
                 onChange={setDepartmentFilter}
                 icon={<Users className="w-4 h-4" />}
+              />
+            )}
+            {showOfficeColumn && officeFilterOptions.length > 0 && (
+              <SelectFilter
+                label="Office"
+                value={officeFilter}
+                options={officeFilterOptions}
+                onChange={setOfficeFilter}
+                icon={<MapPin className="w-4 h-4" />}
               />
             )}
             {hasActiveFilters && (

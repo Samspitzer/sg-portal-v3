@@ -523,12 +523,14 @@ export function CompaniesPage() {
           <div className="grid grid-cols-2 gap-4">
             <Input
               label="Phone"
+              type="tel"
               value={formData.phone}
               onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
               placeholder="(555) 123-4567"
             />
             <Input
               label="Website"
+              type="url"
               value={formData.website}
               onChange={(e) => setFormData({ ...formData, website: e.target.value })}
               placeholder="https://example.com"

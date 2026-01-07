@@ -3,11 +3,11 @@
 // Location: src/components/common/MultiSelectUsers.tsx
 // ============================================================================
 
-import { useState, useRef, useEffect } from 'react';
-import { createPortal } from 'react-dom';
-import { Check, ChevronDown, X, Users, User } from 'lucide-react';
+import { useState, useRef, useEffect, useMemo } from 'react';
+import { Check, ChevronDown, X, Users, User, Search } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useUsersStore } from '@/contexts';
+import { useDropdownKeyboard } from '@/hooks';
 
 interface MultiSelectUsersProps {
   /** Currently selected user IDs */
@@ -26,6 +26,8 @@ interface MultiSelectUsersProps {
   className?: string;
   /** Size variant */
   size?: 'sm' | 'md';
+  /** Minimum users to show search (default: 5) */
+  searchThreshold?: number;
 }
 
 export function MultiSelectUsers({
@@ -37,56 +39,74 @@ export function MultiSelectUsers({
   disabled = false,
   className = '',
   size = 'md',
+  searchThreshold = 5,
 }: MultiSelectUsersProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 });
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const containerRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const { users } = useUsersStore();
   const availableUsers = activeOnly ? users.filter((u) => u.isActive) : users;
   const selectedUsers = users.filter((u) => value.includes(u.id));
 
-  // Update dropdown position when opening
-  useEffect(() => {
-    if (isOpen && triggerRef.current) {
-      const rect = triggerRef.current.getBoundingClientRect();
-      setDropdownPosition({
-        top: rect.bottom + window.scrollY + 4,
-        left: rect.left + window.scrollX,
-        width: rect.width,
-      });
-    }
-  }, [isOpen]);
+  // Show search if enough users
+  const showSearch = availableUsers.length > searchThreshold;
 
-  // Handle clicking outside to close
-  useEffect(() => {
-    if (!isOpen) return;
+  // Filter users based on search
+  const filteredUsers = useMemo(() => {
+    if (!searchQuery.trim()) return availableUsers;
+    const query = searchQuery.toLowerCase();
+    return availableUsers.filter((u) => u.name.toLowerCase().includes(query));
+  }, [availableUsers, searchQuery]);
 
+  // Keyboard navigation using standard hook
+  const dropdownKeyboard = useDropdownKeyboard({
+    items: filteredUsers,
+    isOpen,
+    onSelect: (user) => {
+      if (user) {
+        toggleUser(user.id);
+      }
+    },
+    onClose: () => {
+      setIsOpen(false);
+      setSearchQuery('');
+      buttonRef.current?.focus();
+    },
+  });
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (
-        triggerRef.current &&
-        !triggerRef.current.contains(e.target as Node) &&
-        dropdownRef.current &&
-        !dropdownRef.current.contains(e.target as Node)
-      ) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setIsOpen(false);
+        setSearchQuery('');
       }
     };
-
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Reset highlight and focus search when dropdown opens
+  useEffect(() => {
+    if (isOpen) {
+      dropdownKeyboard.setHighlightedIndex(0);
+      if (showSearch) {
+        setTimeout(() => {
+          searchInputRef.current?.focus();
+        }, 0);
+      }
+    }
   }, [isOpen]);
 
-  // Handle keyboard navigation
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      setIsOpen(false);
-    } else if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      setIsOpen(!isOpen);
+  // Update highlight when search changes
+  useEffect(() => {
+    if (isOpen && searchQuery) {
+      dropdownKeyboard.setHighlightedIndex(0);
     }
-  };
+  }, [searchQuery]);
 
   const toggleUser = (userId: string) => {
     if (value.includes(userId)) {
@@ -101,12 +121,50 @@ export function MultiSelectUsers({
     onChange([]);
   };
 
+  const handleButtonKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (!isOpen) {
+        setIsOpen(true);
+      } else {
+        dropdownKeyboard.handleKeyDown(e);
+      }
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      if (isOpen) {
+        setIsOpen(false);
+        setSearchQuery('');
+      }
+    } else if (isOpen) {
+      dropdownKeyboard.handleKeyDown(e);
+    }
+  };
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      if (searchQuery) {
+        setSearchQuery('');
+      } else {
+        setIsOpen(false);
+        buttonRef.current?.focus();
+      }
+    } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter') {
+      dropdownKeyboard.handleKeyDown(e);
+    } else if (e.key === ' ' && dropdownKeyboard.highlightedIndex >= 0) {
+      // Space selects when an item is highlighted via arrow keys
+      e.preventDefault();
+      dropdownKeyboard.handleKeyDown(e);
+    }
+  };
+
   const sizeClasses = size === 'sm' 
     ? 'px-2 py-1 text-xs'
     : 'px-3 py-2 text-sm';
 
   return (
-    <div className={className}>
+    <div ref={containerRef} className={clsx('relative', className)}>
       {label && (
         <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
           {label}
@@ -115,10 +173,10 @@ export function MultiSelectUsers({
 
       {/* Trigger Button */}
       <button
-        ref={triggerRef}
+        ref={buttonRef}
         type="button"
         onClick={() => !disabled && setIsOpen(!isOpen)}
-        onKeyDown={handleKeyDown}
+        onKeyDown={handleButtonKeyDown}
         disabled={disabled}
         className={clsx(
           'w-full flex items-center justify-between gap-2 rounded-lg border transition-colors',
@@ -187,79 +245,93 @@ export function MultiSelectUsers({
         </div>
       )}
 
-      {/* Dropdown Portal */}
-      {isOpen &&
-        createPortal(
-          <>
-            {/* Backdrop */}
-            <div
-              className="fixed inset-0 z-[9998]"
-              onMouseDown={() => setIsOpen(false)}
-            />
-            {/* Dropdown */}
-            <div
-              ref={dropdownRef}
-              style={{
-                position: 'fixed',
-                top: dropdownPosition.top,
-                left: dropdownPosition.left,
-                width: Math.max(dropdownPosition.width, 200),
-              }}
-              className="z-[9999] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl max-h-60 overflow-y-auto"
-              onMouseDown={(e) => e.stopPropagation()}
-            >
-              {availableUsers.length === 0 ? (
-                <div className="px-4 py-3 text-sm text-slate-500 dark:text-slate-400">
-                  No users available
-                </div>
-              ) : (
-                availableUsers.map((user) => {
-                  const isSelected = value.includes(user.id);
-                  return (
-                    <button
-                      key={user.id}
-                      type="button"
-                      onClick={() => toggleUser(user.id)}
+      {/* Dropdown */}
+      {isOpen && (
+        <div className="absolute z-50 mt-1 w-full min-w-[200px] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg overflow-hidden">
+          {/* Search Input */}
+          {showSearch && (
+            <div className="p-2 border-b border-slate-200 dark:border-slate-700">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={handleSearchKeyDown}
+                  placeholder="Search users..."
+                  className="w-full pl-8 pr-3 py-1.5 text-sm bg-slate-100 dark:bg-slate-700 border-0 rounded-md text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Options List */}
+          <div className="max-h-60 overflow-y-auto">
+            {filteredUsers.length === 0 ? (
+              <div className="px-4 py-3 text-sm text-slate-500 dark:text-slate-400">
+                {searchQuery ? 'No matches found' : 'No users available'}
+              </div>
+            ) : (
+              filteredUsers.map((user, index) => {
+                const isSelected = value.includes(user.id);
+                const isHighlighted = index === dropdownKeyboard.highlightedIndex;
+                return (
+                  <button
+                    key={user.id}
+                    type="button"
+                    onClick={() => toggleUser(user.id)}
+                    className={clsx(
+                      'w-full flex items-center gap-3 px-4 py-2 text-left text-sm transition-colors',
+                      isHighlighted
+                        ? 'bg-brand-50 dark:bg-brand-900/30'
+                        : isSelected
+                        ? 'bg-slate-50 dark:bg-slate-700/50'
+                        : 'hover:bg-slate-100 dark:hover:bg-slate-700'
+                    )}
+                  >
+                    {/* Checkbox */}
+                    <div
                       className={clsx(
-                        'w-full flex items-center gap-3 px-4 py-2 text-left text-sm transition-colors',
-                        'hover:bg-slate-100 dark:hover:bg-slate-700',
-                        isSelected && 'bg-brand-50 dark:bg-brand-900/20'
+                        'w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition-colors',
+                        isSelected
+                          ? 'bg-brand-500 border-brand-500 text-white'
+                          : 'border-slate-300 dark:border-slate-600'
                       )}
                     >
-                      {/* Checkbox */}
-                      <div
+                      {isSelected && <Check className="w-3 h-3" />}
+                    </div>
+
+                    {/* User info */}
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <User className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                      <span
                         className={clsx(
-                          'w-4 h-4 rounded border flex items-center justify-center flex-shrink-0',
+                          'truncate',
                           isSelected
-                            ? 'bg-brand-500 border-brand-500 text-white'
-                            : 'border-slate-300 dark:border-slate-600'
+                            ? 'text-brand-700 dark:text-brand-300 font-medium'
+                            : 'text-slate-700 dark:text-slate-300'
                         )}
                       >
-                        {isSelected && <Check className="w-3 h-3" />}
-                      </div>
-
-                      {/* User info */}
-                      <div className="flex items-center gap-2 flex-1 min-w-0">
-                        <User className="w-4 h-4 text-slate-400 flex-shrink-0" />
-                        <span
-                          className={clsx(
-                            'truncate',
-                            isSelected
-                              ? 'text-brand-700 dark:text-brand-300 font-medium'
-                              : 'text-slate-700 dark:text-slate-300'
-                          )}
-                        >
-                          {user.name}
-                        </span>
-                      </div>
-                    </button>
-                  );
-                })
-              )}
-            </div>
-          </>,
-          document.body
-        )}
+                        {user.name}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

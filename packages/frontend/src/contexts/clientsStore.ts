@@ -35,7 +35,8 @@ export interface CompanyAddress {
   city: string;
   state: string;
   zip: string;
-  salesRepId?: string;  // Optional sales rep for this specific location
+  salesRepId?: string;  // Legacy single sales rep for this location
+  salesRepIds?: string[];  // Multiple sales reps for this location
 }
 
 export interface Company {
@@ -50,16 +51,18 @@ export interface Company {
     city: string;
     state: string;
     zip: string;
-    salesRepId?: string;  // Sales rep for main office location
+    salesRepId?: string;  // Legacy single sales rep for main office
+    salesRepIds?: string[];  // Multiple sales reps for main office
   };
   // New: Multiple addresses support
   addresses?: CompanyAddress[];
   notes?: string;
   // Multiple sales reps at company level (shared account)
-  // If empty, sales reps are set per-location instead
   salesRepIds?: string[];
   // Legacy single sales rep (for backward compatibility - will migrate to salesRepIds)
   salesRepId?: string;
+  // Explicit flag: when true, sales reps are assigned per-location instead of company-level
+  salesRepsByLocation?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -79,15 +82,23 @@ export function getCompanySalesRepIds(company: Company): string[] {
   // Otherwise, collect from locations
   const locationReps: string[] = [];
   
-  // Main office
-  if (company.address?.salesRepId) {
+  // Main office - check both salesRepIds and legacy salesRepId
+  if (company.address?.salesRepIds && company.address.salesRepIds.length > 0) {
+    locationReps.push(...company.address.salesRepIds);
+  } else if (company.address?.salesRepId) {
     locationReps.push(company.address.salesRepId);
   }
   
-  // Additional addresses
+  // Additional addresses - check both salesRepIds and legacy salesRepId
   if (company.addresses) {
     for (const addr of company.addresses) {
-      if (addr.salesRepId && !locationReps.includes(addr.salesRepId)) {
+      if (addr.salesRepIds && addr.salesRepIds.length > 0) {
+        for (const repId of addr.salesRepIds) {
+          if (!locationReps.includes(repId)) {
+            locationReps.push(repId);
+          }
+        }
+      } else if (addr.salesRepId && !locationReps.includes(addr.salesRepId)) {
         locationReps.push(addr.salesRepId);
       }
     }

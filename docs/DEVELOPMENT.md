@@ -6,13 +6,16 @@
 
 ## Table of Contents
 
-1. [Common Components](#common-components)
-2. [Custom Hooks](#custom-hooks)
-3. [Layout Components](#layout-components)
-4. [Established Patterns](#established-patterns)
-5. [Keyboard Navigation Standards](#keyboard-navigation-standards)
-6. [File Structure](#file-structure)
-7. [Adding New Features Checklist](#adding-new-features-checklist)
+1. [Locked Files - DO NOT MODIFY](#-locked-files---do-not-modify)
+2. [Common Components](#common-components)
+3. [Custom Hooks](#custom-hooks)
+4. [Utils](#utils)
+5. [Stores/Contexts](#storescontexts)
+6. [Layout Components](#layout-components)
+7. [Established Patterns](#established-patterns)
+8. [Keyboard Navigation Standards](#keyboard-navigation-standards)
+9. [File Structure](#file-structure)
+10. [Adding New Features Checklist](#adding-new-features-checklist)
 
 ---
 
@@ -25,6 +28,33 @@
 3. **ALWAYS use existing common components** - Don't recreate buttons, inputs, modals, etc.
 4. **ALWAYS follow keyboard navigation standards** - Arrow keys, Enter, Escape must work consistently
 5. **ALWAYS register user dependencies** - When creating stores with user assignments, register with `userDependencyRegistry`
+
+---
+
+## 🔒 LOCKED FILES - DO NOT MODIFY
+
+> **Locked as of:** January 7, 2026
+> **Unlock phase:** Production Phase 2
+
+The following files have been tested, audited, and approved. **DO NOT modify these files** until we move to the next production phase:
+
+### Pages
+| File | Location | Status |
+|------|----------|--------|
+| `ManageUsersPage.tsx` | `src/pages/admin/` | 🔒 LOCKED |
+| `CompanySettingsPage.tsx` | `src/pages/admin/` | 🔒 LOCKED |
+
+### Stores
+| File | Location | Status |
+|------|----------|--------|
+| `companyStore.ts` | `src/contexts/` | 🔒 LOCKED |
+| `usersStore.ts` | `src/contexts/` | 🔒 LOCKED |
+
+**If changes are absolutely necessary:**
+1. Discuss with project lead first
+2. Document the reason for the change
+3. Ensure all existing functionality remains intact
+4. Update this document after approval
 
 ---
 
@@ -615,17 +645,31 @@ import { ConfirmModal } from '@/components/common';
 **Props:**
 - `title`: string
 - `icon`: ReactNode (optional)
-- `defaultOpen`: boolean (default: true)
+- `defaultOpen`: boolean (default: false) - **Note: Sections default to COLLAPSED**
+- `badge`: string | number (optional) - Shows a badge next to title
+- `action`: ReactNode (optional) - Action button in header
 - `children`: ReactNode
+
+**Important:** Use `defaultOpen={false}` for secondary content sections to reduce visual clutter.
 
 **Usage:**
 ```tsx
 import { CollapsibleSection } from '@/components/common';
 
+// Primary content - expanded by default
 <CollapsibleSection
   title="Contact Information"
   icon={<Phone className="w-4 h-4 text-slate-500" />}
   defaultOpen={true}
+>
+  {/* Content */}
+</CollapsibleSection>
+
+// Secondary content - collapsed by default
+<CollapsibleSection
+  title="Notes"
+  icon={<FileText className="w-4 h-4 text-slate-500" />}
+  defaultOpen={false}
 >
   {/* Content */}
 </CollapsibleSection>
@@ -636,7 +680,20 @@ import { CollapsibleSection } from '@/components/common';
 ### Toast / ToastContainer
 **File:** `Toast.tsx`
 
-**Purpose:** Toast notifications system.
+**Purpose:** Toast notifications system with auto-dismiss and progress bar.
+
+**Toast Types:**
+- `success` - Green, for successful operations
+- `error` - Red, for errors (longer duration: 8s)
+- `warning` - Amber, for warnings
+- `info` - Blue, for informational messages
+
+**Features:**
+- Auto-dismiss with configurable duration (default: 5s, errors: 8s)
+- Progress bar showing time remaining
+- Dismissible with X button
+- Stacks multiple toasts
+- Framer Motion animations
 
 **Usage:**
 ```tsx
@@ -652,6 +709,10 @@ toast.success('Created', 'Contact has been added');
 toast.error('Error', 'Something went wrong');
 toast.warning('Warning', 'Please check your input');
 toast.info('Info', 'FYI message');
+
+// Dismiss programmatically
+const id = toast.success('Saved', 'Changes saved');
+toast.dismiss(id);
 ```
 
 ---
@@ -702,41 +763,140 @@ import { PageNavigationGuard } from '@/components/common';
 
 ---
 
-## Utilities
+### MultiSelectUsers
+**File:** `MultiSelectUsers.tsx`
+
+**Purpose:** Checklist-style multi-user selection dropdown with pills display.
+
+**Props:**
+- `label`: string (optional)
+- `selectedUserIds`: string[]
+- `onChange`: (userIds: string[]) => void
+- `users`: User[] - List of available users
+- `placeholder`: string (optional)
+- `disabled`: boolean (optional)
+
+**Features:**
+- Dropdown with checkboxes for each user
+- Shows selected count or names as pills
+- Portal-based positioning (works in modals)
+- Search/filter users (when many users)
+
+**Usage:**
+```tsx
+import { MultiSelectUsers } from '@/components/common';
+
+<MultiSelectUsers
+  label="Sales Reps"
+  selectedUserIds={company.salesRepIds || []}
+  onChange={(ids) => updateCompany({ salesRepIds: ids })}
+  users={activeUsers}
+  placeholder="Select sales reps..."
+/>
+```
+
+---
+
+## Utils
 
 Location: `src/utils/`
 
 ### validation.ts
 **File:** `validation.ts`
 
-**Purpose:** Validation and formatting utilities for common field types.
+**Purpose:** Comprehensive validation and formatting utilities for common field types.
 
-**Functions:**
-
+#### Phone Utilities
 ```tsx
 import { 
-  validateEmail, 
-  validatePhone, 
-  validateWebsite,
-  formatPhoneNumber 
+  formatPhoneNumber,
+  validatePhone,
+  getPhoneError,
+  getPhoneDigits
 } from '@/utils/validation';
 
-// Email validation
-validateEmail('test@example.com');  // true
-validateEmail('invalid');           // false
+// Format phone as (XXX) XXX-XXXX with optional extension
+formatPhoneNumber('5551234567');       // '(555) 123-4567'
+formatPhoneNumber('5551234567#123');   // '(555) 123-4567 #123'
 
-// Phone validation (10 digits required)
-validatePhone('(555) 123-4567');    // true
-validatePhone('555-1234');          // false (only 7 digits)
+// Validate 10-digit phone
+validatePhone('(555) 123-4567');       // true
+validatePhone('555-1234');             // false (only 7 digits)
+validatePhone('');                     // true (empty is allowed)
 
-// Website validation (must have TLD)
-validateWebsite('example.com');     // true
-validateWebsite('https://test.org'); // true
-validateWebsite('test');            // false (no TLD)
+// Get error message
+getPhoneError('555-1234');             // 'Invalid phone number'
+getPhoneError('(555) 123-4567');       // null
 
-// Phone formatting
-formatPhoneNumber('5551234567');    // '(555) 123-4567'
-formatPhoneNumber('5551234567x123'); // '(555) 123-4567 #123'
+// Extract raw digits
+getPhoneDigits('(555) 123-4567 #123'); // '5551234567#123'
+```
+
+#### Email Utilities
+```tsx
+import { 
+  validateEmail,
+  getEmailError,
+  normalizeEmail
+} from '@/utils/validation';
+
+validateEmail('test@example.com');     // true
+validateEmail('invalid');              // false
+validateEmail('');                     // true (empty is allowed)
+
+getEmailError('invalid');              // 'Invalid email address'
+
+normalizeEmail('  Test@Example.COM '); // 'test@example.com'
+```
+
+#### Website/URL Utilities
+```tsx
+import { 
+  validateWebsite,
+  getWebsiteError,
+  formatWebsite,
+  getDisplayWebsite
+} from '@/utils/validation';
+
+validateWebsite('example.com');        // true
+validateWebsite('https://test.org');   // true
+validateWebsite('test');               // false (no TLD)
+
+formatWebsite('example.com');          // 'https://example.com'
+formatWebsite('http://example.com');   // 'http://example.com'
+
+getDisplayWebsite('https://example.com'); // 'example.com'
+```
+
+#### Address Utilities
+```tsx
+import { 
+  formatAddress,
+  validateZip,
+  getZipError,
+  validateState,
+  US_STATES
+} from '@/utils/validation';
+
+// Format address as single line
+formatAddress({ 
+  street: '123 Main St', 
+  city: 'New York', 
+  state: 'NY', 
+  zip: '10001' 
+}); // '123 Main St, New York, NY 10001'
+
+// Validate ZIP (5 or 5+4 format)
+validateZip('10001');        // true
+validateZip('10001-1234');   // true
+validateZip('1000');         // false
+
+// Validate state abbreviation
+validateState('NY');         // true
+validateState('XX');         // false
+
+// US states dropdown options
+// US_STATES = [{ value: 'AL', label: 'Alabama' }, ...]
 ```
 
 ---
@@ -984,6 +1144,187 @@ When you create a new store with user assignments:
 1. Add the `registerUserDependency` call after store creation
 2. The `UserDeactivationModal` will automatically pick up the new module
 3. No other code changes needed!
+
+---
+
+## Stores/Contexts
+
+Location: `src/contexts/`
+
+### Store Overview
+
+| Store | Purpose | Persistence |
+|-------|---------|-------------|
+| `useAuthStore` | Authentication state, login/logout, current user | localStorage |
+| `useUsersStore` | Portal users (employees) CRUD | localStorage |
+| `useClientsStore` | Companies & Contacts CRUD | localStorage |
+| `useCompanyStore` | Company settings (name, logo, letterhead) | localStorage |
+| `useDepartmentsStore` | Departments & Positions | localStorage |
+| `useRolesStore` | Roles & Permissions | localStorage |
+| `useUIStore` | Theme, sidebar state, modals, command palette | localStorage (partial) |
+| `useToastStore` / `useToast` | Toast notifications | No |
+| `useNavigationGuardStore` | Navigation blocking for unsaved changes | No |
+
+### useAuthStore
+**File:** `authStore.ts`
+
+Current user authentication state.
+
+```tsx
+import { useAuthStore } from '@/contexts';
+
+const { user, isAuthenticated, login, logout } = useAuthStore();
+```
+
+### useUsersStore
+**File:** `usersStore.ts`
+
+Portal users (employees) management.
+
+```tsx
+import { useUsersStore } from '@/contexts';
+
+const { 
+  users, 
+  addUser, 
+  updateUser, 
+  deleteUser, 
+  toggleUserActive,
+  getActiveUsers 
+} = useUsersStore();
+```
+
+### useClientsStore
+**File:** `clientsStore.ts`
+
+Companies and Contacts data. **Registered with userDependencyRegistry.**
+
+```tsx
+import { useClientsStore } from '@/contexts';
+
+const { 
+  companies, 
+  contacts,
+  addCompany, 
+  updateCompany, 
+  deleteCompany,
+  addContact,
+  updateContact,
+  deleteContact,
+  getContactsByCompany,
+  // Address management
+  addCompanyAddress,
+  updateCompanyAddress,
+  deleteCompanyAddress,
+  // Contact method management
+  addContactMethod,
+  updateContactMethod,
+  deleteContactMethod
+} = useClientsStore();
+```
+
+### useCompanyStore
+**File:** `companyStore.ts`
+
+Your company settings (not client companies).
+
+```tsx
+import { useCompanyStore } from '@/contexts';
+
+const { company, setCompany, setLogo, setLetterhead } = useCompanyStore();
+// company = { name, website, email, phone, address, logo, letterhead }
+```
+
+### useDepartmentsStore
+**File:** `departmentsStore.ts`
+
+Departments and Positions hierarchy.
+
+```tsx
+import { useDepartmentsStore } from '@/contexts';
+
+const { 
+  departments,
+  addDepartment,
+  updateDepartment,
+  deleteDepartment,
+  addPosition,
+  updatePosition,
+  deletePosition,
+  getPositionsByDepartment
+} = useDepartmentsStore();
+```
+
+### useRolesStore
+**File:** `rolesStore.ts`
+
+Roles and Permissions management.
+
+```tsx
+import { useRolesStore } from '@/contexts';
+
+const { 
+  roles,
+  permissions,
+  addRole,
+  updateRole,
+  deleteRole,
+  setRolePermissions,
+  toggleRolePermission,
+  hasPermission
+} = useRolesStore();
+```
+
+### useToast
+**File:** `toastStore.ts`
+
+Toast notification convenience hook.
+
+```tsx
+import { useToast } from '@/contexts';
+
+const toast = useToast();
+toast.success('Saved', 'Changes have been saved');
+toast.error('Error', 'Something went wrong');
+toast.warning('Warning', 'Please check your input');
+toast.info('Info', 'FYI message');
+```
+
+### useNavigationGuardStore
+**File:** `navigationGuardStore.ts`
+
+Manages navigation blocking for unsaved changes.
+
+```tsx
+import { useNavigationGuardStore } from '@/contexts';
+
+const { 
+  hasUnsavedChanges,
+  isBlocked,
+  setGuard,
+  clearGuard,
+  requestNavigation
+} = useNavigationGuardStore();
+```
+
+### useUIStore
+**File:** `uiStore.ts`
+
+UI state management.
+
+```tsx
+import { useUIStore } from '@/contexts';
+
+const { 
+  theme, 
+  setTheme,
+  sidebarExpanded,
+  toggleSidebar,
+  activeModal,
+  openModal,
+  closeModal
+} = useUIStore();
+```
 
 ---
 
@@ -1364,20 +1705,23 @@ src/
 │   │   ├── DuplicateCompanyModal.tsx
 │   │   ├── DuplicateContactModal.tsx
 │   │   ├── Input.tsx          # With auto-validation for email/phone/url
-│   │   ├── Modal.tsx
+│   │   ├── Modal.tsx          # Includes ConfirmModal
+│   │   ├── MultiSelectUsers.tsx # Checklist-style multi-user select
 │   │   ├── PageNavigationGuard.tsx
 │   │   ├── SearchInput.tsx
 │   │   ├── Select.tsx         # Native select wrapper
 │   │   ├── SelectFilter.tsx   # Filter dropdown with search
 │   │   ├── Textarea.tsx       # Multi-line text input
-│   │   ├── Toast.tsx
+│   │   ├── Toast.tsx          # Toast notifications with progress
 │   │   ├── Toggle.tsx         # Toggle/switch component
 │   │   ├── UnsavedChangesModal.tsx
 │   │   └── UserDeactivationModal.tsx  # User deactivation with dependencies
 │   ├── layout/
 │   │   ├── index.ts
+│   │   ├── Header.tsx         # App header
 │   │   ├── Layout.tsx         # Contains Page component
 │   │   ├── PanelLayout.tsx    # Panel wrappers with SideRibbon
+│   │   ├── PanelDashboard.tsx # Reusable panel dashboard with tiles
 │   │   ├── PanelHeader.tsx
 │   │   ├── Sidebar.tsx
 │   │   └── SideRibbon.tsx
@@ -1388,7 +1732,10 @@ src/
 │       │   ├── CompaniesPage.tsx
 │       │   └── CompanyDetailPage.tsx
 │       └── admin/
-│           └── ManageUsersPage.tsx
+│           ├── ManageUsersPage.tsx
+│           ├── ManageDepartmentsPage.tsx
+│           ├── ManageRolesPage.tsx
+│           └── CompanySettingsPage.tsx
 ├── hooks/
 │   ├── index.ts               # Exports all hooks
 │   ├── useDropdownKeyboard.ts # ⚠️ USE FOR ALL DROPDOWNS
@@ -1397,14 +1744,19 @@ src/
 │   ├── useSafeNavigate.ts
 │   └── useUserDependencies.ts # User dependency hooks
 ├── utils/
-│   ├── validation.ts          # Email/phone/website validation & formatting
+│   ├── index.ts               # Exports all utils
+│   ├── validation.ts          # Email/phone/website/address validation & formatting
 │   └── addressAutocomplete.ts # Radar.io address autocomplete
 └── contexts/
     ├── index.ts
+    ├── authStore.ts           # Authentication state
     ├── clientsStore.ts        # Companies & Contacts data
-    ├── usersStore.ts          # Users data
+    ├── companyStore.ts        # Company settings (your company)
+    ├── usersStore.ts          # Portal users data
     ├── departmentsStore.ts    # Departments & Positions
+    ├── rolesStore.ts          # Roles & Permissions
     ├── toastStore.ts          # Toast notifications
+    ├── uiStore.ts             # UI state (theme, sidebar, etc.)
     ├── navigationGuardStore.ts
     └── userDependencyRegistry.ts  # User dependency tracking
 ```
@@ -1419,6 +1771,7 @@ When adding new features, **ALWAYS check if these exist first:**
 - [ ] Need a button? → Use `Button` component
 - [ ] Need form inputs? → Use `Input` component (has auto-validation!)
 - [ ] Need a dropdown select? → Use `Select` component
+- [ ] Need multi-user selection? → Use `MultiSelectUsers` component
 - [ ] Need multi-line text? → Use `Textarea` component
 - [ ] Need a toggle/switch? → Use `Toggle` component
 - [ ] Need search input? → Use `SearchInput` component
@@ -1428,7 +1781,7 @@ When adding new features, **ALWAYS check if these exist first:**
 - [ ] Need modal? → Use `Modal` or `ConfirmModal`
 - [ ] Need unsaved changes confirmation? → Use `UnsavedChangesModal`
 - [ ] Need user deactivation? → Use `UserDeactivationModal`
-- [ ] Need collapsible sections? → Use `CollapsibleSection`
+- [ ] Need collapsible sections? → Use `CollapsibleSection` (defaultOpen={false})
 - [ ] Need toast notifications? → Use `useToast()`
 - [ ] Need address input? → Use `AddressInput` component
 
@@ -1463,4 +1816,4 @@ When adding new features, **ALWAYS check if these exist first:**
 
 ---
 
-*Last updated: January 6, 2026*
+*Last updated: January 7, 2026*

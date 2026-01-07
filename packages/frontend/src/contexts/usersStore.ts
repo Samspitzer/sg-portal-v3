@@ -8,6 +8,7 @@ export interface User {
   phone: string;
   departmentId: string;
   positionId: string;
+  officeId?: string; // Optional - links to CompanyOffice.id (only required when company has 2+ offices)
   isActive: boolean;
   createdAt: string;
 }
@@ -22,6 +23,7 @@ interface UsersStore extends UsersState {
   deleteUser: (id: string) => void;
   toggleUserActive: (id: string) => void;
   getActiveUsers: () => User[];
+  getUsersByOffice: (officeId: string) => User[];
 }
 
 export const useUsersStore = create<UsersStore>()(
@@ -64,6 +66,10 @@ export const useUsersStore = create<UsersStore>()(
 
         getActiveUsers: () => {
           return get().users.filter((user) => user.isActive);
+        },
+
+        getUsersByOffice: (officeId) => {
+          return get().users.filter((user) => user.officeId === officeId);
         },
       }),
       { name: 'sg-portal-users' }

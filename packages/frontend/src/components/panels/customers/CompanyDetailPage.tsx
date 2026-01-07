@@ -21,7 +21,7 @@ import {
   Info,
 } from 'lucide-react';
 import { Page } from '@/components/layout';
-import { Button, ConfirmModal, Modal, Input, AddressInput, UnsavedChangesModal, Select, Textarea } from '@/components/common';
+import { Button, ConfirmModal, Modal, Input, AddressInput, UnsavedChangesModal, Select, Textarea, Toggle } from '@/components/common';
 import { MultiSelectUsers } from '@/components/common/MultiSelectUsers';
 import { CollapsibleSection } from '@/components/common/CollapsibleSection';
 import { useClientsStore, useUsersStore, useToast, useNavigationGuardStore, CONTACT_ROLES, type Company, type ContactRole, type CompanyAddress, isDuplicateAddress } from '@/contexts';
@@ -107,7 +107,6 @@ function InlineField({
 
   const hasChanges = editValue !== value;
 
-  // Use ref to avoid infinite loops with onEditingChange callback
   const onEditingChangeRef = useRef(onEditingChange);
   onEditingChangeRef.current = onEditingChange;
 
@@ -115,7 +114,6 @@ function InlineField({
     onEditingChangeRef.current?.(isEditing, hasChanges);
   }, [isEditing, hasChanges]);
 
-  // Validate a value and return error message or null
   const getValidationError = (val: string): string | null => {
     if (!val) return null;
     
@@ -131,24 +129,19 @@ function InlineField({
     return null;
   };
 
-  // Handle input change with real-time validation and phone formatting
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     let newValue = e.target.value;
     
-    // Auto-format phone numbers as user types
     if (type === 'tel') {
       const currentDigits = editValue.replace(/\D/g, '').length;
       const newDigits = newValue.replace(/\D/g, '').length;
       
-      // Only format when ADDING digits, not when deleting
       if (newDigits > currentDigits) {
         newValue = formatPhoneNumber(newValue);
       }
-      // When deleting, just accept the raw value as-is (don't re-format)
     }
     
     setEditValue(newValue);
-    // Validate in real-time
     setValidationError(getValidationError(newValue));
   };
 
@@ -165,7 +158,6 @@ function InlineField({
   };
 
   const handleSave = () => {
-    // Validate before saving
     const error = getValidationError(editValue);
     if (error) {
       setValidationError(error);
@@ -215,7 +207,6 @@ function InlineField({
       e.preventDefault();
       e.stopPropagation();
       setPendingTab(false);
-      // If there's a validation error, discard with toast
       if (validationError) {
         handleDiscard(true);
       } else if (hasChanges) {
@@ -226,10 +217,8 @@ function InlineField({
     } else if (e.key === 'Tab' && !e.shiftKey) {
       e.preventDefault();
       e.stopPropagation();
-      // If there's a validation error, show toast and stay on field
       if (validationError) {
         toast.error('Invalid Value', validationError);
-        // Refocus the input to keep cursor in field
         setTimeout(() => {
           inputRef.current?.focus();
         }, 0);
@@ -301,7 +290,6 @@ function InlineField({
             </button>
             <button
               onClick={() => {
-                // If there's a validation error, just discard without asking
                 if (validationError) {
                   handleDiscard(true);
                 } else if (hasChanges) {
@@ -353,27 +341,34 @@ function InlineField({
   );
 }
 
-// Sales Rep Selector
-// Multi-Select Sales Rep Field for Company Level
+// Multi-Select Sales Rep Field for Company Level with "Set by location" toggle
 function MultiSalesRepField({
   label,
   value,
   onSave,
   onEditingChange,
-  showLocationHint = false,
+  addressCount,
+  isSetByLocation,
+  onToggleSetByLocation,
 }: {
   label: string;
   value: string[];
   onSave: (value: string[]) => void;
   onEditingChange?: (isEditing: boolean, hasChanges: boolean) => void;
-  showLocationHint?: boolean;
+  addressCount: number;
+  isSetByLocation: boolean;
+  onToggleSetByLocation: (value: boolean) => void;
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState<string[]>(value);
   const [showModal, setShowModal] = useState(false);
+  const [forceEditMode, setForceEditMode] = useState(false); // Track when switching from "set by location" back to company-level
   const fieldRef = useRef<HTMLDivElement>(null);
   const { users } = useUsersStore();
   const selectedUsers = users.filter((u) => value.includes(u.id));
+
+  // Show "Set by location" toggle only when 2+ addresses exist
+  const showLocationToggle = addressCount >= 2;
 
   useEffect(() => {
     setEditValue(value);
@@ -381,7 +376,6 @@ function MultiSalesRepField({
 
   const hasChanges = JSON.stringify(editValue.sort()) !== JSON.stringify(value.sort());
 
-  // Use ref to avoid infinite loops with onEditingChange callback
   const onEditingChangeRef = useRef(onEditingChange);
   onEditingChangeRef.current = onEditingChange;
 
@@ -393,12 +387,14 @@ function MultiSalesRepField({
     onSave(editValue);
     setIsEditing(false);
     setShowModal(false);
+    setForceEditMode(false);
   };
 
   const handleDiscard = () => {
     setEditValue(value);
     setIsEditing(false);
     setShowModal(false);
+    setForceEditMode(false);
   };
 
   const handleKeepEditing = () => {
@@ -412,6 +408,41 @@ function MultiSalesRepField({
     }
   };
 
+  const handleToggleChange = (checked: boolean) => {
+    if (checked) {
+      // Switching to "Set by location" - clear company-level reps
+      onSave([]);
+      onToggleSetByLocation(true);
+      setForceEditMode(false);
+    } else {
+      // Switching back to company-level - enter edit mode to select reps
+      onToggleSetByLocation(false);
+      setForceEditMode(true);
+      setIsEditing(true);
+    }
+  };
+
+  // If set by location is enabled AND we're not forcing edit mode, show that state
+  if (isSetByLocation && showLocationToggle && !forceEditMode) {
+    return (
+      <div data-inline-field="true" ref={fieldRef} className="-mx-2 px-2 py-1">
+        <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">{label}</div>
+        <div className="flex items-center gap-2">
+          <Users className="w-3.5 h-3.5 text-slate-400" />
+          <span className="text-sm text-brand-600 dark:text-brand-400 italic">Set by location</span>
+        </div>
+        <div className="flex items-center gap-2 mt-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+          <Toggle
+            checked={true}
+            onChange={handleToggleChange}
+            size="sm"
+          />
+          <span className="text-xs text-slate-500 dark:text-slate-400">Assign sales reps per location</span>
+        </div>
+      </div>
+    );
+  }
+
   if (isEditing) {
     return (
       <>
@@ -423,10 +454,15 @@ function MultiSalesRepField({
             placeholder="Select sales reps..."
             size="sm"
           />
-          {showLocationHint && editValue.length === 0 && (
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Leave empty to set sales reps per location instead
-            </p>
+          {showLocationToggle && (
+            <div className="flex items-center gap-2 pt-1">
+              <Toggle
+                checked={false}
+                onChange={handleToggleChange}
+                size="sm"
+              />
+              <span className="text-xs text-slate-500 dark:text-slate-400">Assign sales reps per location</span>
+            </div>
           )}
           <div className="flex items-center gap-2 pt-1">
             <Button variant="primary" size="sm" onClick={handleSave}>
@@ -467,9 +503,7 @@ function MultiSalesRepField({
       <div className="flex items-center gap-2 mt-0.5">
         <Users className="w-3.5 h-3.5 text-slate-400" />
         {selectedUsers.length === 0 ? (
-          <span className="text-sm text-slate-400 italic">
-            {showLocationHint ? 'Set by location' : 'Click to assign...'}
-          </span>
+          <span className="text-sm text-slate-400 italic">Click to assign...</span>
         ) : selectedUsers.length === 1 ? (
           <span className="text-sm text-slate-900 dark:text-white">{selectedUsers[0]?.name}</span>
         ) : (
@@ -490,43 +524,89 @@ function MultiSalesRepField({
   );
 }
 
-// Single Sales Rep Field for Address Level
+// Multi-Select Sales Rep Field for Address Level (supports multiple reps per location)
 function AddressSalesRepField({
   value,
   onChange,
   disabled = false,
 }: {
-  value: string;
-  onChange: (value: string) => void;
+  value: string[];
+  onChange: (value: string[]) => void;
   disabled?: boolean;
 }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState<string[]>(value);
   const { users } = useUsersStore();
-  const activeUsers = users.filter((u) => u.isActive);
+  const selectedUsers = users.filter((u) => value.includes(u.id));
+
+  useEffect(() => {
+    setEditValue(value);
+  }, [value]);
+
+  const handleSave = () => {
+    onChange(editValue);
+    setIsEditing(false);
+  };
+
+  const handleCancel = () => {
+    setEditValue(value);
+    setIsEditing(false);
+  };
+
+  if (disabled) return null;
+
+  if (isEditing) {
+    return (
+      <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+        <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">
+          Location Sales Reps
+        </label>
+        <MultiSelectUsers
+          value={editValue}
+          onChange={setEditValue}
+          placeholder="Select sales reps..."
+          size="sm"
+        />
+        <div className="flex items-center gap-2 mt-2">
+          <Button variant="primary" size="sm" onClick={handleSave}>
+            <Check className="w-3 h-3 mr-1" />
+            Save
+          </Button>
+          <Button variant="secondary" size="sm" onClick={handleCancel}>
+            <X className="w-3 h-3 mr-1" />
+            Cancel
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+    <div 
+      className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 group cursor-pointer"
+      onClick={() => setIsEditing(true)}
+    >
       <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
-        Location Sales Rep
+        Location Sales Reps
       </label>
-      <select
-        value={value || ''}
-        onChange={(e) => onChange(e.target.value)}
-        disabled={disabled}
-        className={clsx(
-          'w-full px-2 py-1.5 text-sm rounded-lg border',
-          'bg-white dark:bg-slate-800 text-slate-900 dark:text-white',
-          'border-slate-200 dark:border-slate-700',
-          'focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent',
-          disabled && 'opacity-50 cursor-not-allowed'
+      <div className="flex items-center gap-2">
+        <Users className="w-3.5 h-3.5 text-slate-400" />
+        {selectedUsers.length === 0 ? (
+          <span className="text-sm text-slate-400 italic">Click to assign...</span>
+        ) : (
+          <div className="flex flex-wrap gap-1">
+            {selectedUsers.map((user) => (
+              <span
+                key={user.id}
+                className="inline-flex items-center px-1.5 py-0.5 bg-brand-50 dark:bg-brand-900/20 text-brand-700 dark:text-brand-300 rounded text-xs"
+              >
+                {user.name}
+              </span>
+            ))}
+          </div>
         )}
-      >
-        <option value="">No sales rep assigned</option>
-        {activeUsers.map((user) => (
-          <option key={user.id} value={user.id}>
-            {user.name}
-          </option>
-        ))}
-      </select>
+        <Pencil className="w-3 h-3 text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity ml-auto" />
+      </div>
     </div>
   );
 }
@@ -606,6 +686,21 @@ export function CompanyDetailPage() {
     );
   }
 
+  // Get all addresses - main office (from legacy address) + additional addresses
+  const mainOfficeAddress = company.address && company.address.street ? {
+    id: 'main-office',
+    label: 'Main Office',
+    ...company.address,
+  } : null;
+
+  const additionalAddresses = company.addresses || [];
+  
+  // Count only addresses with actual street data
+  const addressCount = (mainOfficeAddress ? 1 : 0) + additionalAddresses.filter(addr => addr.street).length;
+
+  // Determine if "set by location" mode is active - use explicit flag
+  const isSetByLocation = company.salesRepsByLocation === true;
+
   const handleFieldSave = (field: keyof Company, value: string) => {
     updateCompany(company.id, { [field]: value || undefined });
     toast.success('Updated', 'Company information saved');
@@ -615,6 +710,51 @@ export function CompanyDetailPage() {
     deleteCompany(company.id);
     toast.success('Deleted', company.name + ' has been removed');
     navigate('/clients/companies');
+  };
+
+  // Sales rep handlers
+  const handleSalesRepSave = (ids: string[]) => {
+    updateCompany(company.id, { salesRepIds: ids.length > 0 ? ids : undefined, salesRepId: undefined });
+    toast.success('Updated', 'Sales reps updated');
+  };
+
+  const handleToggleSetByLocation = (enabled: boolean) => {
+    if (enabled) {
+      // Switching to per-location mode - clear company-level sales reps and set flag
+      updateCompany(company.id, { 
+        salesRepIds: undefined, 
+        salesRepId: undefined,
+        salesRepsByLocation: true,
+      });
+      toast.success('Updated', 'Sales reps will now be set per location');
+    } else {
+      // Switching back to company-level mode - clear flag
+      updateCompany(company.id, { 
+        salesRepsByLocation: false,
+      });
+    }
+  };
+
+  // Main office sales rep handler (for per-location mode)
+  const handleMainOfficeSalesRepChange = (salesRepIds: string[]) => {
+    updateCompany(company.id, {
+      address: {
+        ...company.address!,
+        salesRepId: salesRepIds[0] || undefined, // Store first rep in legacy field
+        salesRepIds: salesRepIds.length > 0 ? salesRepIds : undefined, // Store all reps
+      },
+    });
+    toast.success('Updated', 'Sales reps updated for Main Office');
+  };
+
+  // Additional address sales rep handler (for per-location mode)
+  const handleAddressSalesRepChange = (addressId: string, salesRepIds: string[]) => {
+    updateCompanyAddress(company.id, addressId, {
+      salesRepId: salesRepIds[0] || undefined,
+      salesRepIds: salesRepIds.length > 0 ? salesRepIds : undefined,
+    });
+    const addr = additionalAddresses.find(a => a.id === addressId);
+    toast.success('Updated', `Sales reps updated for ${addr?.label || 'location'}`);
   };
 
   // Add Contact Modal handlers
@@ -628,7 +768,6 @@ export function CompanyDetailPage() {
     setContactFormData(initialContactFormData);
   };
 
-  // Check if form has validation errors
   const hasValidationErrors = () => {
     if (contactFormData.email && !validateEmail(contactFormData.email)) return true;
     if (contactFormData.phoneOffice && !validatePhone(contactFormData.phoneOffice)) return true;
@@ -642,7 +781,6 @@ export function CompanyDetailPage() {
       return;
     }
 
-    // Don't save if there are validation errors (errors shown inline)
     if (hasValidationErrors()) {
       return;
     }
@@ -662,7 +800,6 @@ export function CompanyDetailPage() {
     closeAddContactModal();
   };
 
-  // Only consider it having changes if there are no validation errors
   const hasContactChanges =
     (contactFormData.firstName.trim() !== '' ||
     contactFormData.lastName.trim() !== '' ||
@@ -686,7 +823,6 @@ export function CompanyDetailPage() {
   };
 
   const handleAddAddress = () => {
-    // Check for duplicate address (if there's actually an address to add)
     if (newAddressData.street) {
       const dupCheck = isDuplicateAddress(
         company,
@@ -701,11 +837,9 @@ export function CompanyDetailPage() {
       }
     }
 
-    // If main office is empty, set this as main office instead
     const mainOfficeIsEmpty = !company.address?.street;
     
     if (mainOfficeIsEmpty) {
-      // Set as main office - no label required
       updateCompany(company.id, {
         address: {
           street: newAddressData.street,
@@ -717,7 +851,6 @@ export function CompanyDetailPage() {
       });
       toast.success('Added', 'Main office address saved');
     } else {
-      // Add as additional address - label required
       if (!newAddressLabel.trim()) {
         toast.error('Error', 'Please enter a name for the location');
         return;
@@ -744,32 +877,26 @@ export function CompanyDetailPage() {
     }
   };
 
-  // Handle confirming main office deletion (called after user confirms)
   const handleConfirmClearMainOffice = () => {
     setShowDeleteMainOfficeModal(false);
     
     const otherAddresses = company.addresses || [];
     
     if (otherAddresses.length === 0) {
-      // No other addresses, just clear main office
       updateCompany(company.id, { address: undefined });
       toast.success('Cleared', 'Main office address removed');
     } else if (otherAddresses.length === 1) {
-      // Exactly one other address - auto-promote it to main office
       const addressToPromote = otherAddresses[0];
       if (addressToPromote) {
         promoteAddressToMainOffice(addressToPromote);
       }
     } else {
-      // Multiple other addresses - ask user which to promote
       setSelectedPromoteAddressId('');
       setShowPromoteModal(true);
     }
   };
 
-  // Promote an address to main office
   const promoteAddressToMainOffice = (addressToPromote: CompanyAddress) => {
-    // Set the selected address as main office
     updateCompany(company.id, {
       address: {
         street: addressToPromote.street,
@@ -779,7 +906,6 @@ export function CompanyDetailPage() {
         zip: addressToPromote.zip,
       },
     });
-    // Remove it from additional addresses
     deleteCompanyAddress(company.id, addressToPromote.id);
     toast.success('Updated', `${addressToPromote.label} is now the main office`);
     setShowPromoteModal(false);
@@ -796,18 +922,6 @@ export function CompanyDetailPage() {
       promoteAddressToMainOffice(addressToPromote);
     }
   };
-
-  // Get all addresses - main office (from legacy address) + additional addresses
-  const mainOfficeAddress = company.address && company.address.street ? {
-    id: 'main-office',
-    label: 'Main Office',
-    ...company.address,
-  } : null;
-
-  const additionalAddresses = company.addresses || [];
-  
-  // Count only addresses with actual street data
-  const addressCount = (mainOfficeAddress ? 1 : 0) + additionalAddresses.filter(addr => addr.street).length;
 
   return (
     <Page
@@ -830,12 +944,12 @@ export function CompanyDetailPage() {
         {/* Left Column - Company Info */}
         <div className="lg:col-span-2 space-y-4">
           {/* Company Details - Non-collapsible with header */}
-          <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
+          <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-visible">
             <SectionHeader
               title="Company Details"
               icon={<Building2 className="w-4 h-4 text-slate-500" />}
             />
-            <div className="p-4 bg-white dark:bg-slate-900">
+            <div className="p-4 bg-white dark:bg-slate-900 rounded-b-lg">
               <div className="space-y-3">
                 <InlineField
                   label="Company Name"
@@ -866,9 +980,11 @@ export function CompanyDetailPage() {
                   <MultiSalesRepField
                     label="Sales Reps"
                     value={company.salesRepIds || (company.salesRepId ? [company.salesRepId] : [])}
-                    onSave={(ids) => updateCompany(company.id, { salesRepIds: ids, salesRepId: undefined })}
+                    onSave={handleSalesRepSave}
                     onEditingChange={handleEditingChange('salesRep')}
-                    showLocationHint
+                    addressCount={addressCount}
+                    isSetByLocation={isSetByLocation}
+                    onToggleSetByLocation={handleToggleSetByLocation}
                   />
                 </div>
               </div>
@@ -918,7 +1034,6 @@ export function CompanyDetailPage() {
                   state={company.address?.state || ''}
                   zip={company.address?.zip || ''}
                   onSave={(address) => {
-                    // Check for duplicate (exclude main office itself)
                     if (address.street) {
                       const dupCheck = isDuplicateAddress(
                         company,
@@ -940,25 +1055,18 @@ export function CompanyDetailPage() {
                         city: address.city,
                         state: address.state,
                         zip: address.zip,
-                        salesRepId: company.address?.salesRepId, // Preserve existing sales rep
+                        salesRepId: company.address?.salesRepId,
+                        salesRepIds: company.address?.salesRepIds,
                       },
                     });
                     toast.success('Updated', 'Main Office address saved');
                   }}
                 />
-                {/* Per-location sales rep (only show if no company-level reps) */}
-                {(!company.salesRepIds || company.salesRepIds.length === 0) && company.address?.street && (
+                {/* Per-location sales rep (only show in "set by location" mode) */}
+                {isSetByLocation && company.address?.street && (
                   <AddressSalesRepField
-                    value={company.address?.salesRepId || ''}
-                    onChange={(salesRepId) => {
-                      updateCompany(company.id, {
-                        address: {
-                          ...company.address!,
-                          salesRepId: salesRepId || undefined,
-                        },
-                      });
-                      toast.success('Updated', 'Sales rep updated for Main Office');
-                    }}
+                    value={company.address?.salesRepIds || (company.address?.salesRepId ? [company.address.salesRepId] : [])}
+                    onChange={handleMainOfficeSalesRepChange}
                   />
                 )}
               </div>
@@ -985,7 +1093,6 @@ export function CompanyDetailPage() {
                     state={addr.state}
                     zip={addr.zip}
                     onSave={(address) => {
-                      // Check for duplicate (exclude this address itself)
                       if (address.street) {
                         const dupCheck = isDuplicateAddress(
                           company,
@@ -1010,16 +1117,11 @@ export function CompanyDetailPage() {
                       toast.success('Updated', `${addr.label} address saved`);
                     }}
                   />
-                  {/* Per-location sales rep (only show if no company-level reps) */}
-                  {(!company.salesRepIds || company.salesRepIds.length === 0) && addr.street && (
+                  {/* Per-location sales rep (only show in "set by location" mode) */}
+                  {isSetByLocation && addr.street && (
                     <AddressSalesRepField
-                      value={addr.salesRepId || ''}
-                      onChange={(salesRepId) => {
-                        updateCompanyAddress(company.id, addr.id, {
-                          salesRepId: salesRepId || undefined,
-                        });
-                        toast.success('Updated', `Sales rep updated for ${addr.label}`);
-                      }}
+                      value={addr.salesRepIds || (addr.salesRepId ? [addr.salesRepId] : [])}
+                      onChange={(ids) => handleAddressSalesRepChange(addr.id, ids)}
                     />
                   )}
                 </div>
@@ -1218,7 +1320,6 @@ export function CompanyDetailPage() {
         }
       >
         <div className="space-y-4">
-          {/* Only show label field if main office already exists */}
           {company.address?.street && (
             <Input
               label="Location Name"
@@ -1330,7 +1431,6 @@ export function CompanyDetailPage() {
         }
       >
         <div className="space-y-4">
-          {/* Company (read-only, pre-selected) */}
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
               Company
@@ -1341,7 +1441,6 @@ export function CompanyDetailPage() {
             </div>
           </div>
 
-          {/* Name Row */}
           <div className="grid grid-cols-2 gap-4">
             <Input
               label="First Name"
@@ -1359,7 +1458,6 @@ export function CompanyDetailPage() {
             />
           </div>
 
-          {/* Role */}
           <Select
             label="Role"
             value={contactFormData.role}
@@ -1368,7 +1466,6 @@ export function CompanyDetailPage() {
             placeholder="Select a role..."
           />
 
-          {/* Email */}
           <Input
             label="Email"
             type="email"
@@ -1377,7 +1474,6 @@ export function CompanyDetailPage() {
             placeholder="john.doe@example.com"
           />
 
-          {/* Phone Numbers */}
           <div className="grid grid-cols-2 gap-4">
             <Input
               label="Office Phone"
@@ -1395,7 +1491,6 @@ export function CompanyDetailPage() {
             />
           </div>
 
-          {/* Notes */}
           <Textarea
             label="Notes"
             value={contactFormData.notes}
