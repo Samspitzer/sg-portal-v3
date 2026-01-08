@@ -14,8 +14,9 @@
 6. [Layout Components](#layout-components)
 7. [Established Patterns](#established-patterns)
 8. [Keyboard Navigation Standards](#keyboard-navigation-standards)
-9. [File Structure](#file-structure)
-10. [Adding New Features Checklist](#adding-new-features-checklist)
+9. [Modal vs Toast Guidelines](#modal-vs-toast-guidelines)
+10. [File Structure](#file-structure)
+11. [Adding New Features Checklist](#adding-new-features-checklist)
 
 ---
 
@@ -43,6 +44,7 @@ The following files have been tested, audited, and approved. **DO NOT modify the
 |------|----------|--------|
 | `ManageUsersPage.tsx` | `src/pages/admin/` | 🔒 LOCKED |
 | `CompanySettingsPage.tsx` | `src/pages/admin/` | 🔒 LOCKED |
+| `CompanyDetailPage.tsx` | `src/components/panels/customers/` | 🔒 LOCKED |
 
 ### Stores
 | File | Location | Status |
@@ -250,10 +252,12 @@ import { Toggle } from '@/components/common';
 
 **Props:**
 - `street`: string
+- `suite`: string (optional)
 - `city`: string
 - `state`: string
 - `zip`: string
 - `onSave`: (address: AddressData) => void - Called when user clicks Save
+- `autoSave`: boolean (optional) - Auto-save on selection (for modals)
 - `disabled`: boolean (optional)
 - `required`: boolean (optional)
 - `className`: string (optional)
@@ -261,7 +265,7 @@ import { Toggle } from '@/components/common';
 **Features:**
 - Radar.io autocomplete on street field (type 3+ chars)
 - Auto-populates City, State, ZIP when address selected
-- Local state - changes don't save until "Save Address" clicked
+- Local state - changes don't save until "Save Address" clicked (unless autoSave)
 - Unsaved changes modal when clicking outside with changes
 - Keyboard navigation for suggestions (Arrow keys, Enter, Escape)
 - Falls back to manual input if API not configured
@@ -276,14 +280,29 @@ VITE_RADAR_PUBLISHABLE_KEY=prj_test_pk_xxxxxxxxxxxxx
 ```tsx
 import { AddressInput } from '@/components/common';
 
+// Standard usage with Save button
 <AddressInput
   street={company.address?.street || ''}
+  suite={company.address?.suite || ''}
   city={company.address?.city || ''}
   state={company.address?.state || ''}
   zip={company.address?.zip || ''}
   onSave={(address) => {
     updateCompany(company.id, { address });
     toast.success('Updated', 'Address saved');
+  }}
+/>
+
+// In modals - auto-save on selection
+<AddressInput
+  street={formData.street}
+  suite={formData.suite}
+  city={formData.city}
+  state={formData.state}
+  zip={formData.zip}
+  autoSave
+  onSave={(address) => {
+    setFormData({ ...formData, ...address });
   }}
 />
 ```
@@ -649,8 +668,11 @@ import { ConfirmModal } from '@/components/common';
 - `badge`: string | number (optional) - Shows a badge next to title
 - `action`: ReactNode (optional) - Action button in header
 - `children`: ReactNode
+- `className`: string (optional)
 
-**Important:** Use `defaultOpen={false}` for secondary content sections to reduce visual clutter.
+**Important:** 
+- Use `defaultOpen={false}` for secondary content sections to reduce visual clutter.
+- Does NOT use `overflow-hidden` to allow dropdowns inside to display properly.
 
 **Usage:**
 ```tsx
@@ -766,32 +788,55 @@ import { PageNavigationGuard } from '@/components/common';
 ### MultiSelectUsers
 **File:** `MultiSelectUsers.tsx`
 
-**Purpose:** Checklist-style multi-user selection dropdown with pills display.
+**Purpose:** Checklist-style multi-user selection dropdown with full keyboard navigation.
 
 **Props:**
+- `value`: string[] - Array of selected user IDs
+- `onChange`: (userIds: string[]) => void - Callback when selection changes
 - `label`: string (optional)
-- `selectedUserIds`: string[]
-- `onChange`: (userIds: string[]) => void
-- `users`: User[] - List of available users
-- `placeholder`: string (optional)
+- `placeholder`: string (optional, default: "Select sales reps...")
+- `activeOnly`: boolean (optional) - Filter to active users only
 - `disabled`: boolean (optional)
+- `className`: string (optional)
+- `size`: `'sm'` | `'md'` (optional, default: 'md')
 
 **Features:**
-- Dropdown with checkboxes for each user
-- Shows selected count or names as pills
-- Portal-based positioning (works in modals)
-- Search/filter users (when many users)
+- Uses `useDropdownKeyboard` hook for consistent keyboard navigation
+- `tabIndex={0}` - focusable via Tab key
+- Auto-saves on selection change (no Save/Cancel buttons)
+- Shows selected count or single name in trigger
+- Pills display when multiple users selected
+- Search input for filtering (appears when > 5 users)
+- Scrolls highlighted item into view when navigating
+
+**Keyboard Support:**
+- Tab: Focus/unfocus (closes dropdown when leaving)
+- Space: Open dropdown or select highlighted item
+- Enter: Open dropdown or select highlighted item
+- Arrow Up/Down: Navigate options
+- Escape: Close dropdown
+- Type to search: Jumps to search input and filters
 
 **Usage:**
 ```tsx
-import { MultiSelectUsers } from '@/components/common';
+import { MultiSelectUsers } from '@/components/common/MultiSelectUsers';
 
+// Company-level sales rep selection
 <MultiSelectUsers
-  label="Sales Reps"
-  selectedUserIds={company.salesRepIds || []}
-  onChange={(ids) => updateCompany({ salesRepIds: ids })}
-  users={activeUsers}
+  value={company.salesRepIds || []}
+  onChange={(ids) => {
+    updateCompany(company.id, { salesRepIds: ids });
+    toast.success('Updated', 'Sales reps updated');
+  }}
   placeholder="Select sales reps..."
+/>
+
+// In a form (smaller size)
+<MultiSelectUsers
+  value={formData.salesRepIds}
+  onChange={(ids) => setFormData({ ...formData, salesRepIds: ids })}
+  size="sm"
+  activeOnly={false}
 />
 ```
 
@@ -1200,7 +1245,7 @@ const {
 Companies and Contacts data. **Registered with userDependencyRegistry.**
 
 ```tsx
-import { useClientsStore } from '@/contexts';
+import { useClientsStore, getCompanySalesRepIds } from '@/contexts';
 
 const { 
   companies, 
@@ -1221,6 +1266,9 @@ const {
   updateContactMethod,
   deleteContactMethod
 } = useClientsStore();
+
+// Helper to get ALL sales rep IDs (company-level + location-level)
+const allSalesRepIds = getCompanySalesRepIds(company);
 ```
 
 ### useCompanyStore
@@ -1556,6 +1604,7 @@ Pattern for address fields with Radar.io autocomplete:
 ```tsx
 <AddressInput
   street={record.address?.street || ''}
+  suite={record.address?.suite || ''}
   city={record.address?.city || ''}
   state={record.address?.state || ''}
   zip={record.address?.zip || ''}
@@ -1617,21 +1666,25 @@ Companies can have multiple addresses (Main Office + additional locations):
 ```tsx
 // Data structure
 interface Company {
-  address?: { street, city, state, zip };  // Main office (legacy)
+  address?: { street, suite, city, state, zip, salesRepId?, salesRepIds? };  // Main office
   addresses?: CompanyAddress[];  // Additional locations
+  salesRepsByLocation?: boolean;  // Flag for per-location sales rep mode
 }
 
 interface CompanyAddress {
   id: string;
   label: string;  // "Branch Office", "Warehouse", etc.
   street: string;
+  suite?: string;
   city: string;
   state: string;
   zip: string;
+  salesRepId?: string;   // Legacy single rep
+  salesRepIds?: string[];  // Multiple reps
 }
 
 // Store actions
-addCompanyAddress(companyId, { label, street, city, state, zip });
+addCompanyAddress(companyId, { label, street, suite, city, state, zip });
 updateCompanyAddress(companyId, addressId, data);
 deleteCompanyAddress(companyId, addressId);
 ```
@@ -1654,6 +1707,46 @@ interface Contact {
 
 ---
 
+### 11. Sales Rep Assignment (Company Level vs Location Level)
+
+Companies can assign sales reps at two levels:
+
+**Company Level** (default):
+- Single set of reps for entire company
+- Stored in `company.salesRepIds` array
+
+**Location Level** (when `salesRepsByLocation: true`):
+- Different reps per address
+- Stored in `company.address.salesRepIds` and `company.addresses[].salesRepIds`
+- Toggle visible only when company has 2+ addresses
+
+**Toggle Behavior (Clean Slate - Option A):**
+- Switching TO location mode → Clears company-level reps, shows modal confirmation
+- Switching FROM location mode → Clears ALL location-level reps, shows modal confirmation
+
+**Auto-migration (when addresses drop to 1):**
+- Collects all location-level sales rep IDs
+- Migrates them to company level
+- Clears `salesRepsByLocation` flag
+- Shows modal confirmation with migrated rep names
+
+**Helper Function:**
+```tsx
+import { getCompanySalesRepIds } from '@/contexts';
+
+// Get ALL sales rep IDs for a company (company-level + all location-level)
+const allRepIds = getCompanySalesRepIds(company);
+```
+
+**Filter Usage (ContactsPage):**
+```tsx
+// If contact has assigned office AND company uses location-based reps
+// → Filter by that office's sales reps only
+// Otherwise → Filter by ALL company sales reps
+```
+
+---
+
 ## Keyboard Navigation Standards
 
 ### Dropdowns (Custom) - Use `useDropdownKeyboard`
@@ -1662,8 +1755,9 @@ interface Contact {
 | Arrow Down | Highlight next item |
 | Arrow Up | Highlight previous item |
 | Enter | Select highlighted item |
+| Space | Select highlighted item (in MultiSelectUsers) |
 | Escape | Close dropdown |
-| Tab | Close dropdown, move focus |
+| Tab | Close dropdown, move focus to next field |
 
 ### SelectFilter (with search)
 | Key | Action |
@@ -1689,6 +1783,70 @@ interface Contact {
 
 ---
 
+## Modal vs Toast Guidelines
+
+### Use Modal (with OK button) for:
+- **Significant mode changes** - e.g., toggling between company-level and location-level sales rep assignment
+- **Data migration notifications** - e.g., when addresses drop to 1 and sales reps are auto-migrated
+- **Actions that clear/delete multiple items** - user must acknowledge the scope of changes
+- **Anything user MUST see and acknowledge** - critical information that shouldn't auto-dismiss
+
+**Modal Pattern:**
+```tsx
+const [showModal, setShowModal] = useState(false);
+const [modalMessage, setModalMessage] = useState('');
+
+// Trigger
+setModalMessage('Your important message here');
+setShowModal(true);
+
+// Modal JSX
+<Modal
+  isOpen={showModal}
+  onClose={() => setShowModal(false)}
+  title="Action Completed"
+  size="sm"
+  footer={
+    <Button variant="primary" onClick={() => setShowModal(false)}>
+      OK
+    </Button>
+  }
+>
+  <div className="flex items-start gap-3">
+    <div className="w-10 h-10 rounded-full bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center">
+      <Info className="w-5 h-5 text-brand-600 dark:text-brand-400" />
+    </div>
+    <p className="text-sm text-slate-600 dark:text-slate-400 whitespace-pre-line">
+      {modalMessage}
+    </p>
+  </div>
+</Modal>
+```
+
+### Use Toast for:
+- **Quick confirmations** - save, update, delete single item
+- **Validation errors** - invalid email, phone, required fields
+- **Non-critical notifications** - FYI messages that don't need acknowledgment
+- **Incremental changes** - adding/removing a single sales rep
+
+**Toast Pattern:**
+```tsx
+import { useToast } from '@/contexts';
+
+const toast = useToast();
+
+// Success
+toast.success('Updated', 'Sales reps updated');
+
+// Error
+toast.error('Error', 'Please enter a valid email address');
+
+// Info
+toast.info('Info', 'Changes will take effect immediately');
+```
+
+---
+
 ## File Structure
 
 ```
@@ -1706,7 +1864,7 @@ src/
 │   │   ├── DuplicateContactModal.tsx
 │   │   ├── Input.tsx          # With auto-validation for email/phone/url
 │   │   ├── Modal.tsx          # Includes ConfirmModal
-│   │   ├── MultiSelectUsers.tsx # Checklist-style multi-user select
+│   │   ├── MultiSelectUsers.tsx # Multi-user select with keyboard nav
 │   │   ├── PageNavigationGuard.tsx
 │   │   ├── SearchInput.tsx
 │   │   ├── Select.tsx         # Native select wrapper
@@ -1730,12 +1888,12 @@ src/
 │       │   ├── ContactsPage.tsx
 │       │   ├── ContactDetailPage.tsx
 │       │   ├── CompaniesPage.tsx
-│       │   └── CompanyDetailPage.tsx
+│       │   └── CompanyDetailPage.tsx  # 🔒 LOCKED
 │       └── admin/
-│           ├── ManageUsersPage.tsx
+│           ├── ManageUsersPage.tsx    # 🔒 LOCKED
 │           ├── ManageDepartmentsPage.tsx
 │           ├── ManageRolesPage.tsx
-│           └── CompanySettingsPage.tsx
+│           └── CompanySettingsPage.tsx # 🔒 LOCKED
 ├── hooks/
 │   ├── index.ts               # Exports all hooks
 │   ├── useDropdownKeyboard.ts # ⚠️ USE FOR ALL DROPDOWNS
@@ -1809,6 +1967,8 @@ When adding new features, **ALWAYS check if these exist first:**
 - [ ] Need inline editing? → Follow inline editing pattern from ContactDetailPage
 - [ ] Need address with autocomplete? → Use `AddressInput` component
 - [ ] Need multiple addresses? → Follow CompanyDetailPage pattern
+- [ ] Need sales rep assignment? → Follow Pattern #11 (company vs location level)
+- [ ] Need modal for important changes? → Follow Modal vs Toast Guidelines
 
 ### Layout
 - [ ] Page with DataTable? → Add `fillHeight` prop to `Page`
@@ -1816,4 +1976,4 @@ When adding new features, **ALWAYS check if these exist first:**
 
 ---
 
-*Last updated: January 7, 2026*
+*Last updated: January 8, 2026*
