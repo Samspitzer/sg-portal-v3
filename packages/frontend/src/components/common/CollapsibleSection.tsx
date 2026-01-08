@@ -24,8 +24,8 @@ export function CollapsibleSection({
   const [isOpen, setIsOpen] = useState(defaultOpen);
 
   return (
-    <div className={clsx('border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden', className)}>
-      <div className="flex items-center justify-between px-4 py-3 bg-slate-50 dark:bg-slate-800/50">
+    <div className={clsx('border border-slate-200 dark:border-slate-700 rounded-lg', className)}>
+      <div className="flex items-center justify-between px-4 py-3 bg-slate-50 dark:bg-slate-800/50 rounded-t-lg">
         <button
           type="button"
           onClick={() => setIsOpen(!isOpen)}
@@ -57,7 +57,7 @@ export function CollapsibleSection({
         </div>
       </div>
       {isOpen && (
-        <div className="p-4 bg-white dark:bg-slate-900">
+        <div className="p-4 bg-white dark:bg-slate-900 rounded-b-lg">
           {children}
         </div>
       )}

@@ -8,23 +8,26 @@ import {
   User,
 } from 'lucide-react';
 import { Page } from '@/components/layout';
-import { useClientsStore, useUsersStore, useToast, type Company } from '@/contexts';
-import { CardContent, Button, Input, Modal, SearchInput, Select, Textarea } from '@/components/common';
+import { useClientsStore, useUsersStore, useToast, type Company, getCompanySalesRepIds } from '@/contexts';
+import { CardContent, Button, Input, Modal, SearchInput, Textarea, AddressInput } from '@/components/common';
+import { MultiSelectUsers } from '@/components/common/MultiSelectUsers';
 import { AlphabetFilter } from '@/components/common/AlphabetFilter';
 import { DataTable, type DataTableColumn } from '@/components/common/DataTable';
 import { SelectFilter } from '@/components/common/SelectFilter';
 import { DuplicateCompanyModal } from '@/components/common/DuplicateCompanyModal';
+import { validatePhone, validateWebsite } from '@/utils/validation';
 
 interface CompanyFormData {
   name: string;
   phone: string;
   website: string;
   street: string;
+  suite: string;
   city: string;
   state: string;
   zip: string;
   notes: string;
-  salesRepId: string;
+  salesRepIds: string[];
 }
 
 const initialFormData: CompanyFormData = {
@@ -32,11 +35,12 @@ const initialFormData: CompanyFormData = {
   phone: '',
   website: '',
   street: '',
+  suite: '',
   city: '',
   state: '',
   zip: '',
   notes: '',
-  salesRepId: '',
+  salesRepIds: [],
 };
 
 type SortField = 'name' | 'location' | 'salesRep' | 'contacts';
@@ -73,19 +77,17 @@ export function CompaniesPage() {
     state?: string;
   } | null>(null);
 
-  const activeUsers = useMemo(() => users.filter((u) => u.isActive), [users]);
-
-  // Sales rep options for Select component
-  const salesRepSelectOptions = useMemo(() => 
-    activeUsers.map((user) => ({ value: user.id, label: user.name })),
-    [activeUsers]
-  );
-
   // Helper functions
   const getSalesRepName = (salesRepId?: string) => {
     if (!salesRepId) return '';
     const user = users.find((u) => u.id === salesRepId);
     return user?.name || '';
+  };
+
+  // Get all sales rep names for a company (supports multiple reps)
+  const getCompanySalesRepNames = (company: Company): string[] => {
+    const repIds = getCompanySalesRepIds(company);
+    return repIds.map(id => getSalesRepName(id)).filter(Boolean);
   };
 
   const getContactCount = (companyId: string) => {
@@ -135,21 +137,23 @@ export function CompaniesPage() {
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [companies]);
 
-  // Get sales reps for filter
+  // Get sales reps for filter - includes all reps from company-level and location-level
   const salesRepOptions = useMemo(() => {
     const reps = new Map<string, { name: string; count: number }>();
     companies.forEach((company) => {
-      if (company.salesRepId) {
-        const name = getSalesRepName(company.salesRepId);
+      // Get all sales rep IDs for this company (company-level + location-level)
+      const repIds = getCompanySalesRepIds(company);
+      repIds.forEach((repId) => {
+        const name = getSalesRepName(repId);
         if (name) {
-          const existing = reps.get(company.salesRepId);
+          const existing = reps.get(repId);
           if (existing) {
             existing.count++;
           } else {
-            reps.set(company.salesRepId, { name, count: 1 });
+            reps.set(repId, { name, count: 1 });
           }
         }
-      }
+      });
     });
     return Array.from(reps.entries())
       .map(([value, { name, count }]) => ({ value, label: name, count }))
@@ -172,8 +176,8 @@ export function CompaniesPage() {
       // Location filter
       const matchesLocation = !locationFilter || getAllLocations(company).includes(locationFilter);
 
-      // Sales rep filter
-      const matchesSalesRep = !salesRepFilter || company.salesRepId === salesRepFilter;
+      // Sales rep filter - check if selected rep is in any of the company's sales reps
+      const matchesSalesRep = !salesRepFilter || getCompanySalesRepIds(company).includes(salesRepFilter);
 
       return matchesSearch && matchesLetter && matchesLocation && matchesSalesRep;
     });
@@ -192,8 +196,8 @@ export function CompaniesPage() {
           bVal = getLocation(b).toLowerCase();
           break;
         case 'salesRep':
-          aVal = getSalesRepName(a.salesRepId).toLowerCase();
-          bVal = getSalesRepName(b.salesRepId).toLowerCase();
+          aVal = (getCompanySalesRepNames(a)[0] || '').toLowerCase();
+          bVal = (getCompanySalesRepNames(b)[0] || '').toLowerCase();
           break;
         case 'contacts':
           aVal = getContactCount(a.id);
@@ -283,11 +287,27 @@ export function CompaniesPage() {
       key: 'salesRep',
       header: 'Sales Rep',
       sortable: true,
-      render: (company) => (
-        <span className="text-slate-600 dark:text-slate-400">
-          {getSalesRepName(company.salesRepId) || '—'}
-        </span>
-      ),
+      render: (company) => {
+        const repNames = getCompanySalesRepNames(company);
+        if (repNames.length === 0) {
+          return <span className="text-slate-400">—</span>;
+        }
+        if (repNames.length === 1) {
+          return <span className="text-slate-600 dark:text-slate-400">{repNames[0]}</span>;
+        }
+        return (
+          <div className="flex flex-wrap gap-1">
+            {repNames.map((name, idx) => (
+              <span
+                key={idx}
+                className="inline-flex items-center px-1.5 py-0.5 bg-brand-50 dark:bg-brand-900/20 text-brand-700 dark:text-brand-300 rounded text-xs"
+              >
+                {name}
+              </span>
+            ))}
+          </div>
+        );
+      },
       hideOnMobile: true,
     },
     {
@@ -324,6 +344,18 @@ export function CompaniesPage() {
       return;
     }
 
+    // Validate phone if provided
+    if (formData.phone && !validatePhone(formData.phone)) {
+      toast.error('Error', 'Please enter a valid phone number');
+      return;
+    }
+
+    // Validate website if provided
+    if (formData.website && !validateWebsite(formData.website)) {
+      toast.error('Error', 'Please enter a valid website URL');
+      return;
+    }
+
     // Check for duplicate
     const existing = findDuplicateCompany(formData.name);
     if (existing) {
@@ -352,13 +384,14 @@ export function CompaniesPage() {
         formData.street || formData.city || formData.state || formData.zip
           ? {
               street: formData.street,
+              suite: formData.suite || undefined,
               city: formData.city,
               state: formData.state,
               zip: formData.zip,
             }
           : undefined,
       notes: formData.notes || undefined,
-      salesRepId: formData.salesRepId || undefined,
+      salesRepIds: formData.salesRepIds.length > 0 ? formData.salesRepIds : undefined,
     };
 
     addCompany(companyData);
@@ -385,11 +418,12 @@ export function CompaniesPage() {
     formData.phone !== '' ||
     formData.website !== '' ||
     formData.street !== '' ||
+    formData.suite !== '' ||
     formData.city !== '' ||
     formData.state !== '' ||
     formData.zip !== '' ||
     formData.notes !== '' ||
-    formData.salesRepId !== '';
+    formData.salesRepIds.length > 0;
 
   // Clear all filters
   const clearFilters = () => {
@@ -510,15 +544,17 @@ export function CompaniesPage() {
             autoFocus
           />
 
-          {activeUsers.length > 0 && (
-            <Select
-              label="Sales Rep"
-              value={formData.salesRepId}
-              onChange={(e) => setFormData({ ...formData, salesRepId: e.target.value })}
-              options={salesRepSelectOptions}
-              placeholder="Select a sales rep..."
+          <div className="space-y-1">
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+              Sales Reps
+            </label>
+            <MultiSelectUsers
+              value={formData.salesRepIds}
+              onChange={(ids) => setFormData({ ...formData, salesRepIds: ids })}
+              placeholder="Select sales reps..."
+              activeOnly={false}
             />
-          )}
+          </div>
 
           <div className="grid grid-cols-2 gap-4">
             <Input
@@ -533,35 +569,31 @@ export function CompaniesPage() {
               type="url"
               value={formData.website}
               onChange={(e) => setFormData({ ...formData, website: e.target.value })}
-              placeholder="https://example.com"
+              placeholder="www.example.com"
             />
           </div>
 
-          <Input
-            label="Street Address"
-            value={formData.street}
-            onChange={(e) => setFormData({ ...formData, street: e.target.value })}
-            placeholder="123 Main Street"
-          />
-
-          <div className="grid grid-cols-3 gap-4">
-            <Input
-              label="City"
-              value={formData.city}
-              onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-              placeholder="New York"
-            />
-            <Input
-              label="State"
-              value={formData.state}
-              onChange={(e) => setFormData({ ...formData, state: e.target.value })}
-              placeholder="NY"
-            />
-            <Input
-              label="ZIP Code"
-              value={formData.zip}
-              onChange={(e) => setFormData({ ...formData, zip: e.target.value })}
-              placeholder="10001"
+          <div className="space-y-1">
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+              Address
+            </label>
+            <AddressInput
+              street={formData.street}
+              suite={formData.suite}
+              city={formData.city}
+              state={formData.state}
+              zip={formData.zip}
+              autoSave
+              onSave={(address) => {
+                setFormData({
+                  ...formData,
+                  street: address.street,
+                  suite: address.suite || '',
+                  city: address.city,
+                  state: address.state,
+                  zip: address.zip,
+                });
+              }}
             />
           </div>
 

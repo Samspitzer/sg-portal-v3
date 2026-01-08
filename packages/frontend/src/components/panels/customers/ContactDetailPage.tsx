@@ -29,6 +29,7 @@ import { Card, CardContent, Button, ConfirmModal, Modal, Input, UnsavedChangesMo
 import { CollapsibleSection } from '@/components/common/CollapsibleSection';
 import { useClientsStore, useUsersStore, useToast, useNavigationGuardStore, CONTACT_ROLES, type Contact } from '@/contexts';
 import { useDropdownKeyboard } from '@/hooks';
+import { validateEmail, validatePhone, formatPhoneNumber } from '@/utils/validation';
 
 // Non-collapsible Section Header (matches CollapsibleSection style)
 function SectionHeader({
@@ -139,59 +140,9 @@ function InlineField({
     onEditingChangeRef.current?.(isEditing, hasChanges);
   }, [isEditing, hasChanges]);
 
-  // Phone number formatting
-  const formatPhoneNumber = (input: string): string => {
-    // Remove all non-digit characters except #
-    const hasExtension = input.includes('#');
-    let extension = '';
-    let phoneDigits = input;
-    
-    if (hasExtension) {
-      const parts = input.split('#');
-      phoneDigits = parts[0] || '';
-      extension = parts.slice(1).join('');
-    }
-    
-    const digits = phoneDigits.replace(/\D/g, '');
-    
-    // Format as (XXX) XXX-XXXX
-    let formatted = '';
-    if (digits.length > 0) {
-      formatted = '(' + digits.substring(0, 3);
-    }
-    if (digits.length >= 3) {
-      formatted += ') ' + digits.substring(3, 6);
-    }
-    if (digits.length >= 6) {
-      formatted += '-' + digits.substring(6, 10);
-    }
-    
-    // Add extension if present
-    if (hasExtension && extension) {
-      formatted += ' #' + extension.replace(/\D/g, '');
-    } else if (hasExtension) {
-      formatted += ' #';
-    }
-    
-    return formatted;
-  };
-
-  // Email validation
-  const validateEmail = (email: string): boolean => {
-    if (!email) return true; // Empty is OK
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-  };
-
-  // Phone validation
-  const validatePhone = (phone: string): boolean => {
-    if (!phone) return true; // Empty is OK
-    const digits = phone.replace(/\D/g, '').replace(/#.*/, '');
-    return digits.length >= 10;
-  };
-
   const handleInputChange = (newValue: string) => {
     if (type === 'tel') {
+      // Use imported formatPhoneNumber from utils/validation
       const formatted = formatPhoneNumber(newValue);
       setEditValue(formatted);
       setValidationError(null);
@@ -214,7 +165,7 @@ function InlineField({
   };
 
   const handleSave = () => {
-    // Validate before saving
+    // Validate before saving using imported functions from utils/validation
     if (type === 'email' && !validateEmail(editValue)) {
       setValidationError('Please enter a valid email address');
       return;

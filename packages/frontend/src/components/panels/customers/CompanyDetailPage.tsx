@@ -346,7 +346,6 @@ function MultiSalesRepField({
   label,
   value,
   onSave,
-  onEditingChange,
   addressCount,
   isSetByLocation,
   onToggleSetByLocation,
@@ -359,73 +358,32 @@ function MultiSalesRepField({
   isSetByLocation: boolean;
   onToggleSetByLocation: (value: boolean) => void;
 }) {
-  const [isEditing, setIsEditing] = useState(false);
-  const [editValue, setEditValue] = useState<string[]>(value);
-  const [showModal, setShowModal] = useState(false);
-  const [forceEditMode, setForceEditMode] = useState(false); // Track when switching from "set by location" back to company-level
-  const fieldRef = useRef<HTMLDivElement>(null);
-  const { users } = useUsersStore();
-  const selectedUsers = users.filter((u) => value.includes(u.id));
+  const [localValue, setLocalValue] = useState<string[]>(value);
 
   // Show "Set by location" toggle only when 2+ addresses exist
   const showLocationToggle = addressCount >= 2;
 
+  // Sync local value with prop
   useEffect(() => {
-    setEditValue(value);
+    setLocalValue(value);
   }, [value]);
 
-  const hasChanges = JSON.stringify(editValue.sort()) !== JSON.stringify(value.sort());
-
-  const onEditingChangeRef = useRef(onEditingChange);
-  onEditingChangeRef.current = onEditingChange;
-
-  useEffect(() => {
-    onEditingChangeRef.current?.(isEditing, hasChanges);
-  }, [isEditing, hasChanges]);
-
-  const handleSave = () => {
-    onSave(editValue);
-    setIsEditing(false);
-    setShowModal(false);
-    setForceEditMode(false);
-  };
-
-  const handleDiscard = () => {
-    setEditValue(value);
-    setIsEditing(false);
-    setShowModal(false);
-    setForceEditMode(false);
-  };
-
-  const handleKeepEditing = () => {
-    setShowModal(false);
-  };
-
-  const handleViewKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      setIsEditing(true);
-    }
+  // Handle value changes - save immediately
+  const handleChange = (newValue: string[]) => {
+    setLocalValue(newValue);
+    onSave(newValue);
   };
 
   const handleToggleChange = (checked: boolean) => {
-    if (checked) {
-      // Switching to "Set by location" - clear company-level reps
-      onSave([]);
-      onToggleSetByLocation(true);
-      setForceEditMode(false);
-    } else {
-      // Switching back to company-level - enter edit mode to select reps
-      onToggleSetByLocation(false);
-      setForceEditMode(true);
-      setIsEditing(true);
-    }
+    // Just call the toggle handler - it handles all the data changes and shows one toast
+    onToggleSetByLocation(checked);
   };
 
-  // If set by location is enabled AND we're not forcing edit mode, show that state
-  if (isSetByLocation && showLocationToggle && !forceEditMode) {
+  // CASE 1: "Set by location" is ON and we have 2+ addresses
+  // Show "Set by location" label with toggle to turn it OFF
+  if (isSetByLocation && showLocationToggle) {
     return (
-      <div data-inline-field="true" ref={fieldRef} className="-mx-2 px-2 py-1">
+      <div className="-mx-2 px-2 py-1">
         <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">{label}</div>
         <div className="flex items-center gap-2">
           <Users className="w-3.5 h-3.5 text-slate-400" />
@@ -443,83 +401,27 @@ function MultiSalesRepField({
     );
   }
 
-  if (isEditing) {
-    return (
-      <>
-        <div className="space-y-2" data-inline-field="true" ref={fieldRef}>
-          <label className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</label>
-          <MultiSelectUsers
-            value={editValue}
-            onChange={setEditValue}
-            placeholder="Select sales reps..."
+  // CASE 2: Normal mode - show selector with optional toggle (if 2+ addresses)
+  return (
+    <div className="-mx-2 px-2 py-1">
+      <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">{label}</div>
+      <MultiSelectUsers
+        value={localValue}
+        onChange={handleChange}
+        placeholder="Select sales reps..."
+        size="sm"
+        activeOnly={false}
+      />
+      {showLocationToggle && (
+        <div className="flex items-center gap-2 mt-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+          <Toggle
+            checked={false}
+            onChange={handleToggleChange}
             size="sm"
           />
-          {showLocationToggle && (
-            <div className="flex items-center gap-2 pt-1">
-              <Toggle
-                checked={false}
-                onChange={handleToggleChange}
-                size="sm"
-              />
-              <span className="text-xs text-slate-500 dark:text-slate-400">Assign sales reps per location</span>
-            </div>
-          )}
-          <div className="flex items-center gap-2 pt-1">
-            <Button variant="primary" size="sm" onClick={handleSave}>
-              <Check className="w-3 h-3 mr-1" />
-              Save
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => (hasChanges ? setShowModal(true) : setIsEditing(false))}
-            >
-              <X className="w-3 h-3 mr-1" />
-              Cancel
-            </Button>
-          </div>
+          <span className="text-xs text-slate-500 dark:text-slate-400">Assign sales reps per location</span>
         </div>
-
-        <UnsavedChangesModal
-          isOpen={showModal}
-          onSave={handleSave}
-          onDiscard={handleDiscard}
-          onCancel={handleKeepEditing}
-        />
-      </>
-    );
-  }
-
-  return (
-    <div
-      data-inline-field="true"
-      ref={fieldRef}
-      tabIndex={0}
-      className="group cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 focus:bg-slate-50 dark:focus:bg-slate-800/50 focus:outline-none focus:ring-2 focus:ring-brand-500 -mx-2 px-2 py-1 rounded-lg transition-colors"
-      onClick={() => setIsEditing(true)}
-      onKeyDown={handleViewKeyDown}
-    >
-      <div className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</div>
-      <div className="flex items-center gap-2 mt-0.5">
-        <Users className="w-3.5 h-3.5 text-slate-400" />
-        {selectedUsers.length === 0 ? (
-          <span className="text-sm text-slate-400 italic">Click to assign...</span>
-        ) : selectedUsers.length === 1 ? (
-          <span className="text-sm text-slate-900 dark:text-white">{selectedUsers[0]?.name}</span>
-        ) : (
-          <div className="flex flex-wrap gap-1">
-            {selectedUsers.map((user) => (
-              <span
-                key={user.id}
-                className="inline-flex items-center px-1.5 py-0.5 bg-brand-50 dark:bg-brand-900/20 text-brand-700 dark:text-brand-300 rounded text-xs"
-              >
-                {user.name}
-              </span>
-            ))}
-          </div>
-        )}
-        <Pencil className="w-3 h-3 text-slate-300 opacity-0 group-hover:opacity-100 group-focus:opacity-100 transition-opacity ml-auto" />
-      </div>
+      )}
     </div>
   );
 }
@@ -534,79 +436,19 @@ function AddressSalesRepField({
   onChange: (value: string[]) => void;
   disabled?: boolean;
 }) {
-  const [isEditing, setIsEditing] = useState(false);
-  const [editValue, setEditValue] = useState<string[]>(value);
-  const { users } = useUsersStore();
-  const selectedUsers = users.filter((u) => value.includes(u.id));
-
-  useEffect(() => {
-    setEditValue(value);
-  }, [value]);
-
-  const handleSave = () => {
-    onChange(editValue);
-    setIsEditing(false);
-  };
-
-  const handleCancel = () => {
-    setEditValue(value);
-    setIsEditing(false);
-  };
-
   if (disabled) return null;
 
-  if (isEditing) {
-    return (
-      <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800">
-        <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">
-          Location Sales Reps
-        </label>
-        <MultiSelectUsers
-          value={editValue}
-          onChange={setEditValue}
-          placeholder="Select sales reps..."
-          size="sm"
-        />
-        <div className="flex items-center gap-2 mt-2">
-          <Button variant="primary" size="sm" onClick={handleSave}>
-            <Check className="w-3 h-3 mr-1" />
-            Save
-          </Button>
-          <Button variant="secondary" size="sm" onClick={handleCancel}>
-            <X className="w-3 h-3 mr-1" />
-            Cancel
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div 
-      className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 group cursor-pointer"
-      onClick={() => setIsEditing(true)}
-    >
-      <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
+    <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+      <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">
         Location Sales Reps
       </label>
-      <div className="flex items-center gap-2">
-        <Users className="w-3.5 h-3.5 text-slate-400" />
-        {selectedUsers.length === 0 ? (
-          <span className="text-sm text-slate-400 italic">Click to assign...</span>
-        ) : (
-          <div className="flex flex-wrap gap-1">
-            {selectedUsers.map((user) => (
-              <span
-                key={user.id}
-                className="inline-flex items-center px-1.5 py-0.5 bg-brand-50 dark:bg-brand-900/20 text-brand-700 dark:text-brand-300 rounded text-xs"
-              >
-                {user.name}
-              </span>
-            ))}
-          </div>
-        )}
-        <Pencil className="w-3 h-3 text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity ml-auto" />
-      </div>
+      <MultiSelectUsers
+        value={value}
+        onChange={onChange}
+        placeholder="Select sales reps..."
+        size="sm"
+      />
     </div>
   );
 }
@@ -641,6 +483,14 @@ export function CompanyDetailPage() {
   // Main office deletion - promote selection modal
   const [showPromoteModal, setShowPromoteModal] = useState(false);
   const [selectedPromoteAddressId, setSelectedPromoteAddressId] = useState<string>('');
+  
+  // Sales rep migration modal (when addresses drop to 1)
+  const [showSalesRepMigrationModal, setShowSalesRepMigrationModal] = useState(false);
+  const [migrationMessage, setMigrationMessage] = useState('');
+
+  // Sales rep mode change modal (when toggling between company/location mode)
+  const [showModeChangeModal, setShowModeChangeModal] = useState(false);
+  const [modeChangeMessage, setModeChangeMessage] = useState('');
 
   const company = companies.find((c) => c.id === id);
   const companyContacts = contacts.filter((c) => c.companyId === id);
@@ -701,6 +551,69 @@ export function CompanyDetailPage() {
   // Determine if "set by location" mode is active - use explicit flag
   const isSetByLocation = company.salesRepsByLocation === true;
 
+  // Issue 1: When addresses drop to 1 and was in "set by location" mode,
+  // migrate the remaining location's sales reps to company level and clear location data
+  useEffect(() => {
+    if (addressCount <= 1 && isSetByLocation) {
+      // Collect all location sales rep IDs
+      const locationSalesRepIds: string[] = [];
+      
+      // From main office
+      if (company.address?.salesRepIds) {
+        locationSalesRepIds.push(...company.address.salesRepIds);
+      } else if (company.address?.salesRepId) {
+        locationSalesRepIds.push(company.address.salesRepId);
+      }
+      
+      // From additional addresses
+      additionalAddresses.forEach(addr => {
+        if (addr.salesRepIds) {
+          locationSalesRepIds.push(...addr.salesRepIds);
+        } else if (addr.salesRepId) {
+          locationSalesRepIds.push(addr.salesRepId);
+        }
+      });
+      
+      // Remove duplicates
+      const uniqueSalesRepIds = [...new Set(locationSalesRepIds)];
+      
+      // Get sales rep names for the message
+      const { users } = useUsersStore.getState();
+      const salesRepNames = uniqueSalesRepIds
+        .map(id => users.find(u => u.id === id)?.name)
+        .filter(Boolean);
+      
+      // Clear location sales reps and migrate to company level
+      const updatedAddress = company.address ? {
+        ...company.address,
+        salesRepId: undefined,
+        salesRepIds: undefined,
+      } : undefined;
+      
+      const updatedAddresses = additionalAddresses.map(addr => ({
+        ...addr,
+        salesRepId: undefined,
+        salesRepIds: undefined,
+      }));
+      
+      updateCompany(company.id, {
+        salesRepsByLocation: false,
+        salesRepIds: uniqueSalesRepIds.length > 0 ? uniqueSalesRepIds : undefined,
+        salesRepId: undefined,
+        address: updatedAddress,
+        addresses: updatedAddresses.length > 0 ? updatedAddresses : undefined,
+      });
+      
+      // Show modal with appropriate message
+      if (uniqueSalesRepIds.length > 0) {
+        setMigrationMessage(`Only 1 address remains. The following sales reps have been moved from location-level to company-level:\n\n${salesRepNames.join(', ')}`);
+      } else {
+        setMigrationMessage('Only 1 address remains. Sales reps are no longer assigned by location. Please assign sales reps at the company level.');
+      }
+      setShowSalesRepMigrationModal(true);
+    }
+  }, [addressCount, isSetByLocation, company.id]);
+
   const handleFieldSave = (field: keyof Company, value: string) => {
     updateCompany(company.id, { [field]: value || undefined });
     toast.success('Updated', 'Company information saved');
@@ -726,12 +639,31 @@ export function CompanyDetailPage() {
         salesRepId: undefined,
         salesRepsByLocation: true,
       });
-      toast.success('Updated', 'Sales reps will now be set per location');
+      setModeChangeMessage('Sales rep assignment mode changed to per-location.\n\nYou can now assign different sales reps to each address below.');
+      setShowModeChangeModal(true);
     } else {
-      // Switching back to company-level mode - clear flag
+      // Switching back to company-level mode - clear ALL location sales reps (Option A: clean slate)
+      // Clear main office sales reps
+      const updatedAddress = company.address ? {
+        ...company.address,
+        salesRepId: undefined,
+        salesRepIds: undefined,
+      } : undefined;
+      
+      // Clear additional addresses sales reps
+      const updatedAddresses = additionalAddresses.map(addr => ({
+        ...addr,
+        salesRepId: undefined,
+        salesRepIds: undefined,
+      }));
+      
       updateCompany(company.id, { 
         salesRepsByLocation: false,
+        address: updatedAddress,
+        addresses: updatedAddresses.length > 0 ? updatedAddresses : undefined,
       });
+      setModeChangeMessage('Sales rep assignment mode changed to company-level.\n\nAll location-level sales rep assignments have been cleared. Please assign sales reps at the company level.');
+      setShowModeChangeModal(true);
     }
   };
 
@@ -768,20 +700,27 @@ export function CompanyDetailPage() {
     setContactFormData(initialContactFormData);
   };
 
-  const hasValidationErrors = () => {
-    if (contactFormData.email && !validateEmail(contactFormData.email)) return true;
-    if (contactFormData.phoneOffice && !validatePhone(contactFormData.phoneOffice)) return true;
-    if (contactFormData.phoneMobile && !validatePhone(contactFormData.phoneMobile)) return true;
-    return false;
-  };
-
   const handleSaveContact = () => {
     if (!contactFormData.firstName.trim() || !contactFormData.lastName.trim()) {
       toast.error('Error', 'First name and last name are required');
       return;
     }
 
-    if (hasValidationErrors()) {
+    // Validate email
+    if (contactFormData.email && !validateEmail(contactFormData.email)) {
+      toast.error('Error', 'Please enter a valid email address');
+      return;
+    }
+
+    // Validate office phone
+    if (contactFormData.phoneOffice && !validatePhone(contactFormData.phoneOffice)) {
+      toast.error('Error', 'Please enter a valid office phone number');
+      return;
+    }
+
+    // Validate mobile phone
+    if (contactFormData.phoneMobile && !validatePhone(contactFormData.phoneMobile)) {
+      toast.error('Error', 'Please enter a valid mobile phone number');
       return;
     }
 
@@ -801,13 +740,13 @@ export function CompanyDetailPage() {
   };
 
   const hasContactChanges =
-    (contactFormData.firstName.trim() !== '' ||
+    contactFormData.firstName.trim() !== '' ||
     contactFormData.lastName.trim() !== '' ||
     contactFormData.email !== '' ||
     contactFormData.phoneOffice !== '' ||
     contactFormData.phoneMobile !== '' ||
     contactFormData.role !== '' ||
-    contactFormData.notes !== '') && !hasValidationErrors();
+    contactFormData.notes !== '';
 
   // Address handlers
   const openAddAddressModal = () => {
@@ -949,8 +888,8 @@ export function CompanyDetailPage() {
               title="Company Details"
               icon={<Building2 className="w-4 h-4 text-slate-500" />}
             />
-            <div className="p-4 bg-white dark:bg-slate-900 rounded-b-lg">
-              <div className="space-y-3">
+            <div className="p-4 bg-white dark:bg-slate-900 rounded-b-lg overflow-visible">
+              <div className="space-y-3 overflow-visible">
                 <InlineField
                   label="Company Name"
                   value={company.name}
@@ -958,7 +897,7 @@ export function CompanyDetailPage() {
                   placeholder="Enter company name"
                   onEditingChange={handleEditingChange('name')}
                 />
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 overflow-visible">
                   <InlineField
                     label="Phone"
                     value={company.phone || ''}
@@ -1500,6 +1439,50 @@ export function CompanyDetailPage() {
           />
         </div>
       </Modal>
+
+      {/* Sales Rep Migration Modal */}
+      <Modal
+        isOpen={showSalesRepMigrationModal}
+        onClose={() => setShowSalesRepMigrationModal(false)}
+        title="Sales Reps Reassigned"
+        size="sm"
+        footer={
+          <Button variant="primary" onClick={() => setShowSalesRepMigrationModal(false)}>
+            OK
+          </Button>
+        }
+      >
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-full bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center flex-shrink-0">
+            <Info className="w-5 h-5 text-brand-600 dark:text-brand-400" />
+          </div>
+          <p className="text-sm text-slate-600 dark:text-slate-400 whitespace-pre-line">
+            {migrationMessage}
+          </p>
+        </div>
+      </Modal>
+
+      {/* Sales Rep Mode Change Modal */}
+      <Modal
+        isOpen={showModeChangeModal}
+        onClose={() => setShowModeChangeModal(false)}
+        title="Assignment Mode Changed"
+        size="sm"
+        footer={
+          <Button variant="primary" onClick={() => setShowModeChangeModal(false)}>
+            OK
+          </Button>
+        }
+      >
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-full bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center flex-shrink-0">
+            <Info className="w-5 h-5 text-brand-600 dark:text-brand-400" />
+          </div>
+          <p className="text-sm text-slate-600 dark:text-slate-400 whitespace-pre-line">
+            {modeChangeMessage}
+          </p>
+        </div>
+      </Modal>
     </Page>
   );
-}
+} 

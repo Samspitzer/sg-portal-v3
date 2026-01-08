@@ -17,8 +17,9 @@ import { AlphabetFilter } from '@/components/common/AlphabetFilter';
 import { DataTable, type DataTableColumn } from '@/components/common/DataTable';
 import { SelectFilter } from '@/components/common/SelectFilter';
 import { DuplicateContactModal } from '@/components/common/DuplicateContactModal';
-import { useClientsStore, useUsersStore, useToast, CONTACT_ROLES, type ContactRole, type Contact, type Company } from '@/contexts';
+import { useClientsStore, useUsersStore, useToast, CONTACT_ROLES, type ContactRole, type Contact, type Company, getCompanySalesRepIds } from '@/contexts';
 import { useDropdownKeyboard } from '@/hooks';
+import { validateEmail, validatePhone } from '@/utils/validation';
 
 interface ContactFormData {
   companyId: string;
@@ -223,6 +224,30 @@ export function ContactsPage() {
     return null;
   };
 
+  // Get sales rep IDs for a contact based on their assigned office
+  const getContactSalesRepIds = (contact: Contact, company: Company | undefined): string[] => {
+    if (!company) return [];
+    
+    // If contact has assigned office, get that office's sales reps (if set by location)
+    if (contact.officeAddressId && company.salesRepsByLocation) {
+      if (contact.officeAddressId === 'main-office') {
+        // Main office sales reps
+        if (company.address?.salesRepIds) return company.address.salesRepIds;
+        if (company.address?.salesRepId) return [company.address.salesRepId];
+      } else {
+        // Additional address sales reps
+        const addr = company.addresses?.find((a) => a.id === contact.officeAddressId);
+        if (addr?.salesRepIds) return addr.salesRepIds;
+        if (addr?.salesRepId) return [addr.salesRepId];
+      }
+      return [];
+    }
+    
+    // No assigned office OR company not using location-based sales reps
+    // Return all company sales reps (company-level + location-level)
+    return getCompanySalesRepIds(company);
+  };
+
   // Location filter options (based on contact's assigned office or all company locations if not assigned)
   const locationFilterOptions = useMemo(() => {
     const locationCounts = new Map<string, number>();
@@ -252,14 +277,16 @@ export function ContactsPage() {
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [contacts, companies]);
 
-  // Sales rep filter options (based on company salesRepId)
+  // Sales rep filter options - based on contact's assigned office sales reps or all company sales reps
   const salesRepFilterOptions = useMemo(() => {
     const repCounts = new Map<string, number>();
     contacts.forEach((contact) => {
       const company = getCompany(contact.companyId);
-      if (company?.salesRepId) {
-        repCounts.set(company.salesRepId, (repCounts.get(company.salesRepId) || 0) + 1);
-      }
+      const salesRepIds = getContactSalesRepIds(contact, company);
+      
+      salesRepIds.forEach((repId) => {
+        repCounts.set(repId, (repCounts.get(repId) || 0) + 1);
+      });
     });
     return Array.from(repCounts.entries())
       .map(([repId, count]) => {
@@ -298,8 +325,12 @@ export function ContactsPage() {
         }
       }
       
-      // Sales rep filter - based on company salesRepId
-      const matchesSalesRep = !salesRepFilter || company?.salesRepId === salesRepFilter;
+      // Sales rep filter - based on contact's assigned office or all company sales reps
+      let matchesSalesRep = true;
+      if (salesRepFilter) {
+        const contactSalesRepIds = getContactSalesRepIds(contact, company);
+        matchesSalesRep = contactSalesRepIds.includes(salesRepFilter);
+      }
       
       return matchesSearch && matchesCompany && matchesLetter && matchesLocation && matchesSalesRep;
     });
@@ -566,6 +597,24 @@ export function ContactsPage() {
     }
     if (!formData.lastName.trim()) {
       toast.error('Error', 'Last name is required');
+      return;
+    }
+
+    // Validate email
+    if (formData.email && !validateEmail(formData.email)) {
+      toast.error('Error', 'Please enter a valid email address');
+      return;
+    }
+
+    // Validate office phone
+    if (formData.phoneOffice && !validatePhone(formData.phoneOffice)) {
+      toast.error('Error', 'Please enter a valid office phone number');
+      return;
+    }
+
+    // Validate mobile phone
+    if (formData.phoneMobile && !validatePhone(formData.phoneMobile)) {
+      toast.error('Error', 'Please enter a valid mobile phone number');
       return;
     }
 
