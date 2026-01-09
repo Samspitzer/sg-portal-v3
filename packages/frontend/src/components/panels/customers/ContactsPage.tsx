@@ -18,7 +18,7 @@ import { DataTable, type DataTableColumn } from '@/components/common/DataTable';
 import { SelectFilter } from '@/components/common/SelectFilter';
 import { DuplicateContactModal } from '@/components/common/DuplicateContactModal';
 import { useClientsStore, useUsersStore, useToast, CONTACT_ROLES, type ContactRole, type Contact, type Company, getCompanySalesRepIds } from '@/contexts';
-import { useDropdownKeyboard, useDocumentTitle } from '@/hooks';
+import { useDropdownKeyboard, useDocumentTitle, getContactUrl, getCompanyUrl } from '@/hooks';
 import { validateEmail, validatePhone } from '@/utils/validation';
 
 interface ContactFormData {
@@ -101,6 +101,7 @@ export function ContactsPage() {
   const [duplicateType, setDuplicateType] = useState<'exact' | 'name-only'>('exact');
   const [duplicateContact, setDuplicateContact] = useState<{
     id: string;
+    slug?: string;
     firstName: string;
     lastName: string;
     email?: string;
@@ -726,7 +727,7 @@ export function ContactsPage() {
             onClick={(e) => {
               e.stopPropagation();
               const company = companies.find(c => c.id === contact.companyId);
-              if (company) navigate('/clients/companies/' + company.id);
+              if (company) navigate(getCompanyUrl(company));
             }}
             className="flex items-center gap-2 text-slate-600 dark:text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 cursor-pointer transition-colors"
           >
@@ -860,6 +861,7 @@ export function ContactsPage() {
       const newCompany = companies.find((c) => c.id === formData.companyId);
       setDuplicateContact({
         id: duplicate.contact.id,
+        slug: duplicate.contact.slug,
         firstName: duplicate.contact.firstName,
         lastName: duplicate.contact.lastName,
         email: duplicate.contact.email,
@@ -909,7 +911,8 @@ export function ContactsPage() {
         phoneOffice: newContactInfo.phoneOffice || duplicateContact.phoneOffice,
       });
       toast.success('Updated', duplicateContact.firstName + ' ' + duplicateContact.lastName + ' has been moved to ' + newContactInfo.companyName);
-      navigate('/clients/contacts/' + duplicateContact.id);
+      // Use slug if available, otherwise fall back to id
+      navigate(`/clients/contacts/${duplicateContact.slug || duplicateContact.id}`);
     }
     setShowDuplicateModal(false);
     setDuplicateContact(null);
@@ -1005,7 +1008,7 @@ export function ContactsPage() {
         columns={columns}
         data={filteredAndSortedContacts}
         rowKey={(contact) => contact.id}
-        onRowClick={(contact) => navigate('/clients/contacts/' + contact.id)}
+        onRowClick={(contact) => navigate(getContactUrl(contact))}
         sortField={sortField}
         sortDirection={sortDirection}
         onSort={handleSort}

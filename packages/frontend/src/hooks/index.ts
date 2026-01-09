@@ -11,6 +11,13 @@ export {
   type DependencyCategory,
   type DependencyItem,
 } from './useUserDependencies';
+// Slug-based URL routing hooks
+export {
+  useCompanyBySlug,
+  useContactBySlug,
+  getCompanyUrl,
+  getContactUrl,
+} from './useSlugParam';
 // Re-export registry functions from contexts for convenience
 export {
   registerUserDependency,

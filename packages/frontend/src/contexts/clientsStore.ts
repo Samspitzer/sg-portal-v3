@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
 import { registerUserDependency } from './userDependencyRegistry';
+import { generateCompanySlug, generateContactSlug } from '@/utils/slugUtils';
 
 // Contact Role options
 export const CONTACT_ROLES = [
@@ -41,6 +42,7 @@ export interface CompanyAddress {
 
 export interface Company {
   id: string;
+  slug?: string;  // URL-friendly identifier (e.g., "acme-construction")
   name: string;
   phone?: string;
   website?: string;
@@ -157,6 +159,7 @@ export function isDuplicateAddress(
 
 export interface Contact {
   id: string;
+  slug?: string;  // URL-friendly identifier (e.g., "john-doe")
   companyId: string; // Required - links to company
   firstName: string;
   lastName: string;
@@ -178,10 +181,11 @@ interface ClientsState {
 
 interface ClientsStore extends ClientsState {
   // Company actions
-  addCompany: (company: Omit<Company, 'id' | 'createdAt' | 'updatedAt'>) => void;
+  addCompany: (company: Omit<Company, 'id' | 'slug' | 'createdAt' | 'updatedAt'>) => Company;
   updateCompany: (id: string, data: Partial<Company>) => void;
   deleteCompany: (id: string) => void;
   getCompanyById: (id: string) => Company | undefined;
+  getCompanyBySlug: (slug: string) => Company | undefined;
 
   // Company address actions
   addCompanyAddress: (companyId: string, address: Omit<CompanyAddress, 'id'>) => void;
@@ -189,15 +193,19 @@ interface ClientsStore extends ClientsState {
   deleteCompanyAddress: (companyId: string, addressId: string) => void;
 
   // Contact actions
-  addContact: (contact: Omit<Contact, 'id' | 'createdAt' | 'updatedAt'>) => void;
+  addContact: (contact: Omit<Contact, 'id' | 'slug' | 'createdAt' | 'updatedAt'>) => Contact;
   updateContact: (id: string, data: Partial<Contact>) => void;
   deleteContact: (id: string) => void;
   getContactsByCompany: (companyId: string) => Contact[];
+  getContactBySlug: (slug: string) => Contact | undefined;
   
   // Additional contact method actions
   addContactMethod: (contactId: string, method: Omit<AdditionalContact, 'id'>) => void;
   updateContactMethod: (contactId: string, methodId: string, data: Partial<AdditionalContact>) => void;
   deleteContactMethod: (contactId: string, methodId: string) => void;
+  
+  // Migration helper - generate slugs for existing records without slugs
+  migrateExistingSlugs: () => void;
 }
 
 export const useClientsStore = create<ClientsStore>()(
@@ -211,23 +219,39 @@ export const useClientsStore = create<ClientsStore>()(
         // Company actions
         addCompany: (companyData) => {
           const now = new Date().toISOString();
+          const state = get();
+          
+          // Generate unique slug from company name
+          const slug = generateCompanySlug(companyData.name, state.companies);
+          
           const newCompany: Company = {
             ...companyData,
             id: `company-${Date.now()}`,
+            slug,
             createdAt: now,
             updatedAt: now,
           };
           set((state) => ({ companies: [...state.companies, newCompany] }));
+          return newCompany;
         },
 
         updateCompany: (id, data) => {
-          set((state) => ({
-            companies: state.companies.map((company) =>
-              company.id === id
-                ? { ...company, ...data, updatedAt: new Date().toISOString() }
-                : company
-            ),
-          }));
+          set((state) => {
+            // If name is being updated, regenerate the slug
+            let updatedData = { ...data };
+            if (data.name) {
+              const otherCompanies = state.companies.filter(c => c.id !== id);
+              updatedData.slug = generateCompanySlug(data.name, otherCompanies, id);
+            }
+            
+            return {
+              companies: state.companies.map((company) =>
+                company.id === id
+                  ? { ...company, ...updatedData, updatedAt: new Date().toISOString() }
+                  : company
+              ),
+            };
+          });
         },
 
         deleteCompany: (id) => {
@@ -239,6 +263,10 @@ export const useClientsStore = create<ClientsStore>()(
 
         getCompanyById: (id) => {
           return get().companies.find((company) => company.id === id);
+        },
+        
+        getCompanyBySlug: (slug) => {
+          return get().companies.find((company) => company.slug === slug);
         },
 
         // Company address actions
@@ -295,23 +323,49 @@ export const useClientsStore = create<ClientsStore>()(
         // Contact actions
         addContact: (contactData) => {
           const now = new Date().toISOString();
+          const state = get();
+          
+          // Generate unique slug from contact name
+          const slug = generateContactSlug(
+            contactData.firstName,
+            contactData.lastName,
+            state.contacts
+          );
+          
           const newContact: Contact = {
             ...contactData,
             id: `contact-${Date.now()}`,
+            slug,
             createdAt: now,
             updatedAt: now,
           };
           set((state) => ({ contacts: [...state.contacts, newContact] }));
+          return newContact;
         },
 
         updateContact: (id, data) => {
-          set((state) => ({
-            contacts: state.contacts.map((contact) =>
-              contact.id === id
-                ? { ...contact, ...data, updatedAt: new Date().toISOString() }
-                : contact
-            ),
-          }));
+          set((state) => {
+            let updatedData = { ...data };
+            
+            // If name is being updated, regenerate the slug
+            if (data.firstName !== undefined || data.lastName !== undefined) {
+              const currentContact = state.contacts.find(c => c.id === id);
+              if (currentContact) {
+                const firstName = data.firstName ?? currentContact.firstName;
+                const lastName = data.lastName ?? currentContact.lastName;
+                const otherContacts = state.contacts.filter(c => c.id !== id);
+                updatedData.slug = generateContactSlug(firstName, lastName, otherContacts, id);
+              }
+            }
+            
+            return {
+              contacts: state.contacts.map((contact) =>
+                contact.id === id
+                  ? { ...contact, ...updatedData, updatedAt: new Date().toISOString() }
+                  : contact
+              ),
+            };
+          });
         },
 
         deleteContact: (id) => {
@@ -322,6 +376,10 @@ export const useClientsStore = create<ClientsStore>()(
 
         getContactsByCompany: (companyId) => {
           return get().contacts.filter((contact) => contact.companyId === companyId);
+        },
+        
+        getContactBySlug: (slug) => {
+          return get().contacts.find((contact) => contact.slug === slug);
         },
 
         // Additional contact method actions
@@ -374,6 +432,52 @@ export const useClientsStore = create<ClientsStore>()(
             ),
           }));
         },
+        
+        // Migration helper - generate slugs for existing records without slugs
+        migrateExistingSlugs: () => {
+          set((state) => {
+            // Migrate companies
+            const migratedCompanies = state.companies.map((company, index) => {
+              if (company.slug) return company;
+              
+              // Get slugs of companies processed so far
+              const existingSlugs = state.companies
+                .slice(0, index)
+                .filter(c => c.slug)
+                .map(c => c.slug!);
+              
+              const slug = generateCompanySlug(company.name, 
+                existingSlugs.map(s => ({ id: '', slug: s }))
+              );
+              
+              return { ...company, slug };
+            });
+            
+            // Migrate contacts
+            const migratedContacts = state.contacts.map((contact, index) => {
+              if (contact.slug) return contact;
+              
+              // Get slugs of contacts processed so far
+              const existingSlugs = state.contacts
+                .slice(0, index)
+                .filter(c => c.slug)
+                .map(c => c.slug!);
+              
+              const slug = generateContactSlug(
+                contact.firstName,
+                contact.lastName,
+                existingSlugs.map(s => ({ id: '', slug: s }))
+              );
+              
+              return { ...contact, slug };
+            });
+            
+            return {
+              companies: migratedCompanies,
+              contacts: migratedContacts,
+            };
+          });
+        },
       }),
       { name: 'sg-portal-clients' }
     ),
@@ -401,7 +505,8 @@ registerUserDependency({
   },
   getItemId: (company) => company.id,
   getItemName: (company) => company.name,
-  getItemUrl: (company) => `/clients/companies/${company.id}`,
+  // Use slug for URL if available
+  getItemUrl: (company) => `/clients/companies/${company.slug || company.id}`,
   reassign: (companyId, newUserId) => {
     // When reassigning, set as the only sales rep (replaces all)
     useClientsStore.getState().updateCompany(companyId, { 

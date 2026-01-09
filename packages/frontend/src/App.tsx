@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { MsalProvider } from '@azure/msal-react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -27,6 +28,7 @@ import {
   ProfilePage,
   NotificationSettingsPage,
 } from '@/components/panels';
+import { useClientsStore } from '@/contexts';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -37,6 +39,17 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+// Component to handle one-time migrations on app startup
+function AppInitializer({ children }: { children: React.ReactNode }) {
+  useEffect(() => {
+    // Migrate existing companies/contacts to have slugs (one-time migration)
+    // This is safe to call multiple times - it only updates records without slugs
+    useClientsStore.getState().migrateExistingSlugs();
+  }, []);
+
+  return <>{children}</>;
+}
 
 function AppRoutes() {
   return (
@@ -203,9 +216,11 @@ export function App() {
     <MsalProvider instance={msalInstance}>
       <QueryClientProvider client={queryClient}>
         <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-          <AppRoutes />
-          <PageNavigationGuard />
-          <ToastContainer />
+          <AppInitializer>
+            <AppRoutes />
+            <PageNavigationGuard />
+            <ToastContainer />
+          </AppInitializer>
         </BrowserRouter>
       </QueryClientProvider>
     </MsalProvider>

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { clsx } from 'clsx';
 import {
   User,
@@ -28,7 +28,7 @@ import { Page } from '@/components/layout';
 import { Card, CardContent, Button, ConfirmModal, Modal, Input, UnsavedChangesModal } from '@/components/common';
 import { CollapsibleSection } from '@/components/common/CollapsibleSection';
 import { useClientsStore, useUsersStore, useToast, useNavigationGuardStore, CONTACT_ROLES, type Contact } from '@/contexts';
-import { useDropdownKeyboard, useDocumentTitle } from '@/hooks';
+import { useDropdownKeyboard, useDocumentTitle, useContactBySlug, getCompanyUrl } from '@/hooks';
 import { validateEmail, validatePhone, formatPhoneNumber } from '@/utils/validation';
 
 // Non-collapsible Section Header (matches CollapsibleSection style)
@@ -1184,10 +1184,11 @@ function CompanyField({
 }
 
 export function ContactDetailPage() {
-  const { id } = useParams<{ id: string }>();
+  // Use slug-based routing hook
+  const { contact, company, notFound } = useContactBySlug();
   const navigate = useNavigate();
   const toast = useToast();
-  const { companies, contacts, updateContact, deleteContact, addContactMethod, updateContactMethod, deleteContactMethod } = useClientsStore();
+  const { companies, updateContact, deleteContact, addContactMethod, updateContactMethod, deleteContactMethod } = useClientsStore();
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [editingFields, setEditingFields] = useState<Map<string, boolean>>(new Map());
@@ -1204,8 +1205,6 @@ export function ContactDetailPage() {
   const [newMethodLabel, setNewMethodLabel] = useState('');
   const [methodValidationError, setMethodValidationError] = useState<string | null>(null);
 
-  const contact = contacts.find((c) => c.id === id);
-  const company = contact ? companies.find((c) => c.id === contact.companyId) : null;
   useDocumentTitle(contact ? `${contact.firstName} ${contact.lastName}` : 'Contact');
 
   // Build list of company addresses for office location selector
@@ -1233,9 +1232,9 @@ export function ContactDetailPage() {
   }, [company]);
 
   // Persist fieldsNeedingReview in localStorage so it survives navigation
-  const reviewStorageKey = `contact-fields-review-${id}`;
+  const reviewStorageKey = contact ? `contact-fields-review-${contact.id}` : '';
   const [fieldsNeedingReview, setFieldsNeedingReviewState] = useState<Set<string>>(() => {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && reviewStorageKey) {
       const stored = localStorage.getItem(reviewStorageKey);
       if (stored) {
         try {
@@ -1346,7 +1345,7 @@ export function ContactDetailPage() {
     toast.success('Confirmed', 'All contact information has been confirmed');
   };
 
-  if (!contact) {
+  if (notFound || !contact) {
     return (
       <Page title="Contact Not Found" description="The requested contact could not be found.">
         <Card>
@@ -1584,7 +1583,7 @@ export function ContactDetailPage() {
                       <span
                         onClick={(e) => {
                           e.stopPropagation();
-                          navigate('/clients/companies/' + company.id);
+                          navigate(getCompanyUrl(company));
                         }}
                         className="text-sm text-brand-600 dark:text-brand-400 hover:underline cursor-pointer"
                       >

@@ -976,6 +976,59 @@ if (isRadarConfigured()) {
 
 ---
 
+### slugUtils.ts
+**File:** `slugUtils.ts`
+
+**Purpose:** URL-friendly slug generation for clean URLs like `/clients/companies/acme-construction`.
+
+**Functions:**
+
+```tsx
+import { 
+  generateSlug,
+  generateUniqueSlug,
+  generateCompanySlug,
+  generateContactSlug,
+  isLegacyId,
+  isValidSlug
+} from '@/utils/slugUtils';
+
+// Generate basic slug
+generateSlug('Acme Construction LLC');  // 'acme-construction-llc'
+generateSlug("John O'Brien");           // 'john-obrien'
+generateSlug('ABC & Sons, Inc.');       // 'abc-and-sons-inc'
+
+// Generate unique slug (handles duplicates)
+generateUniqueSlug('Acme', ['acme', 'acme-2']);  // 'acme-3'
+
+// Generate company slug
+const slug = generateCompanySlug('Acme Construction', companies);
+
+// Generate contact slug
+const slug = generateContactSlug('John', 'Doe', contacts);
+
+// Check if param is legacy ID (for redirects)
+isLegacyId('company-1767885526746');  // true
+isLegacyId('acme-construction');       // false
+
+// Validate slug format
+isValidSlug('acme-construction');  // true
+isValidSlug('Acme Construction');  // false
+```
+
+**Auto-Generation:**
+- Slugs are automatically generated when creating companies/contacts
+- Slugs are automatically updated when names change
+- Duplicates get numbered suffixes: `john-doe`, `john-doe-2`, `john-doe-3`
+
+**Migration:**
+Existing records without slugs can be migrated:
+```tsx
+useClientsStore.getState().migrateExistingSlugs();
+```
+
+---
+
 ## Custom Hooks
 
 Location: `src/hooks/`
@@ -1141,6 +1194,89 @@ import { useSafeNavigate } from '@/hooks';
 
 const safeNavigate = useSafeNavigate();
 safeNavigate('/some-path');
+```
+
+---
+
+### useCompanyBySlug
+**File:** `useSlugParam.ts`
+
+**Purpose:** Get a company by its URL slug parameter. Handles legacy ID URLs with automatic redirect.
+
+**Returns:**
+- `company`: Company | undefined - The company found by slug
+- `param`: string | undefined - The URL parameter
+- `notFound`: boolean - True if company was not found
+- `isRedirecting`: boolean - True if redirecting from legacy ID URL
+
+**Usage:**
+```tsx
+import { useCompanyBySlug } from '@/hooks';
+
+export function CompanyDetailPage() {
+  const { company, notFound } = useCompanyBySlug();
+  
+  if (notFound || !company) {
+    return <NotFoundMessage />;
+  }
+  
+  return <CompanyDetails company={company} />;
+}
+```
+
+---
+
+### useContactBySlug
+**File:** `useSlugParam.ts`
+
+**Purpose:** Get a contact by its URL slug parameter. Also returns the contact's company.
+
+**Returns:**
+- `contact`: Contact | undefined - The contact found by slug
+- `company`: Company | undefined - The contact's company (may be undefined if orphaned)
+- `param`: string | undefined - The URL parameter
+- `notFound`: boolean - True if contact was not found
+- `isRedirecting`: boolean - True if redirecting from legacy ID URL
+
+**Usage:**
+```tsx
+import { useContactBySlug } from '@/hooks';
+
+export function ContactDetailPage() {
+  const { contact, company, notFound } = useContactBySlug();
+  
+  if (notFound || !contact) {
+    return <NotFoundMessage />;
+  }
+  
+  return <ContactDetails contact={contact} company={company} />;
+}
+```
+
+---
+
+### getCompanyUrl / getContactUrl
+**File:** `useSlugParam.ts`
+
+**Purpose:** Generate URL paths using slugs. Use these everywhere you need to link to a company or contact.
+
+**Usage:**
+```tsx
+import { getCompanyUrl, getContactUrl } from '@/hooks';
+
+// Navigate to company
+navigate(getCompanyUrl(company));  // → "/clients/companies/acme-construction"
+
+// Navigate to contact
+navigate(getContactUrl(contact));  // → "/clients/contacts/john-doe"
+
+// In DataTable row click
+onRowClick={(company) => navigate(getCompanyUrl(company))}
+
+// In links
+<span onClick={() => navigate(getCompanyUrl(company))}>
+  {company.name}
+</span>
 ```
 
 ---
@@ -1968,15 +2104,17 @@ src/
 │   ├── useFormChanges.ts
 │   ├── useNavigationGuard.ts
 │   ├── useSafeNavigate.ts
+│   ├── useSlugParam.ts        # Slug-based URL routing hooks
 │   └── useUserDependencies.ts # User dependency hooks
 ├── utils/
 │   ├── index.ts               # Exports all utils
 │   ├── validation.ts          # Email/phone/website/address validation & formatting
-│   └── addressAutocomplete.ts # Radar.io address autocomplete
+│   ├── addressAutocomplete.ts # Radar.io address autocomplete
+│   └── slugUtils.ts           # URL slug generation utilities
 └── contexts/
     ├── index.ts
     ├── authStore.ts           # Authentication state
-    ├── clientsStore.ts        # Companies & Contacts data
+    ├── clientsStore.ts        # Companies & Contacts data (with slug support)
     ├── companyStore.ts        # Company settings (your company)
     ├── usersStore.ts          # Portal users data
     ├── departmentsStore.ts    # Departments & Positions
@@ -2040,6 +2178,8 @@ When adding new features, **ALWAYS check if these exist first:**
 - [ ] Need review flow after data change? → Follow Pattern #12 (Contact Review Flow)
 - [ ] Need "needs attention" filter? → Follow Pattern #13
 - [ ] Need clearable fields (not deletable)? → Follow Pattern #14 (trash icon clears value)
+- [ ] Linking to companies/contacts? → Use `getCompanyUrl()` / `getContactUrl()` from hooks
+- [ ] Creating a detail page for companies/contacts? → Use `useCompanyBySlug()` / `useContactBySlug()` hooks
 
 ### Layout
 - [ ] Page with DataTable? → Add `fillHeight` prop to `Page`
@@ -2167,4 +2307,66 @@ For fields that can be cleared (but not deleted), add a hover trash icon.
 
 ---
 
-*Last updated: January 8, 2026*
+### 15. Slug-Based URLs
+
+Companies and Contacts use clean, readable URLs based on their names.
+
+**URL Format:**
+- Companies: `/clients/companies/acme-construction` (instead of `/clients/companies/company-1767885526746`)
+- Contacts: `/clients/contacts/john-doe` (instead of `/clients/contacts/contact-1767885526746`)
+
+**Data Structure:**
+```tsx
+interface Company {
+  id: string;
+  slug?: string;  // URL-friendly identifier
+  name: string;
+  // ...
+}
+
+interface Contact {
+  id: string;
+  slug?: string;  // URL-friendly identifier
+  firstName: string;
+  lastName: string;
+  // ...
+}
+```
+
+**Auto-Generation:**
+- Slugs are generated automatically when creating records
+- Slugs update automatically when names change
+- Duplicate names get numbered suffixes: `john-doe`, `john-doe-2`
+
+**Detail Pages (use hooks):**
+```tsx
+import { useCompanyBySlug, useContactBySlug } from '@/hooks';
+
+// In CompanyDetailPage
+const { company, notFound } = useCompanyBySlug();
+
+// In ContactDetailPage
+const { contact, company, notFound } = useContactBySlug();
+```
+
+**Navigation (use helpers):**
+```tsx
+import { getCompanyUrl, getContactUrl } from '@/hooks';
+
+// In list pages
+onRowClick={(company) => navigate(getCompanyUrl(company))}
+onRowClick={(contact) => navigate(getContactUrl(contact))}
+
+// In links
+<span onClick={() => navigate(getCompanyUrl(company))}>
+  {company.name}
+</span>
+```
+
+**Legacy URL Support:**
+- Old ID-based URLs automatically redirect to slug URLs
+- No broken bookmarks
+
+---
+
+*Last updated: January 9, 2026*

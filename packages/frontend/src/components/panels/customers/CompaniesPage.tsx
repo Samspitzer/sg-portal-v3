@@ -16,7 +16,7 @@ import { DataTable, type DataTableColumn } from '@/components/common/DataTable';
 import { SelectFilter } from '@/components/common/SelectFilter';
 import { DuplicateCompanyModal } from '@/components/common/DuplicateCompanyModal';
 import { validatePhone, validateWebsite } from '@/utils/validation';
-import { useDocumentTitle } from '@/hooks';
+import { useDocumentTitle, getCompanyUrl } from '@/hooks';
 
 interface CompanyFormData {
   name: string;
@@ -72,6 +72,7 @@ export function CompaniesPage() {
   const [showDuplicateModal, setShowDuplicateModal] = useState(false);
   const [duplicateCompany, setDuplicateCompany] = useState<{
     id: string;
+    slug?: string;
     name: string;
     phone?: string;
     website?: string;
@@ -510,6 +511,7 @@ export function CompaniesPage() {
     if (existing) {
       setDuplicateCompany({
         id: existing.id,
+        slug: existing.slug,
         name: existing.name,
         phone: existing.phone,
         website: existing.website,
@@ -550,7 +552,8 @@ export function CompaniesPage() {
 
   const handleViewExistingCompany = () => {
     if (duplicateCompany) {
-      navigate('/clients/companies/' + duplicateCompany.id);
+      // Use slug if available, otherwise fall back to id
+      navigate(`/clients/companies/${duplicateCompany.slug || duplicateCompany.id}`);
     }
     setShowDuplicateModal(false);
     setDuplicateCompany(null);
@@ -600,7 +603,7 @@ export function CompaniesPage() {
         columns={columns}
         data={filteredAndSortedCompanies}
         rowKey={(company) => company.id}
-        onRowClick={(company) => navigate('/clients/companies/' + company.id)}
+        onRowClick={(company) => navigate(getCompanyUrl(company))}
         sortField={sortField}
         sortDirection={sortDirection}
         onSort={handleSort}

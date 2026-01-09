@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { clsx } from 'clsx';
 import {
   Building2,
@@ -31,7 +31,7 @@ import {
   validateEmail,
   validateWebsite,
 } from '@/utils/validation';
-import { useDocumentTitle } from '@/hooks';
+import { useDocumentTitle, useCompanyBySlug, getContactUrl } from '@/hooks';
 
 // Contact form data interface
 interface ContactFormData {
@@ -458,10 +458,11 @@ function AddressSalesRepField({
 const roleOptions = CONTACT_ROLES.map((role) => ({ value: role, label: role }));
 
 export function CompanyDetailPage() {
-  const { id } = useParams<{ id: string }>();
+  // Use slug-based routing hook
+  const { company, notFound } = useCompanyBySlug();
   const navigate = useNavigate();
   const toast = useToast();
-  const { companies, contacts, updateCompany, deleteCompany, addContact, addCompanyAddress, updateCompanyAddress, deleteCompanyAddress } = useClientsStore();
+  const { contacts, updateCompany, deleteCompany, addContact, addCompanyAddress, updateCompanyAddress, deleteCompanyAddress } = useClientsStore();
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [editingFields, setEditingFields] = useState<Map<string, boolean>>(new Map());
@@ -493,8 +494,8 @@ export function CompanyDetailPage() {
   const [showModeChangeModal, setShowModeChangeModal] = useState(false);
   const [modeChangeMessage, setModeChangeMessage] = useState('');
 
-  const company = companies.find((c) => c.id === id);
-  const companyContacts = contacts.filter((c) => c.companyId === id);
+  // Get contacts for this company
+  const companyContacts = company ? contacts.filter((c) => c.companyId === company.id) : [];
   useDocumentTitle(company?.name || 'Company');
 
   const hasUnsavedEdits = Array.from(editingFields.values()).some((hasChanges) => hasChanges);
@@ -520,7 +521,7 @@ export function CompanyDetailPage() {
     };
   }, []);
 
-  if (!company) {
+  if (notFound || !company) {
     return (
       <Page title="Company Not Found" description="The requested company could not be found.">
         <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
@@ -1100,7 +1101,7 @@ export function CompanyDetailPage() {
                 {companyContacts.map((contact) => (
                   <div
                     key={contact.id}
-                    onClick={() => navigate('/clients/contacts/' + contact.id)}
+                    onClick={() => navigate(getContactUrl(contact))}
                     className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer transition-colors"
                   >
                     <div className="w-8 h-8 rounded-full bg-accent-100 dark:bg-accent-900/30 flex items-center justify-center text-xs font-semibold text-accent-600 dark:text-accent-400">
