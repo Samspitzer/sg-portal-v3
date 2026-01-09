@@ -1969,10 +1969,133 @@ When adding new features, **ALWAYS check if these exist first:**
 - [ ] Need multiple addresses? → Follow CompanyDetailPage pattern
 - [ ] Need sales rep assignment? → Follow Pattern #11 (company vs location level)
 - [ ] Need modal for important changes? → Follow Modal vs Toast Guidelines
+- [ ] Need review flow after data change? → Follow Pattern #12 (Contact Review Flow)
+- [ ] Need "needs attention" filter? → Follow Pattern #13
+- [ ] Need clearable fields (not deletable)? → Follow Pattern #14 (trash icon clears value)
 
 ### Layout
 - [ ] Page with DataTable? → Add `fillHeight` prop to `Page`
 - [ ] Page in a panel? → Use appropriate `*Layout` wrapper
+
+---
+
+## Established Patterns (Continued)
+
+### 12. Contact Review Flow (Company Change)
+
+When a contact's company is changed, fields need to be reviewed to ensure contact info is still valid.
+
+**State Management:**
+```tsx
+// Stored in localStorage for persistence across sessions
+const storageKey = `contact-fields-review-${contactId}`;
+
+// Fields that need review after company change
+const reviewFields = ['role', 'email', 'phoneOffice', 'phoneMobile', ...additionalContactIds];
+```
+
+**Trigger:**
+- When `companyId` is changed via `handleCompanyChange()`
+- Shows warning modal (OK button only - acknowledgment, not choice)
+- Sets fields needing review in localStorage
+
+**Auto-Confirm Behavior:**
+- Editing and saving a field → Auto-confirms that field
+- Clearing a field (via trash icon) → Auto-confirms that field
+- Click "Confirm" button on individual field → Confirms that field
+- Click "Confirm All" button → Confirms all fields at once
+
+**UI Elements:**
+- Warning banner at top of ContactDetailPage (only shows when fields need review)
+- "Needs Review" badge on each field needing review
+- "Confirm" button on each field
+- "Confirm All" button in warning banner
+
+**Helper Functions:**
+```tsx
+// Check if contact needs review (from localStorage)
+const contactNeedsReview = (contactId: string) => {
+  const stored = localStorage.getItem(`contact-fields-review-${contactId}`);
+  if (stored) {
+    const fields = JSON.parse(stored);
+    return Array.isArray(fields) && fields.length > 0;
+  }
+  return false;
+};
+
+// Check if contact needs attention (orphaned OR needs review)
+const contactNeedsAttention = (contact: Contact) => {
+  return isOrphanedContact(contact.companyId) || contactNeedsReview(contact.id);
+};
+```
+
+---
+
+### 13. "Needs Attention" Filter Pattern
+
+For list pages, show a filter button that only appears when items need attention.
+
+**Implementation (ContactsPage example):**
+```tsx
+// State
+const [attentionFilter, setAttentionFilter] = useState<'all' | 'needs-attention'>('all');
+
+// Count items needing attention
+const contactsNeedingAttentionCount = useMemo(() => {
+  return contacts.filter(contactNeedsAttention).length;
+}, [contacts, companies]);
+
+// Filter logic
+const matchesAttention = attentionFilter === 'all' || contactNeedsAttention(contact);
+
+// UI - only show when count > 0
+{contactsNeedingAttentionCount > 0 && (
+  <button
+    onClick={() => setAttentionFilter(attentionFilter === 'all' ? 'needs-attention' : 'all')}
+    className={`... ${attentionFilter === 'needs-attention' ? 'active-styles' : 'inactive-styles'}`}
+  >
+    <AlertTriangle className="w-4 h-4" />
+    <span>{count} contacts need attention</span>
+  </button>
+)}
+```
+
+**Styling:**
+- Amber/warning color scheme
+- Toggle state changes text: "X contacts need attention" ↔ "Showing X contacts needing attention"
+- Include in `hasActiveFilters` and `clearFilters()`
+
+---
+
+### 14. Clearable Fields with Trash Icon
+
+For fields that can be cleared (but not deleted), add a hover trash icon.
+
+**Pattern:**
+```tsx
+<div className="relative group">
+  <InlineField
+    label="Email"
+    value={contact.email || ''}
+    onSave={(v) => handleFieldSave('email', v)}
+    type="email"
+    // ... other props
+  />
+  {contact.email && (
+    <button
+      onClick={() => handleFieldSave('email', '')}
+      className="absolute top-1 right-0 p-1 text-slate-300 hover:text-danger-600 opacity-0 group-hover:opacity-100 transition-opacity rounded"
+      title="Clear"
+    >
+      <Trash2 className="w-3.5 h-3.5" />
+    </button>
+  )}
+</div>
+```
+
+**Key Differences from Delete:**
+- Clear: Sets value to empty string, field remains
+- Delete: Removes the entire field/record
 
 ---
 
