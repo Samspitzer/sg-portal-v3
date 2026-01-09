@@ -9,6 +9,8 @@ interface UseDropdownKeyboardOptions<T> {
   loop?: boolean;
   /** Optional: index of an item that should be treated as a special "add new" option at the top */
   hasAddOption?: boolean;
+  /** If true, skips items with disabled property when navigating */
+  skipDisabled?: boolean;
 }
 
 interface UseDropdownKeyboardReturn {
@@ -49,11 +51,45 @@ export function useDropdownKeyboard<T>({
   onClose,
   loop = true,
   hasAddOption = false,
+  skipDisabled = false,
 }: UseDropdownKeyboardOptions<T>): UseDropdownKeyboardReturn {
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
 
   // Total count includes the "add new" option if present
   const totalCount = items.length + (hasAddOption ? 1 : 0);
+
+  // Helper to check if an item is disabled
+  const isItemDisabled = useCallback((index: number): boolean => {
+    if (!skipDisabled) return false;
+    if (hasAddOption && index === 0) return false; // "Add new" option is never disabled
+    const itemIndex = hasAddOption ? index - 1 : index;
+    const item = items[itemIndex] as { disabled?: boolean } | undefined;
+    return item?.disabled === true;
+  }, [skipDisabled, hasAddOption, items]);
+
+  // Find next non-disabled index
+  const findNextEnabled = useCallback((startIndex: number, direction: 1 | -1): number => {
+    if (totalCount === 0) return -1;
+    
+    let index = startIndex;
+    let attempts = 0;
+    
+    while (attempts < totalCount) {
+      if (!isItemDisabled(index)) {
+        return index;
+      }
+      index = index + direction;
+      if (loop) {
+        if (index >= totalCount) index = 0;
+        if (index < 0) index = totalCount - 1;
+      } else {
+        if (index >= totalCount || index < 0) return startIndex;
+      }
+      attempts++;
+    }
+    
+    return -1; // All items disabled
+  }, [totalCount, loop, isItemDisabled]);
 
   // Reset highlight when dropdown closes or items change
   useEffect(() => {
@@ -73,7 +109,7 @@ export function useDropdownKeyboard<T>({
 
   // Helper function to select the highlighted item
   const selectHighlightedItem = useCallback(() => {
-    if (highlightedIndex >= 0) {
+    if (highlightedIndex >= 0 && !isItemDisabled(highlightedIndex)) {
       // If hasAddOption, index 0 is the "add" option, so items start at index 1
       if (hasAddOption) {
         if (highlightedIndex === 0) {
@@ -93,7 +129,7 @@ export function useDropdownKeyboard<T>({
         }
       }
     }
-  }, [highlightedIndex, hasAddOption, items, onSelect]);
+  }, [highlightedIndex, hasAddOption, items, onSelect, isItemDisabled]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -105,11 +141,8 @@ export function useDropdownKeyboard<T>({
           e.stopPropagation();
           setHighlightedIndex((prev) => {
             if (totalCount === 0) return -1;
-            if (prev < 0) return 0;
-            if (prev >= totalCount - 1) {
-              return loop ? 0 : prev;
-            }
-            return prev + 1;
+            const startIndex = prev < 0 ? 0 : (prev >= totalCount - 1 ? (loop ? 0 : prev) : prev + 1);
+            return findNextEnabled(startIndex, 1);
           });
           break;
 
@@ -118,10 +151,8 @@ export function useDropdownKeyboard<T>({
           e.stopPropagation();
           setHighlightedIndex((prev) => {
             if (totalCount === 0) return -1;
-            if (prev <= 0) {
-              return loop ? totalCount - 1 : 0;
-            }
-            return prev - 1;
+            const startIndex = prev <= 0 ? (loop ? totalCount - 1 : 0) : prev - 1;
+            return findNextEnabled(startIndex, -1);
           });
           break;
 
@@ -146,7 +177,7 @@ export function useDropdownKeyboard<T>({
           break;
       }
     },
-    [isOpen, totalCount, loop, selectHighlightedItem, onClose]
+    [isOpen, totalCount, loop, selectHighlightedItem, onClose, findNextEnabled]
   );
 
   return {

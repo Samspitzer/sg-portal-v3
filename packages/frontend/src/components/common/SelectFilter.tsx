@@ -7,6 +7,7 @@ export interface SelectFilterOption {
   value: string;
   label: string;
   count?: number;
+  disabled?: boolean;
 }
 
 export interface SelectFilterProps {
@@ -72,7 +73,7 @@ export function SelectFilter({
     items: allOptions,
     isOpen,
     onSelect: (option) => {
-      if (option) {
+      if (option && !option.disabled) {
         onChange(option.value);
         setIsOpen(false);
         setSearchQuery('');
@@ -84,6 +85,7 @@ export function SelectFilter({
       setSearchQuery('');
       buttonRef.current?.focus();
     },
+    skipDisabled: true,
   });
 
   // Close dropdown when clicking outside
@@ -262,10 +264,13 @@ export function SelectFilter({
               <button
                 key={option.value || 'all'}
                 type="button"
-                onClick={() => handleSelect(option.value)}
+                onClick={() => !option.disabled && handleSelect(option.value)}
+                disabled={option.disabled}
                 className={clsx(
                   'w-full px-4 py-2 text-left text-sm transition-colors flex items-center justify-between',
-                  index === dropdownKeyboard.highlightedIndex
+                  option.disabled
+                    ? 'text-slate-400 dark:text-slate-500 cursor-not-allowed bg-slate-50 dark:bg-slate-800/50'
+                    : index === dropdownKeyboard.highlightedIndex
                     ? 'bg-brand-50 dark:bg-brand-900/20 text-brand-700 dark:text-brand-300'
                     : option.value === value
                     ? 'bg-slate-100 dark:bg-slate-700 font-medium'
@@ -274,7 +279,12 @@ export function SelectFilter({
               >
                 <span>{option.label}</span>
                 {option.count !== undefined && (
-                  <span className="text-xs text-slate-400">{option.count}</span>
+                  <span className={clsx(
+                    'text-xs',
+                    option.disabled ? 'text-slate-300 dark:text-slate-600' : 'text-slate-400'
+                  )}>
+                    {option.count}
+                  </span>
                 )}
               </button>
             ))}

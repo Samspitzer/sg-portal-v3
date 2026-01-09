@@ -52,35 +52,28 @@ function SectionHeader({
   );
 }
 
-// Company Change Review Modal
-function CompanyChangeReviewModal({
+// Company Change Warning Modal
+function CompanyChangeWarningModal({
   isOpen,
   oldCompanyName,
   newCompanyName,
-  onUpdateNow,
-  onUpdateLater,
+  onClose,
 }: {
   isOpen: boolean;
   oldCompanyName: string;
   newCompanyName: string;
-  onUpdateNow: () => void;
-  onUpdateLater: () => void;
+  onClose: () => void;
 }) {
   return (
     <Modal
       isOpen={isOpen}
-      onClose={onUpdateLater}
+      onClose={onClose}
       title="Review Contact Details"
       size="md"
       footer={
-        <div className="flex justify-end gap-3">
-          <Button variant="secondary" onClick={onUpdateLater}>
-            Update Later
-          </Button>
-          <Button variant="primary" onClick={onUpdateNow}>
-            Update Now
-          </Button>
-        </div>
+        <Button variant="primary" onClick={onClose}>
+          OK
+        </Button>
       }
     >
       <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
@@ -121,12 +114,14 @@ function InlineField({
   needsReview?: boolean;
   onConfirm?: () => void;
 }) {
+  const toast = useToast();
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(value);
   const [showModal, setShowModal] = useState(false);
   const [pendingTab, setPendingTab] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const fieldRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
   const onEditingChangeRef = useRef(onEditingChange);
   onEditingChangeRef.current = onEditingChange;
 
@@ -140,16 +135,34 @@ function InlineField({
     onEditingChangeRef.current?.(isEditing, hasChanges);
   }, [isEditing, hasChanges]);
 
-  const handleInputChange = (newValue: string) => {
+  // Real-time validation
+  const getValidationError = (val: string): string | null => {
+    if (!val) return null;
+    
     if (type === 'tel') {
-      // Use imported formatPhoneNumber from utils/validation
-      const formatted = formatPhoneNumber(newValue);
-      setEditValue(formatted);
-      setValidationError(null);
-    } else {
-      setEditValue(newValue);
-      setValidationError(null);
+      return validatePhone(val) ? null : 'Invalid phone number';
     }
+    if (type === 'email') {
+      return validateEmail(val) ? null : 'Invalid email address';
+    }
+    return null;
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    let newValue = e.target.value;
+    
+    if (type === 'tel') {
+      // Only format when adding digits, not when deleting
+      const currentDigits = editValue.replace(/\D/g, '').length;
+      const newDigits = newValue.replace(/\D/g, '').length;
+      
+      if (newDigits > currentDigits) {
+        newValue = formatPhoneNumber(newValue);
+      }
+    }
+    
+    setEditValue(newValue);
+    setValidationError(getValidationError(newValue));
   };
 
   const moveToNextField = () => {
@@ -165,13 +178,9 @@ function InlineField({
   };
 
   const handleSave = () => {
-    // Validate before saving using imported functions from utils/validation
-    if (type === 'email' && !validateEmail(editValue)) {
-      setValidationError('Please enter a valid email address');
-      return;
-    }
-    if (type === 'tel' && !validatePhone(editValue)) {
-      setValidationError('Please enter a valid phone number');
+    const error = getValidationError(editValue);
+    if (error) {
+      setValidationError(error);
       return;
     }
     
@@ -186,7 +195,10 @@ function InlineField({
     }
   };
 
-  const handleDiscard = () => {
+  const handleDiscard = (showDiscardToast = false) => {
+    if (showDiscardToast && validationError) {
+      toast.error('Not Saved', 'Changes discarded due to invalid value');
+    }
     setEditValue(value);
     setIsEditing(false);
     setShowModal(false);
@@ -216,7 +228,9 @@ function InlineField({
       e.preventDefault();
       e.stopPropagation();
       setPendingTab(false);
-      if (hasChanges) {
+      if (validationError) {
+        handleDiscard(true);
+      } else if (hasChanges) {
         setShowModal(true);
       } else {
         setIsEditing(false);
@@ -224,6 +238,13 @@ function InlineField({
     } else if (e.key === 'Tab' && !e.shiftKey) {
       e.preventDefault();
       e.stopPropagation();
+      if (validationError) {
+        toast.error('Invalid Value', validationError);
+        setTimeout(() => {
+          inputRef.current?.focus();
+        }, 0);
+        return;
+      }
       if (hasChanges) {
         setPendingTab(true);
         setShowModal(true);
@@ -255,8 +276,9 @@ function InlineField({
           <div className="flex items-center gap-2">
             {type === 'textarea' ? (
               <textarea
+                ref={inputRef as React.RefObject<HTMLTextAreaElement>}
                 value={editValue}
-                onChange={(e) => handleInputChange(e.target.value)}
+                onChange={handleInputChange}
                 onKeyDown={handleKeyDown}
                 placeholder={placeholder}
                 rows={3}
@@ -270,9 +292,10 @@ function InlineField({
               />
             ) : (
               <input
+                ref={inputRef as React.RefObject<HTMLInputElement>}
                 type={type === 'tel' ? 'text' : type}
                 value={editValue}
-                onChange={(e) => handleInputChange(e.target.value)}
+                onChange={handleInputChange}
                 onKeyDown={handleKeyDown}
                 placeholder={placeholder}
                 autoFocus
@@ -293,7 +316,7 @@ function InlineField({
               <Check className="w-4 h-4" />
             </button>
             <button
-              onClick={() => (hasChanges ? setShowModal(true) : setIsEditing(false))}
+              onClick={() => (validationError ? handleDiscard(true) : hasChanges ? setShowModal(true) : setIsEditing(false))}
               tabIndex={-1}
               className="p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"
               title="Cancel (Esc)"
@@ -309,7 +332,7 @@ function InlineField({
         <UnsavedChangesModal
           isOpen={showModal}
           onSave={handleSave}
-          onDiscard={handleDiscard}
+          onDiscard={() => handleDiscard(false)}
           onCancel={handleKeepEditing}
         />
       </>
@@ -1172,8 +1195,6 @@ export function ContactDetailPage() {
   // Company change review state
   const [showCompanyChangeModal, setShowCompanyChangeModal] = useState(false);
   const [companyChangeInfo, setCompanyChangeInfo] = useState<{ oldName: string; newName: string } | null>(null);
-  const [highlightedFields, setHighlightedFields] = useState<Set<string>>(new Set());
-
   const [showCompanyEditor, setShowCompanyEditor] = useState(false);
   
   // Add Contact Method modal state
@@ -1284,28 +1305,7 @@ export function ContactDetailPage() {
       newName: newCompany?.name || 'Unknown',
     });
     setShowCompanyChangeModal(true);
-  };
-
-  // Handle "Update Now" - highlight fields for review (not persisted)
-  const handleUpdateNow = () => {
-    setShowCompanyChangeModal(false);
-    setCompanyChangeInfo(null);
-    // Clear any persisted review state
-    setFieldsNeedingReview(new Set());
-    // Set temporary highlighted fields for immediate review
-    setHighlightedFields(new Set(['role', 'email', 'phoneOffice', 'phoneMobile']));
-    // Clear any editing state for company field so navigation guard doesn't trigger
-    setEditingFields(prev => {
-      const next = new Map(prev);
-      next.delete('company');
-      return next;
-    });
-  };
-
-  // Handle "Update Later" - persist fields needing review
-  const handleUpdateLater = () => {
-    setShowCompanyChangeModal(false);
-    setCompanyChangeInfo(null);
+    
     // Set fields needing review (persisted in localStorage)
     const fields = new Set(['role', 'email', 'phoneOffice', 'phoneMobile']);
     // Also add any additional contact methods
@@ -1315,7 +1315,12 @@ export function ContactDetailPage() {
       });
     }
     setFieldsNeedingReview(fields);
-    setHighlightedFields(new Set());
+  };
+
+  // Handle closing the warning modal
+  const handleCloseWarningModal = () => {
+    setShowCompanyChangeModal(false);
+    setCompanyChangeInfo(null);
     // Clear any editing state for company field so navigation guard doesn't trigger
     setEditingFields(prev => {
       const next = new Map(prev);
@@ -1332,24 +1337,12 @@ export function ContactDetailPage() {
       next.delete(fieldName);
       return next;
     });
-    // Remove from temporary highlighted set
-    setHighlightedFields(prev => {
-      const next = new Set(prev);
-      next.delete(fieldName);
-      return next;
-    });
   };
 
-  // Clear the needs review flag and switch to Update Now mode
-  const handleClearReview = () => {
+  // Confirm all fields at once
+  const handleConfirmAllFields = () => {
     setFieldsNeedingReview(new Set());
-    setHighlightedFields(new Set(['role', 'email', 'phoneOffice', 'phoneMobile']));
-  };
-
-  const handleMarkAsReviewed = () => {
-    setFieldsNeedingReview(new Set());
-    setHighlightedFields(new Set());
-    toast.success('Reviewed', 'Contact details have been marked as reviewed');
+    toast.success('Confirmed', 'All contact information has been confirmed');
   };
 
   if (!contact) {
@@ -1375,6 +1368,11 @@ export function ContactDetailPage() {
   const handleFieldSave = (field: keyof Contact, value: string) => {
     updateContact(contact.id, { [field]: value || undefined });
     toast.success('Updated', 'Contact information saved');
+    
+    // Auto-confirm the field if it was needing review
+    if (fieldsNeedingReview.has(field)) {
+      handleFieldConfirm(field);
+    }
   };
 
   const handleDelete = () => {
@@ -1418,22 +1416,29 @@ export function ContactDetailPage() {
   };
 
   const handleAddContactMethod = () => {
-    // Validate
+    // Validate label first
+    if (!newMethodLabel.trim()) {
+      toast.error('Error', 'Please enter a label for this contact method');
+      return;
+    }
+    
+    // Validate value
     if (!newMethodValue.trim()) {
       setMethodValidationError('Please enter a value');
+      toast.error('Error', 'Please enter a value');
       return;
     }
     
     if (newMethodType === 'email') {
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(newMethodValue)) {
-        setMethodValidationError('Please enter a valid email address');
+      if (!validateEmail(newMethodValue)) {
+        setMethodValidationError('Invalid email address');
+        toast.error('Error', 'Please enter a valid email address');
         return;
       }
     } else {
-      const digits = newMethodValue.replace(/\D/g, '').replace(/#.*/, '');
-      if (digits.length < 10) {
-        setMethodValidationError('Please enter a valid phone number');
+      if (!validatePhone(newMethodValue)) {
+        setMethodValidationError('Invalid phone number');
+        toast.error('Error', 'Please enter a valid phone number');
         return;
       }
     }
@@ -1441,7 +1446,7 @@ export function ContactDetailPage() {
     addContactMethod(contact.id, {
       type: newMethodType,
       value: newMethodValue,
-      label: newMethodLabel || undefined,
+      label: newMethodLabel.trim(),
     });
     
     // Reset modal state
@@ -1454,12 +1459,30 @@ export function ContactDetailPage() {
   };
 
   const handleNewMethodValueChange = (value: string) => {
+    let newValue = value;
+    
     if (newMethodType !== 'email') {
-      setNewMethodValue(formatPhoneForModal(value));
-    } else {
-      setNewMethodValue(value);
+      // Only format when adding digits, not when deleting
+      const currentDigits = newMethodValue.replace(/\D/g, '').length;
+      const newDigits = value.replace(/\D/g, '').length;
+      
+      if (newDigits > currentDigits) {
+        newValue = formatPhoneForModal(value);
+      } else {
+        newValue = value;
+      }
     }
-    setMethodValidationError(null);
+    
+    setNewMethodValue(newValue);
+    
+    // Real-time validation
+    if (!newValue.trim()) {
+      setMethodValidationError(null);
+    } else if (newMethodType === 'email') {
+      setMethodValidationError(validateEmail(newValue) ? null : 'Invalid email address');
+    } else {
+      setMethodValidationError(validatePhone(newValue) ? null : 'Invalid phone number');
+    }
   };
 
   const handleMethodTypeChange = (type: 'phone' | 'fax' | 'email') => {
@@ -1492,21 +1515,16 @@ export function ContactDetailPage() {
             <div className="flex items-center gap-3">
               <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
               <div>
-                <p className="font-medium text-amber-800 dark:text-amber-300">Contact details need review</p>
+                <p className="font-medium text-amber-800 dark:text-amber-300">Contact information needs review</p>
                 <p className="text-sm text-amber-700 dark:text-amber-400">
-                  This contact was moved to a new company. Please verify the contact information is still correct.
+                  This contact was moved to a new company. Please verify the contact information is still correct, or confirm each field individually.
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Button variant="secondary" size="sm" onClick={handleClearReview}>
-                Review Now
-              </Button>
-              <Button variant="primary" size="sm" onClick={handleMarkAsReviewed}>
-                <Check className="w-4 h-4 mr-1" />
-                Mark Reviewed
-              </Button>
-            </div>
+            <Button variant="primary" size="sm" onClick={handleConfirmAllFields}>
+              <Check className="w-4 h-4 mr-1" />
+              Confirm All
+            </Button>
           </div>
         </div>
       )}
@@ -1541,7 +1559,7 @@ export function ContactDetailPage() {
                   value={contact.role || ''}
                   onSave={(v) => handleFieldSave('role', v)}
                   onEditingChange={handleEditingChange('role')}
-                  needsReview={fieldsNeedingReview.has('role') || highlightedFields.has('role')}
+                  needsReview={fieldsNeedingReview.has('role')}
                   onConfirm={() => handleFieldConfirm('role')}
                 />
                 
@@ -1549,6 +1567,7 @@ export function ContactDetailPage() {
                 <div
                   data-inline-field="true"
                   tabIndex={0}
+                  onClick={() => setShowCompanyEditor(true)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault();
@@ -1684,39 +1703,72 @@ export function ContactDetailPage() {
             }
           >
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <InlineField
-                label="Email"
-                value={contact.email || ''}
-                onSave={(v) => handleFieldSave('email', v)}
-                type="email"
-                placeholder="email@example.com"
-                icon={Mail}
-                onEditingChange={handleEditingChange('email')}
-                needsReview={fieldsNeedingReview.has('email') || highlightedFields.has('email')}
-                onConfirm={() => handleFieldConfirm('email')}
-              />
-              <InlineField
-                label="Office Phone"
-                value={contact.phoneOffice || ''}
-                onSave={(v) => handleFieldSave('phoneOffice', v)}
-                type="tel"
-                placeholder="(555) 123-4567"
-                icon={Phone}
-                onEditingChange={handleEditingChange('phoneOffice')}
-                needsReview={fieldsNeedingReview.has('phoneOffice') || highlightedFields.has('phoneOffice')}
-                onConfirm={() => handleFieldConfirm('phoneOffice')}
-              />
-              <InlineField
-                label="Mobile Phone"
-                value={contact.phoneMobile || ''}
-                onSave={(v) => handleFieldSave('phoneMobile', v)}
-                type="tel"
-                placeholder="(555) 987-6543"
-                icon={Smartphone}
-                onEditingChange={handleEditingChange('phoneMobile')}
-                needsReview={fieldsNeedingReview.has('phoneMobile') || highlightedFields.has('phoneMobile')}
-                onConfirm={() => handleFieldConfirm('phoneMobile')}
-              />
+              <div className="relative group">
+                <InlineField
+                  label="Email"
+                  value={contact.email || ''}
+                  onSave={(v) => handleFieldSave('email', v)}
+                  type="email"
+                  placeholder="email@example.com"
+                  icon={Mail}
+                  onEditingChange={handleEditingChange('email')}
+                  needsReview={fieldsNeedingReview.has('email')}
+                  onConfirm={() => handleFieldConfirm('email')}
+                />
+                {contact.email && (
+                  <button
+                    onClick={() => handleFieldSave('email', '')}
+                    className="absolute top-1 right-0 p-1 text-slate-300 hover:text-danger-600 opacity-0 group-hover:opacity-100 transition-opacity rounded"
+                    title="Clear"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+              <div className="relative group">
+                <InlineField
+                  label="Office Phone"
+                  value={contact.phoneOffice || ''}
+                  onSave={(v) => handleFieldSave('phoneOffice', v)}
+                  type="tel"
+                  placeholder="(555) 123-4567"
+                  icon={Phone}
+                  onEditingChange={handleEditingChange('phoneOffice')}
+                  needsReview={fieldsNeedingReview.has('phoneOffice')}
+                  onConfirm={() => handleFieldConfirm('phoneOffice')}
+                />
+                {contact.phoneOffice && (
+                  <button
+                    onClick={() => handleFieldSave('phoneOffice', '')}
+                    className="absolute top-1 right-0 p-1 text-slate-300 hover:text-danger-600 opacity-0 group-hover:opacity-100 transition-opacity rounded"
+                    title="Clear"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+              <div className="relative group">
+                <InlineField
+                  label="Mobile Phone"
+                  value={contact.phoneMobile || ''}
+                  onSave={(v) => handleFieldSave('phoneMobile', v)}
+                  type="tel"
+                  placeholder="(555) 987-6543"
+                  icon={Smartphone}
+                  onEditingChange={handleEditingChange('phoneMobile')}
+                  needsReview={fieldsNeedingReview.has('phoneMobile')}
+                  onConfirm={() => handleFieldConfirm('phoneMobile')}
+                />
+                {contact.phoneMobile && (
+                  <button
+                    onClick={() => handleFieldSave('phoneMobile', '')}
+                    className="absolute top-1 right-0 p-1 text-slate-300 hover:text-danger-600 opacity-0 group-hover:opacity-100 transition-opacity rounded"
+                    title="Clear"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
               
               {/* Dynamic additional contact methods */}
               {contact.additionalContacts?.map((method) => (
@@ -1724,12 +1776,18 @@ export function ContactDetailPage() {
                   <InlineField
                     label={method.label || (method.type === 'phone' ? 'Phone' : method.type === 'fax' ? 'Fax' : 'Email')}
                     value={method.value}
-                    onSave={(v) => updateContactMethod(contact.id, method.id, { value: v })}
+                    onSave={(v) => {
+                      updateContactMethod(contact.id, method.id, { value: v });
+                      // Auto-confirm if it was needing review
+                      if (fieldsNeedingReview.has(`additional-${method.id}`)) {
+                        handleFieldConfirm(`additional-${method.id}`);
+                      }
+                    }}
                     type={method.type === 'email' ? 'email' : 'tel'}
                     placeholder={method.type === 'email' ? 'email@example.com' : '(555) 123-4567'}
                     icon={method.type === 'phone' ? Phone : method.type === 'fax' ? Printer : Mail}
                     onEditingChange={handleEditingChange(`additional-${method.id}`)}
-                    needsReview={fieldsNeedingReview.has(`additional-${method.id}`) || highlightedFields.has(`additional-${method.id}`)}
+                    needsReview={fieldsNeedingReview.has(`additional-${method.id}`)}
                     onConfirm={() => handleFieldConfirm(`additional-${method.id}`)}
                   />
                   <button
@@ -1803,13 +1861,12 @@ export function ContactDetailPage() {
         variant="danger"
       />
 
-      {/* Company Change Review Modal */}
-      <CompanyChangeReviewModal
+      {/* Company Change Warning Modal */}
+      <CompanyChangeWarningModal
         isOpen={showCompanyChangeModal}
         oldCompanyName={companyChangeInfo?.oldName || ''}
         newCompanyName={companyChangeInfo?.newName || ''}
-        onUpdateNow={handleUpdateNow}
-        onUpdateLater={handleUpdateLater}
+        onClose={handleCloseWarningModal}
       />
 
       {/* Add Contact Method Modal */}
@@ -1893,9 +1950,9 @@ export function ContactDetailPage() {
             </div>
           </div>
 
-          {/* Label (optional) */}
+          {/* Label */}
           <Input
-            label="Label (optional)"
+            label="Label *"
             value={newMethodLabel}
             onChange={(e) => setNewMethodLabel(e.target.value)}
             placeholder="e.g., Work, Home, Assistant"

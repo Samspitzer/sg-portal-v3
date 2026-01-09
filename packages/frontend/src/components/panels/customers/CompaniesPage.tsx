@@ -123,42 +123,189 @@ export function CompaniesPage() {
     return locations;
   };
 
-  // Get unique locations for filter (from all addresses)
+  // Helper to get locations where a specific sales rep is assigned within a company
+  const getLocationsForSalesRep = (company: Company, salesRepId: string): string[] => {
+    const locations: string[] = [];
+    
+    // If company uses company-level reps, check if this rep is assigned at company level
+    if (!company.salesRepsByLocation) {
+      const companyRepIds = company.salesRepIds || (company.salesRepId ? [company.salesRepId] : []);
+      if (companyRepIds.includes(salesRepId)) {
+        // This rep is assigned at company level - they cover all locations
+        return getAllLocations(company);
+      }
+      return [];
+    }
+    
+    // Company uses location-based reps - find locations where this rep is assigned
+    // Check main office
+    if (company.address) {
+      const mainRepIds = company.address.salesRepIds || (company.address.salesRepId ? [company.address.salesRepId] : []);
+      if (mainRepIds.includes(salesRepId)) {
+        const mainLoc = [company.address.city, company.address.state].filter(Boolean).join(', ');
+        if (mainLoc) locations.push(mainLoc);
+      }
+    }
+    
+    // Check additional addresses
+    if (company.addresses) {
+      company.addresses.forEach((addr) => {
+        const addrRepIds = addr.salesRepIds || (addr.salesRepId ? [addr.salesRepId] : []);
+        if (addrRepIds.includes(salesRepId)) {
+          const addrLoc = [addr.city, addr.state].filter(Boolean).join(', ');
+          if (addrLoc && !locations.includes(addrLoc)) locations.push(addrLoc);
+        }
+      });
+    }
+    
+    return locations;
+  };
+
+  // Get unique locations for filter (cascading based on sales rep filter)
   const locationOptions = useMemo(() => {
     const locations = new Map<string, number>();
+    const allLocations = new Map<string, number>();
+    
     companies.forEach((company) => {
       const companyLocations = getAllLocations(company);
+      
+      // Track all locations
       companyLocations.forEach((loc) => {
-        locations.set(loc, (locations.get(loc) || 0) + 1);
+        allLocations.set(loc, (allLocations.get(loc) || 0) + 1);
       });
+      
+      // If sales rep filter is active, only count locations where THAT rep is assigned
+      if (salesRepFilter) {
+        const repLocations = getLocationsForSalesRep(company, salesRepFilter);
+        repLocations.forEach((loc) => {
+          locations.set(loc, (locations.get(loc) || 0) + 1);
+        });
+      }
     });
-    return Array.from(locations.entries())
-      .map(([value, count]) => ({ value, label: value, count }))
-      .sort((a, b) => a.label.localeCompare(b.label));
-  }, [companies]);
+    
+    // Return all locations but mark those with 0 matches as disabled
+    return Array.from(allLocations.entries())
+      .map(([value]) => {
+        const matchCount = salesRepFilter ? (locations.get(value) || 0) : (allLocations.get(value) || 0);
+        return { 
+          value, 
+          label: value, 
+          count: matchCount,
+          disabled: salesRepFilter ? matchCount === 0 : undefined,
+        };
+      })
+      .sort((a, b) => {
+        // Sort enabled options first, then by label
+        if (a.disabled !== b.disabled) return a.disabled ? 1 : -1;
+        return a.label.localeCompare(b.label);
+      });
+  }, [companies, salesRepFilter]);
 
-  // Get sales reps for filter - includes all reps from company-level and location-level
-  const salesRepOptions = useMemo(() => {
-    const reps = new Map<string, { name: string; count: number }>();
-    companies.forEach((company) => {
-      // Get all sales rep IDs for this company (company-level + location-level)
-      const repIds = getCompanySalesRepIds(company);
-      repIds.forEach((repId) => {
-        const name = getSalesRepName(repId);
-        if (name) {
-          const existing = reps.get(repId);
-          if (existing) {
-            existing.count++;
-          } else {
-            reps.set(repId, { name, count: 1 });
+  // Helper to get sales rep IDs for a specific location within a company
+  const getSalesRepIdsForLocation = (company: Company, location: string): string[] => {
+    const repIds: string[] = [];
+    
+    // First check if company has ANY address in this location
+    const companyLocations = getAllLocations(company);
+    if (!companyLocations.includes(location)) {
+      return []; // Company has no address in this location
+    }
+    
+    // If company uses company-level reps, those reps apply to all their locations
+    if (!company.salesRepsByLocation) {
+      if (company.salesRepIds) {
+        repIds.push(...company.salesRepIds);
+      } else if (company.salesRepId) {
+        repIds.push(company.salesRepId);
+      }
+      return repIds;
+    }
+    
+    // Company uses location-based reps - find reps for matching addresses only
+    // Check main office
+    if (company.address) {
+      const mainLoc = [company.address.city, company.address.state].filter(Boolean).join(', ');
+      if (mainLoc === location) {
+        if (company.address.salesRepIds) {
+          repIds.push(...company.address.salesRepIds);
+        } else if (company.address.salesRepId) {
+          repIds.push(company.address.salesRepId);
+        }
+      }
+    }
+    
+    // Check additional addresses
+    if (company.addresses) {
+      company.addresses.forEach((addr) => {
+        const addrLoc = [addr.city, addr.state].filter(Boolean).join(', ');
+        if (addrLoc === location) {
+          if (addr.salesRepIds) {
+            repIds.push(...addr.salesRepIds);
+          } else if (addr.salesRepId) {
+            repIds.push(addr.salesRepId);
           }
         }
       });
+    }
+    
+    return repIds;
+  };
+
+  // Get sales reps for filter - cascading based on location filter
+  const salesRepOptions = useMemo(() => {
+    const reps = new Map<string, { name: string; count: number }>();
+    const allReps = new Map<string, { name: string; count: number }>();
+    
+    companies.forEach((company) => {
+      // Get all sales rep IDs for this company (for "all reps" list)
+      const allRepIds = getCompanySalesRepIds(company);
+      allRepIds.forEach((repId) => {
+        const name = getSalesRepName(repId);
+        if (name) {
+          const existingAll = allReps.get(repId);
+          if (existingAll) {
+            existingAll.count++;
+          } else {
+            allReps.set(repId, { name, count: 1 });
+          }
+        }
+      });
+      
+      // If location filter is active, only count reps assigned to THAT location
+      if (locationFilter) {
+        const locationRepIds = getSalesRepIdsForLocation(company, locationFilter);
+        locationRepIds.forEach((repId) => {
+          const name = getSalesRepName(repId);
+          if (name) {
+            const existing = reps.get(repId);
+            if (existing) {
+              existing.count++;
+            } else {
+              reps.set(repId, { name, count: 1 });
+            }
+          }
+        });
+      }
     });
-    return Array.from(reps.entries())
-      .map(([value, { name, count }]) => ({ value, label: name, count }))
-      .sort((a, b) => a.label.localeCompare(b.label));
-  }, [companies, users]);
+    
+    // Return all reps but mark those with 0 matches as disabled
+    return Array.from(allReps.entries())
+      .map(([value, { name }]) => {
+        const matchData = reps.get(value);
+        const matchCount = locationFilter ? (matchData?.count || 0) : allReps.get(value)?.count || 0;
+        return { 
+          value, 
+          label: name, 
+          count: matchCount,
+          disabled: locationFilter ? matchCount === 0 : undefined,
+        };
+      })
+      .sort((a, b) => {
+        // Sort enabled options first, then by label
+        if (a.disabled !== b.disabled) return a.disabled ? 1 : -1;
+        return a.label.localeCompare(b.label);
+      });
+  }, [companies, users, locationFilter]);
 
   // Get all company names for the alphabet filter
   const companyNames = useMemo(() => companies.map((c) => c.name), [companies]);

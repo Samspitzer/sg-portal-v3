@@ -81,6 +81,7 @@ export function ContactsPage() {
   const [companyFilter, setCompanyFilter] = useState('');
   const [locationFilter, setLocationFilter] = useState('');
   const [salesRepFilter, setSalesRepFilter] = useState('');
+  const [attentionFilter, setAttentionFilter] = useState<'all' | 'needs-attention'>('all');
   const [showModal, setShowModal] = useState(false);
   const [formData, setFormData] = useState<ContactFormData>(initialContactFormData);
   const [companySearch, setCompanySearch] = useState('');
@@ -159,25 +160,17 @@ export function ContactsPage() {
     return false;
   };
 
-  const contactNames = useMemo(() => contacts.map((c) => c.firstName), [contacts]);
+  // Check if contact needs attention (orphaned or needs review)
+  const contactNeedsAttention = (contact: Contact) => {
+    return isOrphanedContact(contact.companyId) || contactNeedsReview(contact.id);
+  };
 
-  // Company options for filter (using SelectFilter format)
-  const companyFilterOptions = useMemo(() => {
-    const companyCounts = new Map<string, number>();
-    contacts.forEach((contact) => {
-      if (contact.companyId && !isOrphanedContact(contact.companyId)) {
-        companyCounts.set(contact.companyId, (companyCounts.get(contact.companyId) || 0) + 1);
-      }
-    });
-    return companies
-      .filter((c) => companyCounts.has(c.id))
-      .map((company) => ({
-        value: company.id,
-        label: company.name,
-        count: companyCounts.get(company.id),
-      }))
-      .sort((a, b) => a.label.localeCompare(b.label));
-  }, [companies, contacts]);
+  // Count contacts needing attention
+  const contactsNeedingAttentionCount = useMemo(() => {
+    return contacts.filter(contactNeedsAttention).length;
+  }, [contacts, companies]);
+
+  const contactNames = useMemo(() => contacts.map((c) => c.firstName), [contacts]);
 
   // Get all locations for a company (main office + additional addresses)
   const getAllCompanyLocations = (company: Company | undefined): string[] => {
@@ -248,58 +241,297 @@ export function ContactsPage() {
     return getCompanySalesRepIds(company);
   };
 
-  // Location filter options (based on contact's assigned office or all company locations if not assigned)
+  // Helper: Get locations where a specific sales rep is assigned for a contact
+  // If contact has no assigned office → return all locations where rep is assigned
+  // If contact has assigned office → return that location only if rep is assigned there
+  const getContactLocationsForSalesRep = (contact: Contact, company: Company | undefined, salesRepId: string): string[] => {
+    if (!company) return [];
+    const locations: string[] = [];
+    
+    // If contact has assigned office
+    if (contact.officeAddressId) {
+      const contactRepIds = getContactSalesRepIds(contact, company);
+      if (contactRepIds.includes(salesRepId)) {
+        const assignedLoc = getContactAssignedLocation(contact, company);
+        if (assignedLoc) locations.push(assignedLoc);
+      }
+      return locations;
+    }
+    
+    // Contact not assigned to specific office - check all company locations
+    // If company uses company-level reps, check if this rep is at company level
+    if (!company.salesRepsByLocation) {
+      const companyRepIds = company.salesRepIds || (company.salesRepId ? [company.salesRepId] : []);
+      if (companyRepIds.includes(salesRepId)) {
+        return getAllCompanyLocations(company);
+      }
+      return [];
+    }
+    
+    // Company uses location-based reps - find locations where this rep is assigned
+    if (company.address) {
+      const mainRepIds = company.address.salesRepIds || (company.address.salesRepId ? [company.address.salesRepId] : []);
+      if (mainRepIds.includes(salesRepId)) {
+        const mainLoc = [company.address.city, company.address.state].filter(Boolean).join(', ');
+        if (mainLoc) locations.push(mainLoc);
+      }
+    }
+    
+    if (company.addresses) {
+      company.addresses.forEach((addr) => {
+        const addrRepIds = addr.salesRepIds || (addr.salesRepId ? [addr.salesRepId] : []);
+        if (addrRepIds.includes(salesRepId)) {
+          const addrLoc = [addr.city, addr.state].filter(Boolean).join(', ');
+          if (addrLoc && !locations.includes(addrLoc)) locations.push(addrLoc);
+        }
+      });
+    }
+    
+    return locations;
+  };
+
+  // Helper: Get sales rep IDs for a specific location for a contact
+  // If contact has assigned office → only return reps if that office is in the location
+  // If contact has no assigned office → return reps assigned to that location
+  const getContactSalesRepIdsForLocation = (contact: Contact, company: Company | undefined, location: string): string[] => {
+    if (!company) return [];
+    
+    // First check if company has any address in this location
+    const companyLocations = getAllCompanyLocations(company);
+    if (!companyLocations.includes(location)) return [];
+    
+    // If contact has assigned office, check if it's in this location
+    if (contact.officeAddressId) {
+      const assignedLoc = getContactAssignedLocation(contact, company);
+      if (assignedLoc !== location) return [];
+      // Return the contact's sales reps (from their assigned office)
+      return getContactSalesRepIds(contact, company);
+    }
+    
+    // Contact not assigned to specific office
+    // If company uses company-level reps, return those
+    if (!company.salesRepsByLocation) {
+      return company.salesRepIds || (company.salesRepId ? [company.salesRepId] : []);
+    }
+    
+    // Company uses location-based reps - find reps for this specific location
+    const repIds: string[] = [];
+    
+    if (company.address) {
+      const mainLoc = [company.address.city, company.address.state].filter(Boolean).join(', ');
+      if (mainLoc === location) {
+        if (company.address.salesRepIds) repIds.push(...company.address.salesRepIds);
+        else if (company.address.salesRepId) repIds.push(company.address.salesRepId);
+      }
+    }
+    
+    if (company.addresses) {
+      company.addresses.forEach((addr) => {
+        const addrLoc = [addr.city, addr.state].filter(Boolean).join(', ');
+        if (addrLoc === location) {
+          if (addr.salesRepIds) repIds.push(...addr.salesRepIds);
+          else if (addr.salesRepId) repIds.push(addr.salesRepId);
+        }
+      });
+    }
+    
+    return repIds;
+  };
+
+  // Location filter options - cascading with companyFilter and salesRepFilter
   const locationFilterOptions = useMemo(() => {
     const locationCounts = new Map<string, number>();
+    const allLocationCounts = new Map<string, number>();
+    
     contacts.forEach((contact) => {
       const company = getCompany(contact.companyId);
       
+      // Get all locations this contact could be in (for "all" counts)
+      let contactLocations: string[] = [];
       if (contact.officeAddressId) {
-        // Contact has assigned office - only count that location
         const assignedLocation = getContactAssignedLocation(contact, company);
-        if (assignedLocation) {
-          locationCounts.set(assignedLocation, (locationCounts.get(assignedLocation) || 0) + 1);
-        }
+        if (assignedLocation) contactLocations = [assignedLocation];
       } else {
-        // No assigned office - count all company locations
-        const companyLocations = getAllCompanyLocations(company);
-        companyLocations.forEach((loc) => {
+        contactLocations = getAllCompanyLocations(company);
+      }
+      
+      // Track all locations
+      contactLocations.forEach((loc) => {
+        allLocationCounts.set(loc, (allLocationCounts.get(loc) || 0) + 1);
+      });
+      
+      // Check if contact matches other active filters
+      let matchesFilters = true;
+      
+      // Check company filter
+      if (companyFilter && matchesFilters) {
+        matchesFilters = contact.companyId === companyFilter;
+      }
+      
+      // Check sales rep filter
+      if (salesRepFilter && matchesFilters) {
+        const repLocations = getContactLocationsForSalesRep(contact, company, salesRepFilter);
+        // Only count locations where this rep is assigned
+        if (matchesFilters) {
+          repLocations.forEach((loc) => {
+            locationCounts.set(loc, (locationCounts.get(loc) || 0) + 1);
+          });
+        }
+        return; // Skip the default counting below
+      }
+      
+      // If only company filter (no sales rep filter), count all contact locations
+      if (matchesFilters) {
+        contactLocations.forEach((loc) => {
           locationCounts.set(loc, (locationCounts.get(loc) || 0) + 1);
         });
       }
     });
-    return Array.from(locationCounts.entries())
-      .map(([loc, count]) => ({
-        value: loc,
-        label: loc,
-        count,
-      }))
-      .sort((a, b) => a.label.localeCompare(b.label));
-  }, [contacts, companies]);
+    
+    const hasActiveFilter = companyFilter || salesRepFilter;
+    
+    return Array.from(allLocationCounts.entries())
+      .map(([loc, totalCount]) => {
+        const matchCount = hasActiveFilter ? (locationCounts.get(loc) || 0) : totalCount;
+        return {
+          value: loc,
+          label: loc,
+          count: matchCount,
+          disabled: hasActiveFilter ? matchCount === 0 : undefined,
+        };
+      })
+      .sort((a, b) => {
+        if (a.disabled !== b.disabled) return a.disabled ? 1 : -1;
+        return a.label.localeCompare(b.label);
+      });
+  }, [contacts, companies, companyFilter, salesRepFilter]);
 
-  // Sales rep filter options - based on contact's assigned office sales reps or all company sales reps
+  // Sales rep filter options - cascading with companyFilter and locationFilter
   const salesRepFilterOptions = useMemo(() => {
     const repCounts = new Map<string, number>();
+    const allRepCounts = new Map<string, number>();
+    
     contacts.forEach((contact) => {
       const company = getCompany(contact.companyId);
-      const salesRepIds = getContactSalesRepIds(contact, company);
       
-      salesRepIds.forEach((repId) => {
-        repCounts.set(repId, (repCounts.get(repId) || 0) + 1);
+      // Get all sales reps for this contact (for "all" counts)
+      const allSalesRepIds = getContactSalesRepIds(contact, company);
+      allSalesRepIds.forEach((repId) => {
+        allRepCounts.set(repId, (allRepCounts.get(repId) || 0) + 1);
       });
+      
+      // Check if contact matches other active filters
+      let matchesFilters = true;
+      
+      // Check company filter
+      if (companyFilter && matchesFilters) {
+        matchesFilters = contact.companyId === companyFilter;
+      }
+      
+      // Check location filter
+      if (locationFilter && matchesFilters) {
+        if (contact.officeAddressId) {
+          const assignedLocation = getContactAssignedLocation(contact, company);
+          matchesFilters = assignedLocation === locationFilter;
+        } else {
+          matchesFilters = getAllCompanyLocations(company).includes(locationFilter);
+        }
+      }
+      
+      // If contact matches filters, count their sales reps
+      if (matchesFilters) {
+        // If location filter is active, only count reps assigned to that location
+        if (locationFilter) {
+          const locationRepIds = getContactSalesRepIdsForLocation(contact, company, locationFilter);
+          locationRepIds.forEach((repId) => {
+            repCounts.set(repId, (repCounts.get(repId) || 0) + 1);
+          });
+        } else {
+          // No location filter, count all contact's sales reps
+          allSalesRepIds.forEach((repId) => {
+            repCounts.set(repId, (repCounts.get(repId) || 0) + 1);
+          });
+        }
+      }
     });
-    return Array.from(repCounts.entries())
-      .map(([repId, count]) => {
+    
+    const hasActiveFilter = companyFilter || locationFilter;
+    
+    return Array.from(allRepCounts.entries())
+      .map(([repId, totalCount]) => {
         const user = users.find((u) => u.id === repId);
+        const matchCount = hasActiveFilter ? (repCounts.get(repId) || 0) : totalCount;
         return {
           value: repId,
           label: user?.name || 'Unknown',
-          count,
+          count: matchCount,
+          disabled: hasActiveFilter ? matchCount === 0 : undefined,
         };
       })
       .filter((opt) => opt.label !== 'Unknown')
-      .sort((a, b) => a.label.localeCompare(b.label));
-  }, [contacts, companies, users]);
+      .sort((a, b) => {
+        if (a.disabled !== b.disabled) return a.disabled ? 1 : -1;
+        return a.label.localeCompare(b.label);
+      });
+  }, [contacts, companies, users, companyFilter, locationFilter]);
+
+  // Company options for filter - cascading with location and salesRep filters
+  const companyFilterOptions = useMemo(() => {
+    const allCompanyCounts = new Map<string, number>();
+    const filteredCompanyCounts = new Map<string, number>();
+    
+    contacts.forEach((contact) => {
+      if (contact.companyId && !isOrphanedContact(contact.companyId)) {
+        const company = getCompany(contact.companyId);
+        
+        // Track all companies with contacts
+        allCompanyCounts.set(contact.companyId, (allCompanyCounts.get(contact.companyId) || 0) + 1);
+        
+        // Check if contact matches the active filters
+        let matchesFilters = true;
+        
+        // Check location filter
+        if (locationFilter && matchesFilters) {
+          if (contact.officeAddressId) {
+            const assignedLocation = getContactAssignedLocation(contact, company);
+            matchesFilters = assignedLocation === locationFilter;
+          } else {
+            matchesFilters = getAllCompanyLocations(company).includes(locationFilter);
+          }
+        }
+        
+        // Check sales rep filter
+        if (salesRepFilter && matchesFilters) {
+          const contactSalesRepIds = getContactSalesRepIds(contact, company);
+          matchesFilters = contactSalesRepIds.includes(salesRepFilter);
+        }
+        
+        if (matchesFilters) {
+          filteredCompanyCounts.set(contact.companyId, (filteredCompanyCounts.get(contact.companyId) || 0) + 1);
+        }
+      }
+    });
+    
+    const hasActiveFilter = locationFilter || salesRepFilter;
+    
+    return companies
+      .filter((c) => allCompanyCounts.has(c.id))
+      .map((company) => {
+        const matchCount = hasActiveFilter 
+          ? (filteredCompanyCounts.get(company.id) || 0)
+          : (allCompanyCounts.get(company.id) || 0);
+        return {
+          value: company.id,
+          label: company.name,
+          count: matchCount,
+          disabled: hasActiveFilter ? matchCount === 0 : undefined,
+        };
+      })
+      .sort((a, b) => {
+        if (a.disabled !== b.disabled) return a.disabled ? 1 : -1;
+        return a.label.localeCompare(b.label);
+      });
+  }, [companies, contacts, locationFilter, salesRepFilter]);
 
   const filteredAndSortedContacts = useMemo(() => {
     let result = contacts.filter((contact) => {
@@ -310,6 +542,9 @@ export function ContactsPage() {
       const matchesCompany = !companyFilter || contact.companyId === companyFilter;
       const matchesLetter = !letterFilter || 
         (contact.firstName?.charAt(0)?.toUpperCase() === letterFilter);
+      
+      // Attention filter - only show contacts needing attention
+      const matchesAttention = attentionFilter === 'all' || contactNeedsAttention(contact);
       
       // Location filter - check contact's assigned office or all company locations
       const company = getCompany(contact.companyId);
@@ -332,7 +567,7 @@ export function ContactsPage() {
         matchesSalesRep = contactSalesRepIds.includes(salesRepFilter);
       }
       
-      return matchesSearch && matchesCompany && matchesLetter && matchesLocation && matchesSalesRep;
+      return matchesSearch && matchesCompany && matchesLetter && matchesLocation && matchesSalesRep && matchesAttention;
     });
 
     result = [...result].sort((a, b) => {
@@ -362,7 +597,7 @@ export function ContactsPage() {
     });
 
     return result;
-  }, [contacts, search, companyFilter, letterFilter, locationFilter, salesRepFilter, sortField, sortDirection, companies]);
+  }, [contacts, search, companyFilter, letterFilter, locationFilter, salesRepFilter, attentionFilter, sortField, sortDirection, companies]);
 
   // Companies for modal dropdown
   const filteredCompanies = useMemo(() => {
@@ -745,9 +980,10 @@ export function ContactsPage() {
     setCompanyFilter('');
     setLocationFilter('');
     setSalesRepFilter('');
+    setAttentionFilter('all');
   };
 
-  const hasActiveFilters = search || letterFilter || companyFilter || locationFilter || salesRepFilter;
+  const hasActiveFilters = search || letterFilter || companyFilter || locationFilter || salesRepFilter || attentionFilter !== 'all';
 
   const hasContactChanges = formData.companyId !== '' || formData.firstName.trim() !== '' || formData.lastName.trim() !== '' || formData.email !== '' || formData.phoneOffice !== '' || formData.phoneMobile !== '' || formData.role !== '' || formData.notes !== '';
   const hasCompanyChanges = companyFormData.name.trim() !== '' || companyFormData.phone !== '' || companyFormData.website !== '' || companyFormData.street !== '' || companyFormData.city !== '' || companyFormData.state !== '' || companyFormData.zip !== '' || companyFormData.notes !== '' || companyFormData.salesRepId !== '';
@@ -774,6 +1010,28 @@ export function ContactsPage() {
         onSort={handleSort}
         filters={
           <div className="space-y-4">
+            {/* Needs Attention Filter - only show if there are contacts needing attention */}
+            {contactsNeedingAttentionCount > 0 && (
+              <div className="flex items-center">
+                <button
+                  onClick={() => setAttentionFilter(attentionFilter === 'all' ? 'needs-attention' : 'all')}
+                  className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg border transition-colors ${
+                    attentionFilter === 'needs-attention'
+                      ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700'
+                      : 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/30'
+                  }`}
+                >
+                  <AlertTriangle className="w-4 h-4" />
+                  <span>
+                    {attentionFilter === 'needs-attention' 
+                      ? `Showing ${contactsNeedingAttentionCount} contact${contactsNeedingAttentionCount !== 1 ? 's' : ''} needing attention`
+                      : `${contactsNeedingAttentionCount} contact${contactsNeedingAttentionCount !== 1 ? 's' : ''} need${contactsNeedingAttentionCount === 1 ? 's' : ''} attention`
+                    }
+                  </span>
+                </button>
+              </div>
+            )}
+
             {/* Search and Filter Row */}
             <div className="flex flex-wrap items-center gap-3">
               <SearchInput
