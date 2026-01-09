@@ -28,7 +28,7 @@ import { Page } from '@/components/layout';
 import { Card, CardContent, Button, ConfirmModal, Modal, Input, UnsavedChangesModal } from '@/components/common';
 import { CollapsibleSection } from '@/components/common/CollapsibleSection';
 import { useClientsStore, useUsersStore, useToast, useNavigationGuardStore, CONTACT_ROLES, type Contact } from '@/contexts';
-import { useDropdownKeyboard } from '@/hooks';
+import { useDropdownKeyboard, useDocumentTitle } from '@/hooks';
 import { validateEmail, validatePhone, formatPhoneNumber } from '@/utils/validation';
 
 // Non-collapsible Section Header (matches CollapsibleSection style)
@@ -1206,6 +1206,7 @@ export function ContactDetailPage() {
 
   const contact = contacts.find((c) => c.id === id);
   const company = contact ? companies.find((c) => c.id === contact.companyId) : null;
+  useDocumentTitle(contact ? `${contact.firstName} ${contact.lastName}` : 'Contact');
 
   // Build list of company addresses for office location selector
   const companyAddressOptions = useMemo(() => {

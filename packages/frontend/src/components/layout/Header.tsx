@@ -9,7 +9,6 @@ import {
   Monitor,
   LogOut,
   User,
-  Settings,
   ChevronDown,
 } from 'lucide-react';
 import { useAuthStore, useUIStore, useToast, useCompanyStore } from '@/contexts';
@@ -250,10 +249,19 @@ export function Header({ }: { fullWidth?: boolean }) {
                   'w-8 h-8 rounded-full',
                   'bg-brand-100 dark:bg-brand-900',
                   'flex items-center justify-center',
-                  'text-brand-600 dark:text-brand-400 font-medium text-sm'
+                  'text-brand-600 dark:text-brand-400 font-medium text-sm',
+                  'overflow-hidden'
                 )}
               >
-                {user?.firstName?.[0]}{user?.lastName?.[0]}
+                {user?.avatarUrl ? (
+                  <img 
+                    src={user.avatarUrl} 
+                    alt={user?.displayName}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <>{user?.firstName?.[0]}{user?.lastName?.[0]}</>
+                )}
               </div>
               <div className="hidden md:block text-left">
                 <p className="text-sm font-medium text-slate-900 dark:text-white leading-tight">
@@ -307,7 +315,7 @@ export function Header({ }: { fullWidth?: boolean }) {
                     </button>
                     <button
                       onClick={() => {
-                        navigate('/settings');
+                        navigate('/notifications');
                         setShowUserMenu(false);
                       }}
                       className={clsx(
@@ -317,8 +325,8 @@ export function Header({ }: { fullWidth?: boolean }) {
                         'hover:bg-slate-100 dark:hover:bg-slate-700'
                       )}
                     >
-                      <Settings className="w-4 h-4" />
-                      Settings
+                      <Bell className="w-4 h-4" />
+                      Notification Settings
                     </button>
                   </div>
 

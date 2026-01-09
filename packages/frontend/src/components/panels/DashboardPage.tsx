@@ -13,6 +13,7 @@ import {
 import { Page } from '@/components/layout';
 import { Card, CardHeader, CardContent, Button } from '@/components/common';
 import { useAuthStore } from '@/contexts';
+import { useDocumentTitle } from '@/hooks';
 
 interface StatCardProps {
   title: string;
@@ -110,6 +111,7 @@ function ActivityItem({ title, description, time, type }: ActivityItemProps) {
 
 export function DashboardPage() {
   const { user } = useAuthStore();
+  useDocumentTitle('Dashboard');
 
   const stats: StatCardProps[] = [
     {

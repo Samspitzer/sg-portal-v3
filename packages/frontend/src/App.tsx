@@ -25,7 +25,7 @@ import {
   AdminPage,
   DeveloperPage,
   ProfilePage,
-  SettingsPage,
+  NotificationSettingsPage,
 } from '@/components/panels';
 
 const queryClient = new QueryClient({
@@ -62,18 +62,18 @@ function AppRoutes() {
       />
       
       {/* Customers Panel */}
-<Route
-  path="/clients/*"
-  element={
-    <AuthGuard requiredPermission="customers:view">
-      <Layout>
-        <CustomersLayout>
-          <ClientsPage />
-        </CustomersLayout>
-      </Layout>
-    </AuthGuard>
-  }
-/>
+      <Route
+        path="/clients/*"
+        element={
+          <AuthGuard requiredPermission="customers:view">
+            <Layout>
+              <CustomersLayout>
+                <ClientsPage />
+              </CustomersLayout>
+            </Layout>
+          </AuthGuard>
+        }
+      />
       <Route
         path="/clients/contacts"
         element={
@@ -181,13 +181,13 @@ function AppRoutes() {
         }
       />
       
-      {/* Settings - no side ribbon */}
+      {/* Notification Settings - no side ribbon */}
       <Route
-        path="/settings"
+        path="/notifications"
         element={
           <AuthGuard>
             <Layout>
-              <SettingsPage />
+              <NotificationSettingsPage />
             </Layout>
           </AuthGuard>
         }

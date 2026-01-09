@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useAuthStore, useCompanyStore } from '@/contexts';
 import { Header } from '@/components/layout';
+import { useDocumentTitle } from '@/hooks';
 
 interface ModuleCard {
   id: string;
@@ -82,6 +83,7 @@ const modules: ModuleCard[] = [
 ];
 
 export function LandingPage() {
+  useDocumentTitle();
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const { company } = useCompanyStore();

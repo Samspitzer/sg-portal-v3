@@ -4,8 +4,10 @@ import { motion } from 'framer-motion';
 import { LogIn, Loader2, Shield } from 'lucide-react';
 import { useAuthStore, useToast } from '@/contexts';
 import { Button } from '@/components/common';
+import { useDocumentTitle } from '@/hooks';
 
 export function LoginPage() {
+  useDocumentTitle('Sign In');
   const navigate = useNavigate();
   const { login, isAuthenticated } = useAuthStore();
   const toast = useToast();

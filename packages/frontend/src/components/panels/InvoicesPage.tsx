@@ -1,3 +1,4 @@
+import { useDocumentTitle } from '@/hooks';
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { clsx } from 'clsx';
@@ -497,6 +498,7 @@ function InvoiceCard({
 }
 
 export function InvoicesPage() {
+  useDocumentTitle('Invoices');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<InvoiceStatus | ''>('');

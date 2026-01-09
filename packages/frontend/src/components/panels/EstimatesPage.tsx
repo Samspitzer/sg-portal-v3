@@ -1,3 +1,4 @@
+import { useDocumentTitle } from '@/hooks';
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { clsx } from 'clsx';
@@ -465,6 +466,7 @@ function EstimateCard({
 }
 
 export function EstimatesPage() {
+  useDocumentTitle('Estimates');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<EstimateStatus | ''>('');

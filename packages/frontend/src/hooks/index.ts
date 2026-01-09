@@ -2,6 +2,7 @@ export { useFormChanges } from './useFormChanges';
 export { useNavigationGuard } from './useNavigationGuard';
 export { useSafeNavigate } from './useSafeNavigate';
 export { useDropdownKeyboard } from './useDropdownKeyboard';
+export { useDocumentTitle } from './useDocumentTitle';
 export { 
   useUserDependencies, 
   useReassignUserItems, 

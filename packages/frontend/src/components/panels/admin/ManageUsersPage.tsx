@@ -18,7 +18,7 @@ import { DataTable, type DataTableColumn } from '@/components/common/DataTable';
 import { SelectFilter } from '@/components/common/SelectFilter';
 import { UserDeactivationModal } from '@/components/common/UserDeactivationModal';
 import { useToast, useDepartmentsStore, useUsersStore, useCompanyStore, type User } from '@/contexts';
-import { useFormChanges } from '@/hooks';
+import { useFormChanges, useDocumentTitle } from '@/hooks';
 import { validateEmail, validatePhone } from '@/utils/validation';
 
 interface UserFormData {
@@ -61,6 +61,7 @@ function UserModal({
   isLoading: boolean;
 }) {
   const toast = useToast();
+  useDocumentTitle('Manage Users');
   const { departments } = useDepartmentsStore();
   const { company } = useCompanyStore();
 
@@ -347,6 +348,7 @@ export function ManageUsersPage() {
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const toast = useToast();
+  useDocumentTitle('Manage Users');
 
   // Use the shared stores
   const { users, addUser, updateUser, deleteUser, toggleUserActive } = useUsersStore();

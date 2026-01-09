@@ -1,6 +1,7 @@
 import { Routes, Route } from 'react-router-dom';
 import { Building2, Contact, Users } from 'lucide-react';
 import { PanelDashboard } from '@/components/layout';
+import { useDocumentTitle } from '@/hooks';
 import { CompaniesPage } from './customers/CompaniesPage';
 import { ContactsPage } from './customers/ContactsPage';
 import { CompanyDetailPage } from './customers/CompanyDetailPage';
@@ -8,6 +9,7 @@ import { ContactDetailPage } from './customers/ContactDetailPage';
 
 // Customers Dashboard using reusable PanelDashboard
 function CustomersDashboard() {
+  useDocumentTitle('Customers');
   const tiles = [
     {
       id: 'companies',

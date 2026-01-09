@@ -1,10 +1,12 @@
 import { Routes, Route } from 'react-router-dom';
 import { Users, Building2, Shield, Settings, Briefcase } from 'lucide-react';
 import { PanelDashboard } from '@/components/layout';
+import { useDocumentTitle } from '@/hooks';
 import { ManageUsersPage, CompanySettingsPage, ManageDepartmentsPage, ManageRolesPage } from './admin';
 
 // Admin Dashboard using reusable PanelDashboard
 function AdminDashboard() {
+  useDocumentTitle('Admin');
   const tiles = [
     {
       id: 'users',

@@ -1,3 +1,4 @@
+import { useDocumentTitle } from '@/hooks';
 import { Page } from '@/components/layout';
 import { Card, CardContent } from '@/components/common';
 import { Construction } from 'lucide-react';
@@ -8,6 +9,7 @@ interface PlaceholderPageProps {
 }
 
 function PlaceholderPage({ title, description }: PlaceholderPageProps) {
+  useDocumentTitle(title);
   return (
     <Page title={title} description={description}>
       <Card className="text-center py-16">

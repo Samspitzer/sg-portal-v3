@@ -1145,6 +1145,73 @@ safeNavigate('/some-path');
 
 ---
 
+### useDocumentTitle
+**File:** `useDocumentTitle.ts`
+
+**Purpose:** Set the browser tab title dynamically per page. Automatically appends the company name.
+
+**Parameters:**
+- `title?: string` - The page title (optional). If omitted, just shows company name.
+
+**Usage:**
+```tsx
+import { useDocumentTitle } from '@/hooks';
+
+// Static title
+export function CompaniesPage() {
+  useDocumentTitle('Companies');
+  // Browser tab shows: "Companies | S&G Portal"
+  // ...
+}
+
+// Dynamic title based on data
+export function ContactDetailPage() {
+  const contact = contacts.find((c) => c.id === id);
+  useDocumentTitle(contact ? `${contact.firstName} ${contact.lastName}` : 'Contact');
+  // Browser tab shows: "John Smith | S&G Portal"
+  // ...
+}
+
+// No title (just company name)
+export function LandingPage() {
+  useDocumentTitle();
+  // Browser tab shows: "S&G Portal"
+  // ...
+}
+```
+
+**Implementation Notes:**
+- Hook must be called inside the component function
+- For dynamic titles based on data, call the hook AFTER the data lookup
+- The hook restores the previous title when the component unmounts
+- Company name comes from `useCompanyStore`
+
+**Pages Using This Hook:**
+| Page | Title |
+|------|-------|
+| LandingPage | *(none - company name only)* |
+| LoginPage | `'Sign In'` |
+| DashboardPage | `'Dashboard'` |
+| CompaniesPage | `'Companies'` |
+| CompanyDetailPage | `company?.name \|\| 'Company'` |
+| ContactsPage | `'Contacts'` |
+| ContactDetailPage | `contact.firstName + contact.lastName` |
+| ProfilePage | `'Profile'` |
+| NotificationSettingsPage | `'Notification Settings'` |
+| AdminPage (dashboard) | `'Admin'` |
+| ManageUsersPage | `'Manage Users'` |
+| ManageDepartmentsPage | `'Departments'` |
+| ManageRolesPage | `'Roles'` |
+| PermissionsPage | `'Permissions'` |
+| CompanySettingsPage | `'Company Settings'` |
+| ProjectsPage | `'Projects'` |
+| EstimatesPage | `'Estimates'` |
+| InvoicesPage | `'Invoices'` |
+| ClientsPage (dashboard) | `'Customers'` |
+| PlaceholderPages | *Dynamic from title prop* |
+
+---
+
 ## User Dependency Registry
 
 Location: `src/contexts/userDependencyRegistry.ts`
@@ -1896,6 +1963,7 @@ src/
 │           └── CompanySettingsPage.tsx # 🔒 LOCKED
 ├── hooks/
 │   ├── index.ts               # Exports all hooks
+│   ├── useDocumentTitle.ts    # Browser tab title management
 │   ├── useDropdownKeyboard.ts # ⚠️ USE FOR ALL DROPDOWNS
 │   ├── useFormChanges.ts
 │   ├── useNavigationGuard.ts

@@ -7,7 +7,7 @@ export { EstimatesPage } from './EstimatesPage';
 export { InvoicesPage } from './InvoicesPage';
 export { AdminPage } from './AdminPage';
 export { ProfilePage } from './ProfilePage';
-export { SettingsPage } from './SettingsPage';
+export { NotificationSettingsPage } from './NotificationSettingsPage';
 export {
   AccountingPage,
   DeveloperPage,

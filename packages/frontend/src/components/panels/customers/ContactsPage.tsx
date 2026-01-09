@@ -18,7 +18,7 @@ import { DataTable, type DataTableColumn } from '@/components/common/DataTable';
 import { SelectFilter } from '@/components/common/SelectFilter';
 import { DuplicateContactModal } from '@/components/common/DuplicateContactModal';
 import { useClientsStore, useUsersStore, useToast, CONTACT_ROLES, type ContactRole, type Contact, type Company, getCompanySalesRepIds } from '@/contexts';
-import { useDropdownKeyboard } from '@/hooks';
+import { useDropdownKeyboard, useDocumentTitle } from '@/hooks';
 import { validateEmail, validatePhone } from '@/utils/validation';
 
 interface ContactFormData {
@@ -75,6 +75,7 @@ export function ContactsPage() {
   const { companies, contacts, addContact, updateContact, addCompany } = useClientsStore();
   const { users } = useUsersStore();
   const toast = useToast();
+  useDocumentTitle('Contacts');
 
   const [search, setSearch] = useState('');
   const [letterFilter, setLetterFilter] = useState<string | null>(null);

@@ -8,14 +8,17 @@ import {
   Briefcase,
   Camera,
   Upload,
+  X,
 } from 'lucide-react';
 import { useAuthStore, useToast } from '@/contexts';
+import { useDocumentTitle } from '@/hooks';
 
 export function ProfilePage() {
-  const { user } = useAuthStore();
+  const { user, setUser } = useAuthStore();
   const toast = useToast();
+  useDocumentTitle('Profile');
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   const handleAvatarClick = () => {
     fileInputRef.current?.click();
@@ -36,14 +39,45 @@ export function ProfilePage() {
         return;
       }
 
-      // Create preview
+      setIsUploading(true);
+
+      // Create preview and save to user
       const reader = new FileReader();
       reader.onload = (event) => {
-        setAvatarPreview(event.target?.result as string);
+        const avatarUrl = event.target?.result as string;
+        
+        // Update user in authStore (this persists and updates Header)
+        if (user) {
+          setUser({
+            ...user,
+            avatarUrl,
+          });
+        }
+        
+        setIsUploading(false);
         toast.success('Photo updated', 'Your profile photo has been updated');
-        // TODO: Upload to server
+        // TODO: In production, upload to server and get permanent URL
+      };
+      reader.onerror = () => {
+        setIsUploading(false);
+        toast.error('Upload failed', 'Failed to read the image file');
       };
       reader.readAsDataURL(file);
+    }
+    
+    // Reset file input so same file can be selected again
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleRemovePhoto = () => {
+    if (user) {
+      setUser({
+        ...user,
+        avatarUrl: undefined,
+      });
+      toast.success('Photo removed', 'Your profile photo has been removed');
     }
   };
 
@@ -112,10 +146,13 @@ export function ProfilePage() {
             
             {/* Avatar with upload */}
             <div className="relative group">
-              <div className="w-28 h-28 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-3xl font-bold text-primary-600 dark:text-primary-400 shadow-lg overflow-hidden">
-                {avatarPreview || user?.avatarUrl ? (
+              <div className={clsx(
+                "w-28 h-28 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-3xl font-bold text-primary-600 dark:text-primary-400 shadow-lg overflow-hidden",
+                isUploading && "opacity-50"
+              )}>
+                {user?.avatarUrl ? (
                   <img 
-                    src={avatarPreview || user?.avatarUrl} 
+                    src={user.avatarUrl} 
                     alt={user?.displayName}
                     className="w-full h-full object-cover"
                   />
@@ -127,19 +164,34 @@ export function ProfilePage() {
               {/* Upload overlay */}
               <button 
                 onClick={handleAvatarClick}
-                className="absolute inset-0 rounded-full bg-black/50 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                disabled={isUploading}
+                className="absolute inset-0 rounded-full bg-black/50 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer disabled:cursor-wait"
               >
                 <Upload className="w-6 h-6 text-white mb-1" />
-                <span className="text-white text-xs font-medium">Upload</span>
+                <span className="text-white text-xs font-medium">
+                  {isUploading ? 'Uploading...' : 'Upload'}
+                </span>
               </button>
               
               {/* Camera button */}
               <button 
                 onClick={handleAvatarClick}
-                className="absolute bottom-0 right-0 w-9 h-9 rounded-full bg-primary-500 hover:bg-primary-600 shadow-md flex items-center justify-center text-white transition-colors"
+                disabled={isUploading}
+                className="absolute bottom-0 right-0 w-9 h-9 rounded-full bg-primary-500 hover:bg-primary-600 shadow-md flex items-center justify-center text-white transition-colors disabled:opacity-50"
               >
                 <Camera className="w-4 h-4" />
               </button>
+
+              {/* Remove photo button - only show if there's a photo */}
+              {user?.avatarUrl && (
+                <button 
+                  onClick={handleRemovePhoto}
+                  className="absolute top-0 right-0 w-7 h-7 rounded-full bg-danger-500 hover:bg-danger-600 shadow-md flex items-center justify-center text-white transition-colors"
+                  title="Remove photo"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
             </div>
             
             {/* User Name */}

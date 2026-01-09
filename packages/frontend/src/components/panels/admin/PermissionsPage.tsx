@@ -1,8 +1,10 @@
 import { Shield, Lock, Users } from 'lucide-react';
 import { Page } from '@/components/layout';
 import { Card, CardContent } from '@/components/common';
+import { useDocumentTitle } from '@/hooks';
 
 export function PermissionsPage() {
+  useDocumentTitle('Permissions');
   return (
     <Page
       title="Permissions"

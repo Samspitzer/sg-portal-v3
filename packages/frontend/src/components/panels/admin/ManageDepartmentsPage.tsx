@@ -13,10 +13,12 @@ import { Page } from '@/components/layout';
 import { Card, CardContent, Button, Input, Modal, ConfirmModal } from '@/components/common';
 import { useDepartmentsStore, type Department, type Position } from '@/contexts';
 import { useToast } from '@/contexts';
+import { useDocumentTitle } from '@/hooks';
 
 export function ManageDepartmentsPage() {
   const { departments, addDepartment, updateDepartment, deleteDepartment, addPosition, updatePosition, deletePosition } = useDepartmentsStore();
   const toast = useToast();
+  useDocumentTitle('Departments');
 
   // Department modal state
   const [selectedDeptId, setSelectedDeptId] = useState<string | null>(null);

@@ -12,7 +12,6 @@ import {
   Sun,
   Monitor,
   Bell,
-  Settings,
 } from 'lucide-react';
 import { useAuthStore, useUIStore, useToast, useCompanyStore } from '@/contexts';
 import { PANELS } from '@/config/panels';
@@ -473,10 +472,19 @@ export function PanelHeader() {
                   'w-8 h-8 rounded-full',
                   'bg-primary-100 dark:bg-primary-900',
                   'flex items-center justify-center',
-                  'text-primary-600 dark:text-primary-400 font-medium text-sm'
+                  'text-primary-600 dark:text-primary-400 font-medium text-sm',
+                  'overflow-hidden'
                 )}
               >
-                {user?.firstName?.[0]}{user?.lastName?.[0]}
+                {user?.avatarUrl ? (
+                  <img 
+                    src={user.avatarUrl} 
+                    alt={user?.displayName}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <>{user?.firstName?.[0]}{user?.lastName?.[0]}</>
+                )}
               </div>
               <div className="hidden md:block text-left">
                 <p className="text-sm font-medium text-slate-900 dark:text-white leading-tight">
@@ -530,7 +538,7 @@ export function PanelHeader() {
                     </button>
                     <button
                       onClick={() => {
-                        navigate('/settings');
+                        navigate('/notifications');
                         setShowUserMenu(false);
                       }}
                       className={clsx(
@@ -540,8 +548,8 @@ export function PanelHeader() {
                         'hover:bg-slate-100 dark:hover:bg-slate-700'
                       )}
                     >
-                      <Settings className="w-4 h-4" />
-                      Settings
+                      <Bell className="w-4 h-4" />
+                      Notification Settings
                     </button>
                   </div>
 

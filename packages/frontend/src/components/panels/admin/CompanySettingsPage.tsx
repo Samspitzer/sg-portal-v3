@@ -27,6 +27,7 @@ import {
   validateEmail,
   validateWebsite,
 } from '@/utils/validation';
+import { useDocumentTitle } from '@/hooks';
 
 // Non-collapsible Section Header (matches CollapsibleSection style)
 function SectionHeader({
@@ -68,6 +69,7 @@ function InlineField({
   onEditingChange?: (isEditing: boolean, hasChanges: boolean) => void;
 }) {
   const toast = useToast();
+  useDocumentTitle('Company Settings');
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(value);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -248,6 +250,7 @@ export function CompanySettingsPage() {
     deleteLetterhead,
   } = useCompanyStore();
   const toast = useToast();
+  useDocumentTitle('Company Settings');
   const [isLoading, setIsLoading] = useState(false);
   const [previewLetterhead, setPreviewLetterhead] = useState<LetterheadTemplate | null>(null);
 

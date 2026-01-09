@@ -16,6 +16,7 @@ import { DataTable, type DataTableColumn } from '@/components/common/DataTable';
 import { SelectFilter } from '@/components/common/SelectFilter';
 import { DuplicateCompanyModal } from '@/components/common/DuplicateCompanyModal';
 import { validatePhone, validateWebsite } from '@/utils/validation';
+import { useDocumentTitle } from '@/hooks';
 
 interface CompanyFormData {
   name: string;
@@ -51,6 +52,7 @@ export function CompaniesPage() {
   const { companies, contacts, addCompany } = useClientsStore();
   const { users } = useUsersStore();
   const toast = useToast();
+  useDocumentTitle('Companies');
 
   // Search and filters
   const [search, setSearch] = useState('');

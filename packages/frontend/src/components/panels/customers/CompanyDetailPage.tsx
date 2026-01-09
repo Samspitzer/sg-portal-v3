@@ -31,6 +31,7 @@ import {
   validateEmail,
   validateWebsite,
 } from '@/utils/validation';
+import { useDocumentTitle } from '@/hooks';
 
 // Contact form data interface
 interface ContactFormData {
@@ -494,6 +495,7 @@ export function CompanyDetailPage() {
 
   const company = companies.find((c) => c.id === id);
   const companyContacts = contacts.filter((c) => c.companyId === id);
+  useDocumentTitle(company?.name || 'Company');
 
   const hasUnsavedEdits = Array.from(editingFields.values()).some((hasChanges) => hasChanges);
 
@@ -1485,4 +1487,4 @@ export function CompanyDetailPage() {
       </Modal>
     </Page>
   );
-} 
+}

@@ -1,3 +1,4 @@
+import { useDocumentTitle } from '@/hooks';
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { clsx } from 'clsx';
@@ -393,6 +394,7 @@ function ProjectCard({
 }
 
 export function ProjectsPage() {
+  useDocumentTitle('Projects');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<ProjectStatus | ''>('');
