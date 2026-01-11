@@ -2,7 +2,14 @@ export { useAuthStore } from './authStore';
 export { useUIStore, initializeTheme } from './uiStore';
 export { useToast } from './toastStore';
 export { useCompanyStore, type CompanySettings, type CompanyOffice, type LetterheadTemplate } from './companyStore';
-export { useDepartmentsStore, type Department, type Position } from './departmentsStore';
+// Updated: fieldsStore replaces departmentsStore (backward compatible alias included)
+export { 
+  useFieldsStore, 
+  useDepartmentsStore,  // Backward compatibility alias
+  type Department, 
+  type Position,
+  type PositionLevel,
+} from './fieldsStore';
 export { useRolesStore, type Role, type Permission } from './rolesStore';
 export { useNavigationGuardStore } from './navigationGuardStore';
 export { useUsersStore, type User } from './usersStore';
@@ -14,7 +21,7 @@ export {
   type AdditionalContact,
   type ContactMethodType,
   type CompanyAddress,
-  CONTACT_ROLES,
+  // REMOVED: CONTACT_ROLES - now in fieldsStore
   CONTACT_METHOD_TYPES,
   isDuplicateAddress,
   getCompanySalesRepIds,

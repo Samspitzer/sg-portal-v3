@@ -17,7 +17,7 @@ import { AlphabetFilter } from '@/components/common/AlphabetFilter';
 import { DataTable, type DataTableColumn } from '@/components/common/DataTable';
 import { SelectFilter } from '@/components/common/SelectFilter';
 import { DuplicateContactModal } from '@/components/common/DuplicateContactModal';
-import { useClientsStore, useUsersStore, useToast, CONTACT_ROLES, type ContactRole, type Contact, type Company, getCompanySalesRepIds } from '@/contexts';
+import { useClientsStore, useUsersStore, useFieldsStore, useToast, type ContactRole, type Contact, type Company, getCompanySalesRepIds } from '@/contexts';
 import { useDropdownKeyboard, useDocumentTitle, getContactUrl, getCompanyUrl } from '@/hooks';
 import { validateEmail, validatePhone } from '@/utils/validation';
 
@@ -74,6 +74,7 @@ export function ContactsPage() {
   const navigate = useNavigate();
   const { companies, contacts, addContact, updateContact, addCompany } = useClientsStore();
   const { users } = useUsersStore();
+  const { contactRoles } = useFieldsStore();
   const toast = useToast();
   useDocumentTitle('Contacts');
 
@@ -124,8 +125,8 @@ export function ContactsPage() {
 
   // Role options for Select component
   const roleOptions = useMemo(() => 
-    CONTACT_ROLES.map((role) => ({ value: role, label: role })),
-    []
+    contactRoles.map((role) => ({ value: role, label: role })),
+    [contactRoles]
   );
 
   // Sales rep options for Select component

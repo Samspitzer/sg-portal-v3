@@ -27,7 +27,7 @@ import {
 import { Page } from '@/components/layout';
 import { Card, CardContent, Button, ConfirmModal, Modal, Input, UnsavedChangesModal } from '@/components/common';
 import { CollapsibleSection } from '@/components/common/CollapsibleSection';
-import { useClientsStore, useUsersStore, useToast, useNavigationGuardStore, CONTACT_ROLES, type Contact } from '@/contexts';
+import { useClientsStore, useUsersStore, useToast, useNavigationGuardStore, useFieldsStore, type Contact } from '@/contexts';
 import { useDropdownKeyboard, useDocumentTitle, useContactBySlug, getCompanyUrl } from '@/hooks';
 import { validateEmail, validatePhone, formatPhoneNumber } from '@/utils/validation';
 
@@ -395,6 +395,7 @@ function RoleField({
   needsReview?: boolean;
   onConfirm?: () => void;
 }) {
+  const { contactRoles } = useFieldsStore();
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(value);
   const [showModal, setShowModal] = useState(false);
@@ -407,7 +408,7 @@ function RoleField({
   onEditingChangeRef.current = onEditingChange;
 
   // Role options including "No role assigned"
-  const roleOptions = useMemo(() => ['', ...CONTACT_ROLES], []);
+  const roleOptions = useMemo(() => ['', ...contactRoles], [contactRoles]);
 
   useEffect(() => {
     setEditValue(value);

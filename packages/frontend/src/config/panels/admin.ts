@@ -3,7 +3,7 @@ import {
   Users,
   Building2,
   Shield,
-  Briefcase,
+  SlidersHorizontal,
 } from 'lucide-react';
 import type { PanelTile } from './accounting';
 
@@ -14,8 +14,8 @@ export const ADMIN_PANEL = {
   icon: Settings,
   tiles: [
     { id: 'users', name: 'Manage Users', path: '/admin/users', icon: Users, description: 'Manage user accounts' },
-    { id: 'departments', name: 'Departments', path: '/admin/departments', icon: Briefcase, description: 'Departments & positions' },
-    { id: 'roles', name: 'Roles', path: '/admin/roles', icon: Shield, description: 'Roles & permissions' },
+    { id: 'fields', name: 'Field Settings', path: '/admin/fields', icon: SlidersHorizontal, description: 'Departments, positions & dropdowns' },
+    { id: 'permissions', name: 'Permissions', path: '/admin/permissions', icon: Shield, description: 'Panel access control' },
     { id: 'company', name: 'Company Settings', path: '/admin/company', icon: Building2, description: 'Company information' },
   ] as PanelTile[],
 };

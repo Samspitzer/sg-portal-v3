@@ -4,17 +4,7 @@ import { registerUserDependency } from './userDependencyRegistry';
 import { generateCompanySlug, generateContactSlug } from '@/utils/slugUtils';
 
 // Contact Role options
-export const CONTACT_ROLES = [
-  'Owner',
-  'Project Executive',
-  'Project Manager',
-  'Site Super',
-  'Estimating',
-  'VP of Construction',
-  'Accounts Payable',
-] as const;
-
-export type ContactRole = (typeof CONTACT_ROLES)[number];
+export type ContactRole = string;  // Now dynamic, managed by fieldsStore
 
 // Additional contact method types
 export const CONTACT_METHOD_TYPES = ['phone', 'fax', 'email'] as const;
@@ -71,24 +61,27 @@ export interface Company {
 
 // Helper to get all sales rep IDs for a company (both company-level and location-level)
 export function getCompanySalesRepIds(company: Company): string[] {
-  // If company has company-level sales reps, return those
+  const allReps: string[] = [];
+  
+  // Company-level sales reps
   if (company.salesRepIds && company.salesRepIds.length > 0) {
-    return company.salesRepIds;
+    allReps.push(...company.salesRepIds);
   }
   
-  // Legacy single sales rep support
-  if (company.salesRepId) {
-    return [company.salesRepId];
+  // Legacy single sales rep support at company level
+  if (company.salesRepId && !allReps.includes(company.salesRepId)) {
+    allReps.push(company.salesRepId);
   }
-  
-  // Otherwise, collect from locations
-  const locationReps: string[] = [];
   
   // Main office - check both salesRepIds and legacy salesRepId
   if (company.address?.salesRepIds && company.address.salesRepIds.length > 0) {
-    locationReps.push(...company.address.salesRepIds);
-  } else if (company.address?.salesRepId) {
-    locationReps.push(company.address.salesRepId);
+    for (const repId of company.address.salesRepIds) {
+      if (!allReps.includes(repId)) {
+        allReps.push(repId);
+      }
+    }
+  } else if (company.address?.salesRepId && !allReps.includes(company.address.salesRepId)) {
+    allReps.push(company.address.salesRepId);
   }
   
   // Additional addresses - check both salesRepIds and legacy salesRepId
@@ -96,20 +89,20 @@ export function getCompanySalesRepIds(company: Company): string[] {
     for (const addr of company.addresses) {
       if (addr.salesRepIds && addr.salesRepIds.length > 0) {
         for (const repId of addr.salesRepIds) {
-          if (!locationReps.includes(repId)) {
-            locationReps.push(repId);
+          if (!allReps.includes(repId)) {
+            allReps.push(repId);
           }
         }
-      } else if (addr.salesRepId && !locationReps.includes(addr.salesRepId)) {
-        locationReps.push(addr.salesRepId);
+      } else if (addr.salesRepId && !allReps.includes(addr.salesRepId)) {
+        allReps.push(addr.salesRepId);
       }
     }
   }
   
-  return locationReps;
+  return allReps;
 }
 
-// Helper to check if a company is assigned to a specific sales rep
+// Helper to check if a company is assigned to a specific sales rep (anywhere)
 export function isCompanyAssignedToRep(company: Company, salesRepId: string): boolean {
   return getCompanySalesRepIds(company).includes(salesRepId);
 }
@@ -237,11 +230,12 @@ export const useClientsStore = create<ClientsStore>()(
 
         updateCompany: (id, data) => {
           set((state) => {
-            // If name is being updated, regenerate the slug
             let updatedData = { ...data };
-            if (data.name) {
+            
+            // If name is being updated, regenerate the slug
+            if (data.name !== undefined) {
               const otherCompanies = state.companies.filter(c => c.id !== id);
-              updatedData.slug = generateCompanySlug(data.name, otherCompanies, id);
+              updatedData.slug = generateCompanySlug(data.name, otherCompanies);
             }
             
             return {
@@ -257,7 +251,8 @@ export const useClientsStore = create<ClientsStore>()(
         deleteCompany: (id) => {
           set((state) => ({
             companies: state.companies.filter((company) => company.id !== id),
-            // Contacts are NOT deleted - they become orphaned and show as red in the UI
+            // Also delete associated contacts
+            contacts: state.contacts.filter((contact) => contact.companyId !== id),
           }));
         },
 
@@ -487,31 +482,40 @@ export const useClientsStore = create<ClientsStore>()(
 
 // Register user dependencies for this store
 // This allows the system to automatically track user assignments across modules
-// Note: For companies with multiple sales reps, each rep assignment is tracked separately
-registerUserDependency({
+// Uses hasUser to check ALL locations (company-level AND address-level)
+registerUserDependency<Company>({
   module: 'companies',
   label: 'Companies (Sales Rep)',
   icon: 'Building2',
   field: 'salesRepIds',
   getItems: () => useClientsStore.getState().companies,
-  // Return first sales rep for legacy compatibility, but the system should check salesRepIds
-  getUserId: (company) => {
-    // Check new salesRepIds array first
-    if (company.salesRepIds && company.salesRepIds.length > 0) {
-      return company.salesRepIds[0];
-    }
-    // Fall back to legacy salesRepId
-    return company.salesRepId;
-  },
+  // Use hasUser instead of getUserId to check ALL possible locations
+  hasUser: (company, userId) => isCompanyAssignedToRep(company, userId),
   getItemId: (company) => company.id,
   getItemName: (company) => company.name,
   // Use slug for URL if available
   getItemUrl: (company) => `/clients/companies/${company.slug || company.id}`,
   reassign: (companyId, newUserId) => {
-    // When reassigning, set as the only sales rep (replaces all)
-    useClientsStore.getState().updateCompany(companyId, { 
-      salesRepIds: newUserId ? [newUserId] : [],
-      salesRepId: undefined // Clear legacy field
-    });
+    // When reassigning, set as the only sales rep at company level (clears location-level)
+    const company = useClientsStore.getState().getCompanyById(companyId);
+    if (company) {
+      // Clear address-level assignments
+      const updatedAddress = company.address 
+        ? { ...company.address, salesRepId: undefined, salesRepIds: undefined }
+        : undefined;
+      const updatedAddresses = company.addresses?.map(addr => ({
+        ...addr,
+        salesRepId: undefined,
+        salesRepIds: undefined,
+      }));
+      
+      useClientsStore.getState().updateCompany(companyId, { 
+        salesRepIds: newUserId ? [newUserId] : [],
+        salesRepId: undefined, // Clear legacy field
+        salesRepsByLocation: false, // Switch to company-level assignment
+        address: updatedAddress,
+        addresses: updatedAddresses,
+      });
+    }
   },
 });

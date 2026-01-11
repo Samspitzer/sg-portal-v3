@@ -9,6 +9,8 @@ export interface User {
   departmentId: string;
   positionId: string;
   officeId?: string; // Optional - links to CompanyOffice.id (only required when company has 2+ offices)
+  supervisorId?: string; // Optional - additional/override supervisor (can be alongside default)
+  defaultSupervisorDisabled?: boolean; // If true, the default supervisor from position is disabled
   isActive: boolean;
   createdAt: string;
 }
@@ -24,6 +26,8 @@ interface UsersStore extends UsersState {
   toggleUserActive: (id: string) => void;
   getActiveUsers: () => User[];
   getUsersByOffice: (officeId: string) => User[];
+  getUsersByPosition: (positionId: string) => User[];
+  getUserById: (id: string) => User | undefined;
 }
 
 export const useUsersStore = create<UsersStore>()(
@@ -70,6 +74,14 @@ export const useUsersStore = create<UsersStore>()(
 
         getUsersByOffice: (officeId) => {
           return get().users.filter((user) => user.officeId === officeId);
+        },
+
+        getUsersByPosition: (positionId) => {
+          return get().users.filter((user) => user.positionId === positionId);
+        },
+
+        getUserById: (id) => {
+          return get().users.find((user) => user.id === id);
         },
       }),
       { name: 'sg-portal-users' }

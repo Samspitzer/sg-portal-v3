@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { clsx } from 'clsx';
 import {
@@ -24,7 +24,7 @@ import { Page } from '@/components/layout';
 import { Button, ConfirmModal, Modal, Input, AddressInput, UnsavedChangesModal, Select, Textarea, Toggle } from '@/components/common';
 import { MultiSelectUsers } from '@/components/common/MultiSelectUsers';
 import { CollapsibleSection } from '@/components/common/CollapsibleSection';
-import { useClientsStore, useUsersStore, useToast, useNavigationGuardStore, CONTACT_ROLES, type Company, type ContactRole, type CompanyAddress, isDuplicateAddress } from '@/contexts';
+import { useClientsStore, useUsersStore, useToast, useNavigationGuardStore, useFieldsStore, type Company, type ContactRole, type CompanyAddress, isDuplicateAddress } from '@/contexts';
 import {
   formatPhoneNumber,
   validatePhone,
@@ -454,15 +454,21 @@ function AddressSalesRepField({
   );
 }
 
-// Role options for contact form
-const roleOptions = CONTACT_ROLES.map((role) => ({ value: role, label: role }));
+// Role options moved inside CompanyDetailPage component to use fieldsStore
 
 export function CompanyDetailPage() {
   // Use slug-based routing hook
   const { company, notFound } = useCompanyBySlug();
   const navigate = useNavigate();
   const toast = useToast();
+  const { contactRoles } = useFieldsStore();
   const { contacts, updateCompany, deleteCompany, addContact, addCompanyAddress, updateCompanyAddress, deleteCompanyAddress } = useClientsStore();
+
+  // Role options for contact form - using dynamic contactRoles from store
+  const roleOptions = useMemo(() => 
+    contactRoles.map((role) => ({ value: role, label: role })),
+    [contactRoles]
+  );
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [editingFields, setEditingFields] = useState<Map<string, boolean>>(new Map());

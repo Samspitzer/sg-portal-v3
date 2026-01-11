@@ -65,8 +65,10 @@ export interface UserDependencyRegistration<T = any> {
   field: string;
   /** Function to get all items from the store */
   getItems: () => T[];
-  /** Function to get the user ID field from an item */
-  getUserId: (item: T) => string | undefined | null;
+  /** Function to get the user ID field from an item (legacy - use hasUser for complex checks) */
+  getUserId?: (item: T) => string | undefined | null;
+  /** Function to check if a user is associated with an item (supports complex relationships) */
+  hasUser?: (item: T, userId: string) => boolean;
   /** Function to get the item ID */
   getItemId: (item: T) => string;
   /** Function to get the display name for an item */
@@ -120,6 +122,21 @@ export function subscribeToRegistry(listener: RegistryListener): () => void {
 }
 
 /**
+ * Check if a user is associated with an item
+ */
+function isUserAssociated<T>(registration: UserDependencyRegistration<T>, item: T, userId: string): boolean {
+  // Use hasUser if provided (for complex relationships like multiple sales reps)
+  if (registration.hasUser) {
+    return registration.hasUser(item, userId);
+  }
+  // Fall back to getUserId for simple single-user fields
+  if (registration.getUserId) {
+    return registration.getUserId(item) === userId;
+  }
+  return false;
+}
+
+/**
  * Get all items assigned to a specific user across all registered modules
  */
 export function getUserDependencies(userId: string, userName: string): UserDependencies {
@@ -128,7 +145,7 @@ export function getUserDependencies(userId: string, userName: string): UserDepen
   for (const registration of dependencyRegistry.values()) {
     try {
       const allItems = registration.getItems();
-      const userItems = allItems.filter(item => registration.getUserId(item) === userId);
+      const userItems = allItems.filter(item => isUserAssociated(registration, item, userId));
       
       if (userItems.length > 0) {
         categories.push({

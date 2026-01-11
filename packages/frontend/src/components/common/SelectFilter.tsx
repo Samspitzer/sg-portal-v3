@@ -88,6 +88,15 @@ export function SelectFilter({
     skipDisabled: true,
   });
 
+  // Close dropdown when focus leaves the container
+  const handleContainerBlur = (e: React.FocusEvent) => {
+    // Check if the new focus target is outside our container
+    if (containerRef.current && !containerRef.current.contains(e.relatedTarget as Node)) {
+      setIsOpen(false);
+      setSearchQuery('');
+    }
+  };
+
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -155,6 +164,17 @@ export function SelectFilter({
         // ESC when closed clears the filter
         onChange('');
       }
+    } else if (e.key === 'Tab') {
+      // Tab should select highlighted option and allow normal tab navigation
+      if (isOpen) {
+        const highlighted = allOptions[dropdownKeyboard.highlightedIndex];
+        if (highlighted && !highlighted.disabled) {
+          onChange(highlighted.value);
+        }
+        setIsOpen(false);
+        setSearchQuery('');
+        // Don't prevent default - let tab navigate naturally
+      }
     } else if (isOpen) {
       dropdownKeyboard.handleKeyDown(e);
     }
@@ -176,6 +196,16 @@ export function SelectFilter({
         setIsOpen(false);
       }
       buttonRef.current?.focus();
+    } else if (e.key === 'Tab') {
+      // Select the highlighted option before moving to next field
+      const highlighted = allOptions[dropdownKeyboard.highlightedIndex];
+      if (highlighted && !highlighted.disabled) {
+        onChange(highlighted.value);
+      }
+      // Close dropdown
+      setIsOpen(false);
+      setSearchQuery('');
+      // Don't prevent default - let tab navigate to next element naturally
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
       dropdownKeyboard.handleKeyDown(e);
@@ -199,7 +229,7 @@ export function SelectFilter({
   };
 
   return (
-    <div ref={containerRef} className={clsx('relative', className)}>
+    <div ref={containerRef} className={clsx('relative', className)} onBlur={handleContainerBlur}>
       {/* Trigger Button */}
       <button
         ref={buttonRef}

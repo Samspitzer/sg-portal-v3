@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { clsx } from 'clsx';
 import {
   Plus,
@@ -17,7 +18,7 @@ import { CardContent, Button, Input, Modal, SearchInput, Select, Toggle } from '
 import { DataTable, type DataTableColumn } from '@/components/common/DataTable';
 import { SelectFilter } from '@/components/common/SelectFilter';
 import { UserDeactivationModal } from '@/components/common/UserDeactivationModal';
-import { useToast, useDepartmentsStore, useUsersStore, useCompanyStore, type User } from '@/contexts';
+import { useToast, useFieldsStore, useUsersStore, useCompanyStore, type User } from '@/contexts';
 import { useFormChanges, useDocumentTitle } from '@/hooks';
 import { validateEmail, validatePhone } from '@/utils/validation';
 
@@ -62,7 +63,7 @@ function UserModal({
 }) {
   const toast = useToast();
   useDocumentTitle('Manage Users');
-  const { departments } = useDepartmentsStore();
+  const { departments } = useFieldsStore();
   const { company } = useCompanyStore();
 
   // Get offices - only show selector if 2+ offices
@@ -252,7 +253,7 @@ function UserModal({
               />
               {departments.length === 0 && (
                 <p className="text-xs text-slate-400 mt-1">
-                  No departments available. <a href="/admin/departments" className="text-brand-500 hover:underline">Add departments</a>
+                  No departments available. <a href="/admin/fields" className="text-brand-500 hover:underline">Add departments</a>
                 </p>
               )}
             </div>
@@ -267,7 +268,7 @@ function UserModal({
               />
               {formData.departmentId && availablePositions.length === 0 && (
                 <p className="text-xs text-slate-400 mt-1">
-                  No positions in this department. <a href="/admin/departments" className="text-brand-500 hover:underline">Add positions</a>
+                  No positions in this department. <a href="/admin/fields" className="text-brand-500 hover:underline">Add positions</a>
                 </p>
               )}
             </div>
@@ -336,6 +337,7 @@ function UserModal({
 
 // Main Page Component
 export function ManageUsersPage() {
+  const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('');
@@ -352,7 +354,7 @@ export function ManageUsersPage() {
 
   // Use the shared stores
   const { users, addUser, updateUser, deleteUser, toggleUserActive } = useUsersStore();
-  const { departments } = useDepartmentsStore();
+  const { departments } = useFieldsStore();
   const { company } = useCompanyStore();
 
   // Get offices - only show filter/column if 2+ offices
@@ -452,7 +454,7 @@ export function ManageUsersPage() {
     });
 
     return result;
-  }, [users, search, statusFilter, departmentFilter, sortField, sortDirection, departments]);
+  }, [users, search, statusFilter, departmentFilter, officeFilter, sortField, sortDirection, departments]);
 
   const handleSort = (field: string) => {
     if (sortField === field) {
@@ -522,9 +524,8 @@ export function ManageUsersPage() {
     }
   };
 
-  const openEditModal = (user: User) => {
-    setEditingUser(user);
-    setIsModalOpen(true);
+  const openUserDetail = (user: User) => {
+    navigate(`/admin/users/${user.id}`);
   };
 
   // Clear all filters
@@ -659,7 +660,7 @@ export function ManageUsersPage() {
         columns={columns}
         data={filteredAndSortedUsers}
         rowKey={(user) => user.id}
-        onRowClick={(user) => openEditModal(user)}
+        onRowClick={(user) => openUserDetail(user)}
         sortField={sortField}
         sortDirection={sortDirection}
         onSort={handleSort}
