@@ -10,11 +10,12 @@ import {
   GitBranch,
   ChevronRight,
   CornerDownRight,
+  AlertTriangle,
 } from 'lucide-react';
 import { Page } from '@/components/layout';
-import { Card, CardContent, Button, Input, Modal, ConfirmModal, Select } from '@/components/common';
+import { Button, Input, Modal, Select } from '@/components/common';
 import { CollapsibleSection } from '@/components/common/CollapsibleSection';
-import { useFieldsStore, type Department, type Position } from '@/contexts';
+import { useFieldsStore, useUsersStore, type Department, type Position } from '@/contexts';
 import { useToast } from '@/contexts';
 import { useDocumentTitle } from '@/hooks';
 
@@ -33,60 +34,11 @@ function PanelSectionHeader({ title, icon, description }: { title: string; icon:
   );
 }
 
-// Compact position row with hierarchy indicator
-function PositionRow({
-  position,
-  reportsToName,
-  depth,
-  onEdit,
-  onDelete,
-}: {
-  position: Position;
-  reportsToName: string | null;
-  depth: number;
-  onEdit: () => void;
-  onDelete: () => void;
-}) {
-  return (
-    <div
-      className={clsx(
-        'flex items-center gap-2 py-1.5 px-2 rounded hover:bg-slate-50 dark:hover:bg-slate-800/50 group',
-        depth > 0 && 'ml-4'
-      )}
-    >
-      {depth > 0 && (
-        <CornerDownRight className="w-3 h-3 text-slate-300 dark:text-slate-600 flex-shrink-0" />
-      )}
-      <span className="text-sm text-slate-900 dark:text-white font-medium flex-1 truncate">
-        {position.name}
-      </span>
-      {reportsToName && (
-        <span className="text-xs text-slate-400 dark:text-slate-500 hidden sm:block truncate max-w-[100px]">
-          → {reportsToName}
-        </span>
-      )}
-      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-        <button
-          onClick={onEdit}
-          className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors"
-        >
-          <Edit2 className="w-3 h-3 text-slate-400" />
-        </button>
-        <button
-          onClick={onDelete}
-          className="p-1 hover:bg-danger-50 dark:hover:bg-danger-900/20 rounded transition-colors"
-        >
-          <Trash2 className="w-3 h-3 text-slate-400 hover:text-danger-500" />
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// Department card with hierarchy tree
+// Department card - compact with popup for positions
 function DepartmentCard({
   department,
   parentDeptName,
+  allDepartments,
   onEditDept,
   onDeleteDept,
   onAddPosition,
@@ -95,17 +47,29 @@ function DepartmentCard({
 }: {
   department: Department;
   parentDeptName: string | null;
+  allDepartments: Department[];
   onEditDept: () => void;
   onDeleteDept: () => void;
   onAddPosition: () => void;
   onEditPosition: (position: Position) => void;
   onDeletePosition: (position: Position) => void;
 }) {
-  // Build hierarchy tree
+  const [showPositions, setShowPositions] = useState(false);
+  
+  // Build hierarchy tree - only same department positions for tree structure
   const positionTree = useMemo(() => {
     const buildTree = (parentId: string | null, depth: number): { position: Position; depth: number }[] => {
       const children = department.positions
-        .filter(p => p.reportsToPositionId === parentId)
+        .filter(p => {
+          // Only include in tree if reports to position in same department OR is a root
+          if (p.reportsToPositionId === parentId) return true;
+          // If reports to external dept, show at root level (depth 0)
+          if (parentId === null && p.reportsToPositionId) {
+            const reportsToInSameDept = department.positions.find(pos => pos.id === p.reportsToPositionId);
+            return !reportsToInSameDept; // Not in same dept = show at root
+          }
+          return false;
+        })
         .sort((a, b) => a.order - b.order);
       
       const result: { position: Position; depth: number }[] = [];
@@ -119,78 +83,156 @@ function DepartmentCard({
     return buildTree(null, 0);
   }, [department.positions]);
 
-  const getReportsToName = (position: Position): string | null => {
-    if (!position.reportsToPositionId) return null;
-    const parent = department.positions.find(p => p.id === position.reportsToPositionId);
-    return parent?.name || null;
+  const getReportsToInfo = (position: Position): { name: string | null; externalDept: string | null } => {
+    if (!position.reportsToPositionId) return { name: null, externalDept: null };
+    
+    // Check same department first
+    const sameDeptParent = department.positions.find(p => p.id === position.reportsToPositionId);
+    if (sameDeptParent) {
+      return { name: sameDeptParent.name, externalDept: null };
+    }
+    
+    // Check other departments
+    for (const otherDept of allDepartments) {
+      if (otherDept.id === department.id) continue;
+      const externalParent = otherDept.positions.find(p => p.id === position.reportsToPositionId);
+      if (externalParent) {
+        return { name: externalParent.name, externalDept: otherDept.name };
+      }
+    }
+    
+    return { name: null, externalDept: null };
   };
 
   return (
-    <Card className="h-full">
-      <CardContent className="p-0">
-        {/* Header */}
-        <div className="flex items-center justify-between p-3 border-b border-slate-100 dark:border-slate-800">
+    <>
+      {/* Compact Card */}
+      <div
+        onClick={() => setShowPositions(true)}
+        className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 cursor-pointer hover:border-brand-300 dark:hover:border-brand-700 hover:shadow-sm transition-all group"
+      >
+        <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0 flex-1">
             <Building2 className="w-4 h-4 text-brand-500 flex-shrink-0" />
             <div className="min-w-0 flex-1">
-              <h3 className="font-semibold text-slate-900 dark:text-white text-sm truncate">
+              <h3 className="font-medium text-slate-900 dark:text-white text-sm truncate">
                 {department.name}
               </h3>
               {parentDeptName && (
-                <p className="text-xs text-slate-400 truncate">→ {parentDeptName}</p>
+                <p className="text-[10px] text-brand-500 truncate">→ {parentDeptName}</p>
               )}
             </div>
           </div>
-          <div className="flex items-center gap-0.5 flex-shrink-0">
-            <button
-              onClick={onEditDept}
-              className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors"
-              title="Edit department"
-            >
-              <Edit2 className="w-3.5 h-3.5 text-slate-400" />
-            </button>
-            <button
-              onClick={onDeleteDept}
-              className="p-1.5 hover:bg-danger-50 dark:hover:bg-danger-900/20 rounded transition-colors"
-              title="Delete department"
-            >
-              <Trash2 className="w-3.5 h-3.5 text-slate-400 hover:text-danger-500" />
-            </button>
+          <span className="text-[10px] text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded flex-shrink-0">
+            {department.positions.length}
+          </span>
+        </div>
+      </div>
+
+      {/* Positions Popup Modal */}
+      <Modal
+        isOpen={showPositions}
+        onClose={() => setShowPositions(false)}
+        title={department.name}
+        size="md"
+      >
+        <div className="space-y-3">
+          {/* Department Actions */}
+          <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+            <div className="flex items-center gap-2 text-xs text-slate-500">
+              <Building2 className="w-3.5 h-3.5" />
+              {parentDeptName ? (
+                <span>Reports to: <span className="text-brand-600">{parentDeptName}</span></span>
+              ) : (
+                <span>Top-level department</span>
+              )}
+            </div>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={(e) => { e.stopPropagation(); onEditDept(); setShowPositions(false); }}
+                className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors"
+                title="Edit department"
+              >
+                <Edit2 className="w-3.5 h-3.5 text-slate-400" />
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); onDeleteDept(); setShowPositions(false); }}
+                className="p-1.5 hover:bg-danger-50 dark:hover:bg-danger-900/20 rounded transition-colors"
+                title="Delete department"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-slate-400 hover:text-danger-500" />
+              </button>
+            </div>
+          </div>
+
+          {/* Positions List */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+                Positions ({department.positions.length})
+              </h4>
+              <button
+                onClick={onAddPosition}
+                className="flex items-center gap-1 text-xs text-brand-600 hover:text-brand-700 font-medium"
+              >
+                <Plus className="w-3 h-3" />
+                Add
+              </button>
+            </div>
+            
+            {positionTree.length === 0 ? (
+              <p className="text-sm text-slate-400 text-center py-4">No positions in this department</p>
+            ) : (
+              <div className="space-y-0.5 max-h-[300px] overflow-y-auto">
+                {positionTree.map(({ position, depth }) => {
+                  const reportsInfo = getReportsToInfo(position);
+                  return (
+                    <div
+                      key={position.id}
+                      className={clsx(
+                        'flex items-center gap-2 py-1.5 px-2 rounded hover:bg-slate-50 dark:hover:bg-slate-800/50 group',
+                        depth > 0 && 'ml-4'
+                      )}
+                    >
+                      {depth > 0 && (
+                        <CornerDownRight className="w-3 h-3 text-slate-300 dark:text-slate-600 flex-shrink-0" />
+                      )}
+                      <span className="text-sm text-slate-900 dark:text-white font-medium flex-1 truncate">
+                        {position.name}
+                      </span>
+                      {reportsInfo.name && (
+                        <span className={clsx(
+                          'text-xs truncate max-w-[120px]',
+                          reportsInfo.externalDept 
+                            ? 'text-brand-600 dark:text-brand-400' 
+                            : 'text-slate-400 dark:text-slate-500'
+                        )}>
+                          → {reportsInfo.name}
+                        </span>
+                      )}
+                      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                        <button
+                          onClick={() => onEditPosition(position)}
+                          className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors"
+                        >
+                          <Edit2 className="w-3 h-3 text-slate-400" />
+                        </button>
+                        <button
+                          onClick={() => onDeletePosition(position)}
+                          className="p-1 hover:bg-danger-50 dark:hover:bg-danger-900/20 rounded transition-colors"
+                        >
+                          <Trash2 className="w-3 h-3 text-slate-400 hover:text-danger-500" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
-
-        {/* Positions */}
-        <div className="p-2 max-h-[200px] overflow-y-auto">
-          {positionTree.length === 0 ? (
-            <p className="text-xs text-slate-400 text-center py-2">No positions</p>
-          ) : (
-            <div className="space-y-0.5">
-              {positionTree.map(({ position, depth }) => (
-                <PositionRow
-                  key={position.id}
-                  position={position}
-                  reportsToName={getReportsToName(position)}
-                  depth={depth}
-                  onEdit={() => onEditPosition(position)}
-                  onDelete={() => onDeletePosition(position)}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Add Position */}
-        <div className="px-2 pb-2">
-          <button
-            onClick={onAddPosition}
-            className="w-full flex items-center justify-center gap-1 py-1.5 text-xs text-slate-500 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20 rounded border border-dashed border-slate-200 dark:border-slate-700 hover:border-brand-300 dark:hover:border-brand-700 transition-colors"
-          >
-            <Plus className="w-3 h-3" />
-            Add Position
-          </button>
-        </div>
-      </CardContent>
-    </Card>
+      </Modal>
+    </>
   );
 }
 
@@ -210,6 +252,7 @@ export function FieldSettingsPage() {
     getDepartmentsByParent,
     getParentDepartment,
   } = useFieldsStore();
+  const { users } = useUsersStore();
   const toast = useToast();
   useDocumentTitle('Field Settings');
 
@@ -225,6 +268,7 @@ export function FieldSettingsPage() {
   const [positionDeptId, setPositionDeptId] = useState<string | null>(null);
   const [positionName, setPositionName] = useState('');
   const [positionReportsTo, setPositionReportsTo] = useState<string | null>(null);
+  const [isDepartmentHead, setIsDepartmentHead] = useState(false);
 
   // Contact role state
   const [showRoleModal, setShowRoleModal] = useState(false);
@@ -237,6 +281,112 @@ export function FieldSettingsPage() {
     id: string;
     name: string;
   } | null>(null);
+  
+  // Helper to check position dependencies
+  const getPositionDependencies = (positionId: string) => {
+    // Users assigned to this position
+    const assignedUsers = users.filter(u => u.positionId === positionId);
+    
+    // Users who have someone in this position as their ADDITIONAL supervisor (supervisorId override)
+    const usersWithThisAsSupervisor = users.filter(u => {
+      // Get users in this position
+      const usersInPosition = users.filter(usr => usr.positionId === positionId && usr.isActive);
+      // Check if any user has one of them as their supervisorId
+      return usersInPosition.some(sup => (u as any).supervisorId === sup.id);
+    });
+    
+    // Positions that report to this position
+    const allPositions = departments.flatMap(d => d.positions);
+    const reportingPositions = allPositions.filter(p => p.reportsToPositionId === positionId);
+    
+    // Get the position being deleted to find what it reports to
+    const positionBeingDeleted = allPositions.find(p => p.id === positionId);
+    const willReportTo = positionBeingDeleted?.reportsToPositionId 
+      ? allPositions.find(p => p.id === positionBeingDeleted.reportsToPositionId)
+      : null;
+    
+    // Check if this is a department head
+    const dept = departments.find(d => d.id === positionBeingDeleted?.departmentId);
+    const sameDeptPositionIds = dept?.positions.map(p => p.id) || [];
+    const reportsToSameDept = positionBeingDeleted?.reportsToPositionId 
+      ? sameDeptPositionIds.includes(positionBeingDeleted.reportsToPositionId)
+      : false;
+    const isDepartmentHead = !reportsToSameDept;
+    
+    // Get executive supervisor info (if dept head reports to exec)
+    const execSupervisor = isDepartmentHead && positionBeingDeleted?.reportsToPositionId
+      ? allPositions.find(p => p.id === positionBeingDeleted.reportsToPositionId)
+      : null;
+    
+    return {
+      assignedUsers,
+      usersWithThisAsSupervisor,
+      reportingPositions,
+      willReportTo,
+      isDepartmentHead,
+      execSupervisor,
+      position: positionBeingDeleted,
+      hasAssignedUsers: assignedUsers.length > 0,
+      hasUsersWithThisAsSupervisor: usersWithThisAsSupervisor.length > 0,
+      hasReportingPositions: reportingPositions.length > 0,
+      hasDependencies: assignedUsers.length > 0 || usersWithThisAsSupervisor.length > 0,
+    };
+  };
+  
+  // Helper to check department dependencies  
+  const getDepartmentDependencies = (departmentId: string) => {
+    // Get this department and all child departments recursively
+    const getAllChildDeptIds = (deptId: string): string[] => {
+      const children = getDepartmentsByParent(deptId);
+      return [deptId, ...children.flatMap(c => getAllChildDeptIds(c.id))];
+    };
+    const allAffectedDeptIds = getAllChildDeptIds(departmentId);
+    
+    // Users assigned to this department OR any child department
+    const assignedUsers = users.filter(u => allAffectedDeptIds.includes(u.departmentId));
+    
+    // All positions in affected departments
+    const affectedPositions = departments
+      .filter(d => allAffectedDeptIds.includes(d.id))
+      .flatMap(d => d.positions);
+    const affectedPositionIds = affectedPositions.map(p => p.id);
+    
+    // Positions OUTSIDE this department that report to positions INSIDE this department
+    const allPositions = departments.flatMap(d => d.positions);
+    const externalReportingPositions = allPositions.filter(p => 
+      !affectedPositionIds.includes(p.id) && 
+      p.reportsToPositionId && 
+      affectedPositionIds.includes(p.reportsToPositionId)
+    );
+    
+    // Users outside this department who have supervisorId pointing to users in affected positions
+    const usersInAffectedPositions = users.filter(u => affectedPositionIds.includes(u.positionId));
+    const externalUsersWithSupervisorHere = users.filter(u => 
+      !allAffectedDeptIds.includes(u.departmentId) &&
+      usersInAffectedPositions.some(sup => (u as any).supervisorId === sup.id)
+    );
+    
+    // Child departments
+    const childDepts = getDepartmentsByParent(departmentId);
+    
+    // Get all positions in this department (direct)
+    const dept = departments.find(d => d.id === departmentId);
+    const positions = dept?.positions || [];
+    
+    return {
+      assignedUsers,
+      childDepts,
+      positions,
+      affectedPositions,
+      externalReportingPositions,
+      externalUsersWithSupervisorHere,
+      hasAssignedUsers: assignedUsers.length > 0,
+      hasChildDepts: childDepts.length > 0,
+      hasPositions: positions.length > 0,
+      hasExternalReporting: externalReportingPositions.length > 0 || externalUsersWithSupervisorHere.length > 0,
+      hasDependencies: assignedUsers.length > 0 || externalReportingPositions.length > 0 || externalUsersWithSupervisorHere.length > 0,
+    };
+  };
 
   // Build department hierarchy
   const topLevelDepts = useMemo(() => getDepartmentsByParent(null), [departments]);
@@ -258,16 +408,6 @@ export function FieldSettingsPage() {
     
     addOptions(topLevelDepts);
     return options;
-  };
-
-  // Get position options for reports-to selector (within same department)
-  const getReportsToOptions = (deptId: string, excludeId?: string) => {
-    const dept = departments.find(d => d.id === deptId);
-    if (!dept) return [];
-    
-    return dept.positions
-      .filter(p => p.id !== excludeId)
-      .map(p => ({ value: p.id, label: p.name }));
   };
 
   // ============ DEPARTMENT HANDLERS ============
@@ -310,13 +450,22 @@ export function FieldSettingsPage() {
     setPositionDeptId(deptId);
     setPositionName('');
     setPositionReportsTo(null);
+    setIsDepartmentHead(false);
     setShowPositionModal(true);
   };
 
   const openEditPositionModal = (position: Position) => {
+    // Check if this is a department head (reports to no one in same dept OR reports to exec)
+    const dept = departments.find(d => d.id === position.departmentId);
+    const sameDeptPositionIds = dept?.positions.map(p => p.id) || [];
+    const reportsToSameDept = position.reportsToPositionId 
+      ? sameDeptPositionIds.includes(position.reportsToPositionId)
+      : false;
+    
     setEditingPosition(position);
     setPositionDeptId(position.departmentId);
     setPositionName(position.name);
+    setIsDepartmentHead(!reportsToSameDept);
     setPositionReportsTo(position.reportsToPositionId);
     setShowPositionModal(true);
   };
@@ -327,18 +476,34 @@ export function FieldSettingsPage() {
       return;
     }
     
+    // If not a department head, reportsTo must be set (same-dept)
+    // If department head, reportsTo can be null or exec position
+    const finalReportsTo = isDepartmentHead ? positionReportsTo : positionReportsTo;
+    
     if (editingPosition) {
       updatePosition(editingPosition.id, { 
         name: positionName.trim(), 
-        reportsToPositionId: positionReportsTo 
+        reportsToPositionId: finalReportsTo 
       });
       toast.success('Updated', 'Position updated');
     } else if (positionDeptId) {
-      addPosition(positionDeptId, positionName.trim(), positionReportsTo);
+      addPosition(positionDeptId, positionName.trim(), finalReportsTo);
       toast.success('Added', 'Position created');
     }
     
     setShowPositionModal(false);
+  };
+  
+  // Handle department head checkbox toggle
+  const handleDepartmentHeadToggle = (checked: boolean) => {
+    setIsDepartmentHead(checked);
+    if (checked) {
+      // Clear same-dept reportsTo when becoming dept head
+      setPositionReportsTo(null);
+    } else {
+      // Clear exec reportsTo when no longer dept head
+      setPositionReportsTo(null);
+    }
   };
 
   // ============ CONTACT ROLE HANDLERS ============
@@ -381,13 +546,29 @@ export function FieldSettingsPage() {
 
   // ============ DELETE HANDLER ============
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = (options?: { newDeptHeadId?: string; inheritExecSupervisor?: boolean }) => {
     if (!deleteTarget) return;
     
     if (deleteTarget.type === 'department') {
       deleteDepartment(deleteTarget.id);
       toast.success('Deleted', `${deleteTarget.name} removed`);
     } else if (deleteTarget.type === 'position') {
+      // If we're promoting a new dept head, update them first
+      if (options?.newDeptHeadId) {
+        const deps = getPositionDependencies(deleteTarget.id);
+        const execSupervisorId = options.inheritExecSupervisor ? deps.execSupervisor?.id : null;
+        
+        // Make the new position a department head (reports to exec or null)
+        updatePosition(options.newDeptHeadId, { reportsToPositionId: execSupervisorId || null });
+        
+        // Update other reporting positions to report to the new dept head
+        deps.reportingPositions
+          .filter(p => p.id !== options.newDeptHeadId)
+          .forEach(p => {
+            updatePosition(p.id, { reportsToPositionId: options.newDeptHeadId! });
+          });
+      }
+      
       deletePosition(deleteTarget.id);
       toast.success('Deleted', `${deleteTarget.name} removed`);
     } else if (deleteTarget.type === 'role') {
@@ -414,14 +595,15 @@ export function FieldSettingsPage() {
           </div>
         )}
         <div className={clsx(
-          'grid gap-3',
-          level === 0 ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 ml-4'
+          'grid gap-2',
+          level === 0 ? 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6' : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 ml-4'
         )}>
           {depts.map(dept => (
             <DepartmentCard
               key={dept.id}
               department={dept}
               parentDeptName={getParentDepartment(dept.id)?.name || null}
+              allDepartments={departments}
               onEditDept={() => openEditDeptModal(dept)}
               onDeleteDept={() => setDeleteTarget({ type: 'department', id: dept.id, name: dept.name })}
               onAddPosition={() => openAddPositionModal(dept.id)}
@@ -602,17 +784,111 @@ export function FieldSettingsPage() {
             placeholder="e.g., Sales Manager"
             autoFocus
           />
-          <Select
-            label="Reports To"
-            value={positionReportsTo || ''}
-            onChange={(e) => setPositionReportsTo(e.target.value || null)}
-            options={positionDeptId ? getReportsToOptions(positionDeptId, editingPosition?.id) : []}
-            placeholder="None (Department Head)"
-          />
-          {!positionReportsTo && (
-            <p className="text-xs text-amber-600 dark:text-amber-400">
-              ⚠️ Department heads escalate to parent department.
-            </p>
+          
+          {/* Department Head Checkbox */}
+          <label className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+            <input
+              type="checkbox"
+              checked={isDepartmentHead}
+              onChange={(e) => handleDepartmentHeadToggle(e.target.checked)}
+              className="w-4 h-4 text-brand-600 bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 rounded focus:ring-brand-500"
+            />
+            <div>
+              <span className="text-sm font-medium text-slate-900 dark:text-white">
+                Department Head
+              </span>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Top position in this department
+              </p>
+            </div>
+          </label>
+          
+          {/* Reports To - Different options based on department head status */}
+          {isDepartmentHead ? (
+            // Department Head: can optionally report to Executive
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                Reports To (Executive)
+              </label>
+              {(() => {
+                // Find Executive department
+                const execDept = departments.find(d => 
+                  d.name.toLowerCase().includes('executive') || 
+                  d.name.toLowerCase().includes('exec') ||
+                  d.name.toLowerCase() === 'c-suite' ||
+                  d.name.toLowerCase() === 'leadership'
+                );
+                
+                // Don't show if we're in the exec department
+                if (!execDept || execDept.id === positionDeptId) {
+                  return (
+                    <p className="text-sm text-slate-500 dark:text-slate-400 italic">
+                      No executive department found
+                    </p>
+                  );
+                }
+                
+                const execOptions = execDept.positions.filter(p => p.id !== editingPosition?.id);
+                
+                if (execOptions.length === 0) {
+                  return (
+                    <p className="text-sm text-slate-500 dark:text-slate-400 italic">
+                      No positions in {execDept.name}
+                    </p>
+                  );
+                }
+                
+                return (
+                  <select
+                    value={positionReportsTo || ''}
+                    onChange={(e) => setPositionReportsTo(e.target.value || null)}
+                    className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+                  >
+                    <option value="">None (no executive supervisor)</option>
+                    {execOptions.map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                );
+              })()}
+            </div>
+          ) : (
+            // Not Department Head: must report to someone in same department
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                Reports To
+              </label>
+              {(() => {
+                const dept = departments.find(d => d.id === positionDeptId);
+                const sameDeptOptions = dept?.positions.filter(p => p.id !== editingPosition?.id) || [];
+                
+                if (sameDeptOptions.length === 0) {
+                  return (
+                    <p className="text-sm text-slate-500 dark:text-slate-400 italic">
+                      No other positions in this department
+                    </p>
+                  );
+                }
+                
+                return (
+                  <select
+                    value={positionReportsTo || ''}
+                    onChange={(e) => setPositionReportsTo(e.target.value || null)}
+                    className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+                  >
+                    <option value="">Select supervisor...</option>
+                    {sameDeptOptions.map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                );
+              })()}
+              {!positionReportsTo && (
+                <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                  ⚠️ Please select a supervisor or mark as Department Head
+                </p>
+              )}
+            </div>
           )}
         </div>
       </Modal>
@@ -642,19 +918,305 @@ export function FieldSettingsPage() {
       </Modal>
 
       {/* ============ DELETE CONFIRMATION ============ */}
-      <ConfirmModal
-        isOpen={!!deleteTarget}
-        onClose={() => setDeleteTarget(null)}
-        onConfirm={handleConfirmDelete}
-        title={`Delete ${deleteTarget?.type === 'department' ? 'Department' : deleteTarget?.type === 'position' ? 'Position' : 'Role'}`}
-        message={
-          deleteTarget?.type === 'department'
-            ? `Delete "${deleteTarget?.name}" and all its positions? Child departments will also be deleted.`
-            : `Delete "${deleteTarget?.name}"?`
-        }
-        confirmText="Delete"
-        variant="danger"
-      />
+      {deleteTarget && (
+        <DeleteConfirmationModal
+          target={deleteTarget}
+          onClose={() => setDeleteTarget(null)}
+          onConfirm={handleConfirmDelete}
+          getPositionDependencies={getPositionDependencies}
+          getDepartmentDependencies={getDepartmentDependencies}
+        />
+      )}
     </Page>
+  );
+}
+
+// Delete Confirmation Modal with dependency warnings
+function DeleteConfirmationModal({
+  target,
+  onClose,
+  onConfirm,
+  getPositionDependencies,
+  getDepartmentDependencies,
+}: {
+  target: { type: 'department' | 'position' | 'role'; id: string; name: string };
+  onClose: () => void;
+  onConfirm: (options?: { newDeptHeadId?: string; inheritExecSupervisor?: boolean }) => void;
+  getPositionDependencies: (id: string) => {
+    assignedUsers: any[];
+    usersWithThisAsSupervisor: any[];
+    reportingPositions: any[];
+    willReportTo: any | null;
+    isDepartmentHead: boolean;
+    execSupervisor: any | null;
+    position: any | null;
+    hasAssignedUsers: boolean;
+    hasUsersWithThisAsSupervisor: boolean;
+    hasReportingPositions: boolean;
+    hasDependencies: boolean;
+  };
+  getDepartmentDependencies: (id: string) => {
+    assignedUsers: any[];
+    childDepts: any[];
+    positions: any[];
+    affectedPositions: any[];
+    externalReportingPositions: any[];
+    externalUsersWithSupervisorHere: any[];
+    hasAssignedUsers: boolean;
+    hasChildDepts: boolean;
+    hasPositions: boolean;
+    hasExternalReporting: boolean;
+    hasDependencies: boolean;
+  };
+}) {
+  const [newDeptHeadId, setNewDeptHeadId] = useState<string>('');
+  const [inheritExecSupervisor, setInheritExecSupervisor] = useState(true);
+  
+  const positionDeps = target.type === 'position' ? getPositionDependencies(target.id) : null;
+  const deptDeps = target.type === 'department' ? getDepartmentDependencies(target.id) : null;
+  
+  // Check if this is a dept head with reporting positions (needs succession)
+  const needsSuccession = positionDeps?.isDepartmentHead && positionDeps?.hasReportingPositions;
+  
+  // Critical = cannot delete (users assigned or external dependencies)
+  const hasCriticalDependencies = 
+    (positionDeps?.hasAssignedUsers) || 
+    (positionDeps?.hasUsersWithThisAsSupervisor) ||
+    (deptDeps?.hasDependencies);
+  
+  // Warnings = can delete but will affect other things (non-dept-head with reporting positions)
+  const hasWarnings = 
+    (positionDeps?.hasReportingPositions && !positionDeps?.isDepartmentHead && !hasCriticalDependencies);
+  
+  // For dept head deletion, must select successor
+  const canDeleteDeptHead = needsSuccession ? !!newDeptHeadId : true;
+
+  return (
+    <Modal
+      isOpen={true}
+      onClose={onClose}
+      title={`Delete ${target.type === 'department' ? 'Department' : target.type === 'position' ? 'Position' : 'Role'}`}
+    >
+      <div className="space-y-4">
+        {/* Critical dependencies for Position */}
+        {positionDeps?.hasAssignedUsers && (
+          <div className="p-3 bg-danger-50 dark:bg-danger-900/20 border border-danger-200 dark:border-danger-800 rounded-lg">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="w-5 h-5 text-danger-600 dark:text-danger-400 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="font-medium text-danger-800 dark:text-danger-200">
+                  Users are assigned to this position
+                </p>
+                <p className="text-sm text-danger-700 dark:text-danger-300 mt-1">
+                  {positionDeps.assignedUsers.length} user{positionDeps.assignedUsers.length !== 1 ? 's' : ''}: 
+                  <span className="font-medium"> {positionDeps.assignedUsers.map((u: any) => u.name).join(', ')}</span>
+                </p>
+                <p className="text-sm text-danger-600 dark:text-danger-400 mt-2">
+                  Reassign these users to a different position before deleting.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* Users with this position holder as additional supervisor */}
+        {positionDeps?.hasUsersWithThisAsSupervisor && (
+          <div className="p-3 bg-danger-50 dark:bg-danger-900/20 border border-danger-200 dark:border-danger-800 rounded-lg">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="w-5 h-5 text-danger-600 dark:text-danger-400 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="font-medium text-danger-800 dark:text-danger-200">
+                  Users have supervisors in this position
+                </p>
+                <p className="text-sm text-danger-700 dark:text-danger-300 mt-1">
+                  {positionDeps.usersWithThisAsSupervisor.length} user{positionDeps.usersWithThisAsSupervisor.length !== 1 ? 's have' : ' has'} an additional supervisor assigned from this position.
+                </p>
+                <p className="text-sm text-danger-600 dark:text-danger-400 mt-2">
+                  Update their supervisor assignments before deleting.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* Department Head Succession - only show if no critical deps */}
+        {needsSuccession && !hasCriticalDependencies && (
+          <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+            <div className="flex items-start gap-2 mb-3">
+              <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="font-medium text-amber-800 dark:text-amber-200">
+                  This is a Department Head
+                </p>
+                <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                  {positionDeps!.reportingPositions.length} position{positionDeps!.reportingPositions.length !== 1 ? 's' : ''} report to this position:
+                </p>
+                <ul className="text-sm text-amber-700 dark:text-amber-300 mt-1 ml-4 list-disc">
+                  {positionDeps!.reportingPositions.map((p: any) => (
+                    <li key={p.id}>{p.name}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+            
+            <div className="space-y-3 mt-4">
+              <div>
+                <label className="block text-sm font-medium text-amber-800 dark:text-amber-200 mb-1">
+                  Select the new Department Head:
+                </label>
+                <select
+                  value={newDeptHeadId}
+                  onChange={(e) => setNewDeptHeadId(e.target.value)}
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-700 rounded-lg text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                >
+                  <option value="">Select a position...</option>
+                  {positionDeps!.reportingPositions.map((p: any) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </div>
+              
+              {positionDeps?.execSupervisor && newDeptHeadId && (
+                <label className="flex items-center gap-2 text-sm text-amber-800 dark:text-amber-200 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={inheritExecSupervisor}
+                    onChange={(e) => setInheritExecSupervisor(e.target.checked)}
+                    className="w-4 h-4 text-amber-600 bg-white dark:bg-slate-700 border-amber-300 dark:border-amber-600 rounded focus:ring-amber-500"
+                  />
+                  <span>
+                    New Department Head reports to <strong>{positionDeps.execSupervisor.name}</strong>
+                  </span>
+                </label>
+              )}
+              
+              {newDeptHeadId && (
+                <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
+                  The other positions will report to the new Department Head.
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+        
+        {/* Critical dependencies for Department */}
+        {deptDeps?.hasAssignedUsers && (
+          <div className="p-3 bg-danger-50 dark:bg-danger-900/20 border border-danger-200 dark:border-danger-800 rounded-lg">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="w-5 h-5 text-danger-600 dark:text-danger-400 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="font-medium text-danger-800 dark:text-danger-200">
+                  Users are assigned to this department
+                </p>
+                <p className="text-sm text-danger-700 dark:text-danger-300 mt-1">
+                  {deptDeps.assignedUsers.length} user{deptDeps.assignedUsers.length !== 1 ? 's' : ''}: 
+                  <span className="font-medium"> {deptDeps.assignedUsers.slice(0, 5).map((u: any) => u.name).join(', ')}</span>
+                  {deptDeps.assignedUsers.length > 5 && ` and ${deptDeps.assignedUsers.length - 5} more`}
+                </p>
+                <p className="text-sm text-danger-600 dark:text-danger-400 mt-2">
+                  Reassign all users before deleting this department.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {deptDeps?.hasExternalReporting && (
+          <div className="p-3 bg-danger-50 dark:bg-danger-900/20 border border-danger-200 dark:border-danger-800 rounded-lg">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="w-5 h-5 text-danger-600 dark:text-danger-400 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="font-medium text-danger-800 dark:text-danger-200">
+                  External dependencies exist
+                </p>
+                <ul className="text-sm text-danger-700 dark:text-danger-300 mt-1 space-y-1">
+                  {deptDeps.externalReportingPositions.length > 0 && (
+                    <li>• {deptDeps.externalReportingPositions.length} position{deptDeps.externalReportingPositions.length !== 1 ? 's' : ''} from other departments report to positions here</li>
+                  )}
+                  {deptDeps.externalUsersWithSupervisorHere.length > 0 && (
+                    <li>• {deptDeps.externalUsersWithSupervisorHere.length} user{deptDeps.externalUsersWithSupervisorHere.length !== 1 ? 's' : ''} from other departments have supervisors here</li>
+                  )}
+                </ul>
+                <p className="text-sm text-danger-600 dark:text-danger-400 mt-2">
+                  Update these reporting structures before deleting.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* Info about what will be deleted (for department) */}
+        {deptDeps && !hasCriticalDependencies && (deptDeps.hasChildDepts || deptDeps.hasPositions) && (
+          <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
+            <p className="text-sm text-slate-600 dark:text-slate-400">
+              This will delete:
+            </p>
+            <ul className="text-sm text-slate-600 dark:text-slate-400 mt-1 space-y-0.5">
+              {deptDeps.hasPositions && (
+                <li>• {deptDeps.positions.length} position{deptDeps.positions.length !== 1 ? 's' : ''}</li>
+              )}
+              {deptDeps.hasChildDepts && (
+                <li>• {deptDeps.childDepts.length} child department{deptDeps.childDepts.length !== 1 ? 's' : ''} and their positions</li>
+              )}
+            </ul>
+          </div>
+        )}
+        
+        {/* Warning for non-dept-head positions that will be reassigned */}
+        {hasWarnings && positionDeps?.hasReportingPositions && (
+          <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="font-medium text-amber-800 dark:text-amber-200">
+                  Reporting structure will be updated
+                </p>
+                <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                  {positionDeps.reportingPositions.length} position{positionDeps.reportingPositions.length !== 1 ? 's' : ''} currently report to "{target.name}".
+                  {positionDeps.willReportTo 
+                    ? <> They will be reassigned to report to <strong>{positionDeps.willReportTo.name}</strong>.</>
+                    : <> They will become department heads (no supervisor).</>
+                  }
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* Normal message when no dependencies */}
+        {!hasCriticalDependencies && !hasWarnings && !needsSuccession && (
+          <p className="text-slate-600 dark:text-slate-400">
+            {target.type === 'role' 
+              ? `Delete the role "${target.name}"?`
+              : `Delete "${target.name}"? This action cannot be undone.`
+            }
+          </p>
+        )}
+        
+        {/* Action buttons */}
+        <div className="flex justify-end gap-2 pt-2">
+          <Button variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          {hasCriticalDependencies ? (
+            <Button variant="secondary" disabled>
+              Cannot Delete
+            </Button>
+          ) : needsSuccession ? (
+            <Button 
+              variant="danger" 
+              onClick={() => onConfirm({ newDeptHeadId, inheritExecSupervisor })}
+              disabled={!canDeleteDeptHead}
+            >
+              Delete & Assign
+            </Button>
+          ) : (
+            <Button variant="danger" onClick={() => onConfirm()}>
+              {hasWarnings ? 'Delete Anyway' : 'Delete'}
+            </Button>
+          )}
+        </div>
+      </div>
+    </Modal>
   );
 }

@@ -720,6 +720,14 @@ export function UserDetailPage() {
     );
   }
   
+  // Check for data integrity issues
+  const userDepartment = departments.find(d => d.id === user.departmentId);
+  const hasMissingDepartment = user.departmentId && !userDepartment;
+  const hasMissingPosition = user.positionId && !userPosition;
+  const additionalSupervisorUser = additionalSupervisorId ? users.find(u => u.id === additionalSupervisorId) : null;
+  const hasMissingSupervisor = additionalSupervisorId && !additionalSupervisorUser;
+  const hasDataIssues = hasMissingDepartment || hasMissingPosition || hasMissingSupervisor;
+  
   return (
     <Page
       title={user.name}
@@ -737,6 +745,60 @@ export function UserDetailPage() {
         </div>
       }
     >
+      {/* Data Integrity Warnings */}
+      {hasDataIssues && (
+        <div className="mb-4 space-y-2">
+          {hasMissingDepartment && (
+            <div className="flex items-center gap-3 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+              <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                  Department not found
+                </p>
+                <p className="text-xs text-amber-700 dark:text-amber-300">
+                  The assigned department has been deleted. Please select a new department.
+                </p>
+              </div>
+            </div>
+          )}
+          {hasMissingPosition && (
+            <div className="flex items-center gap-3 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+              <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                  Position not found
+                </p>
+                <p className="text-xs text-amber-700 dark:text-amber-300">
+                  The assigned position has been deleted. Please select a new position.
+                </p>
+              </div>
+            </div>
+          )}
+          {hasMissingSupervisor && (
+            <div className="flex items-center gap-3 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+              <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+              <div className="flex-1 flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                    Additional supervisor not found
+                  </p>
+                  <p className="text-xs text-amber-700 dark:text-amber-300">
+                    The additional supervisor has been deleted or deactivated.
+                  </p>
+                </div>
+                <Button 
+                  variant="secondary" 
+                  size="sm"
+                  onClick={handleRemoveAdditionalSupervisor}
+                >
+                  Remove
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+      
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Left Column - User Details */}
         <div className="lg:col-span-2 space-y-4">
@@ -965,7 +1027,7 @@ export function UserDetailPage() {
                         <Info className="w-4 h-4" />
                         <span>
                           {userPosition.reportsToPositionId === null
-                            ? 'Department head - escalates to parent department'
+                            ? 'Department Head'
                             : 'No reporting structure defined for this position'}
                         </span>
                       </div>

@@ -93,11 +93,11 @@ export function Header({ }: { fullWidth?: boolean }) {
           >
             {/* Company Logo */}
             {company.logo ? (
-              <div className="bg-white rounded-xl">
-                <img 
-                  src={company.logo} 
-                  alt={company.name} 
-                  className="h-12 w-auto max-w-[180px] object-contain"
+              <div className="bg-white rounded-xl p-1">
+                <img
+                  src={company.logo}
+                  alt={company.name}
+                  className="h-10 w-auto max-w-[160px] object-contain"
                 />
               </div>
             ) : (

@@ -12,6 +12,7 @@ import {
   UserCheck,
   Trash2,
   MapPin,
+  AlertTriangle,
 } from 'lucide-react';
 import { Page } from '@/components/layout';
 import { CardContent, Button, Input, Modal, SearchInput, Select, Toggle } from '@/components/common';
@@ -366,10 +367,22 @@ export function ManageUsersPage() {
     return dept?.name || '—';
   };
 
+  const isDepartmentMissing = (departmentId: string) => {
+    if (!departmentId) return false;
+    return !departments.find(d => d.id === departmentId);
+  };
+
   const getPositionName = (departmentId: string, positionId: string) => {
     const dept = departments.find(d => d.id === departmentId);
     const pos = dept?.positions.find(p => p.id === positionId);
     return pos?.name || '—';
+  };
+
+  const isPositionMissing = (departmentId: string, positionId: string) => {
+    if (!positionId) return false;
+    const dept = departments.find(d => d.id === departmentId);
+    if (!dept) return true; // If dept missing, position is also effectively missing
+    return !dept.positions.find(p => p.id === positionId);
   };
 
   const getOfficeName = (officeId?: string) => {
@@ -608,21 +621,35 @@ export function ManageUsersPage() {
       key: 'department',
       header: 'Department',
       sortable: true,
-      render: (user) => (
-        <span className="text-slate-600 dark:text-slate-400">
-          {getDepartmentName(user.departmentId)}
-        </span>
-      ),
+      render: (user) => {
+        const missing = isDepartmentMissing(user.departmentId);
+        return (
+          <span className={clsx(
+            'flex items-center gap-1',
+            missing ? 'text-amber-600 dark:text-amber-400' : 'text-slate-600 dark:text-slate-400'
+          )}>
+            {missing && <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />}
+            {missing ? 'Missing' : getDepartmentName(user.departmentId)}
+          </span>
+        );
+      },
       hideOnMobile: true,
     },
     {
       key: 'position',
       header: 'Position',
-      render: (user) => (
-        <span className="text-slate-600 dark:text-slate-400">
-          {getPositionName(user.departmentId, user.positionId)}
-        </span>
-      ),
+      render: (user) => {
+        const missing = isPositionMissing(user.departmentId, user.positionId);
+        return (
+          <span className={clsx(
+            'flex items-center gap-1',
+            missing ? 'text-amber-600 dark:text-amber-400' : 'text-slate-600 dark:text-slate-400'
+          )}>
+            {missing && <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />}
+            {missing ? 'Missing' : getPositionName(user.departmentId, user.positionId)}
+          </span>
+        );
+      },
       hideOnMobile: true,
     },
     {

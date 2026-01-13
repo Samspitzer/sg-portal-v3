@@ -215,11 +215,13 @@ export function PanelHeader() {
             )}
           >
             {company.logo ? (
-              <img 
-                src={company.logo} 
-                alt={company.name} 
-                className="h-12 w-auto max-w-[180px] object-contain"
-              />
+              <div className="bg-white rounded-xl p-1">
+                <img
+                  src={company.logo}
+                  alt={company.name}
+                  className="h-10 w-auto max-w-[160px] object-contain"
+                />
+              </div>
             ) : (
               <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center">
                 <span className="text-white font-bold text-xs">

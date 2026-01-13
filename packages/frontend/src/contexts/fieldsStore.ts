@@ -302,18 +302,35 @@ export const useFieldsStore = create<FieldsStore>()(
 
       deletePosition: (positionId) => {
         set((state) => {
+          // Find the position being deleted to get its reportsToPositionId
+          const deletedPosition = state.departments
+            .flatMap(d => d.positions)
+            .find(p => p.id === positionId);
+          
+          const inheritedReportsTo = deletedPosition?.reportsToPositionId || null;
+          
           // When deleting a position, update any positions that reported to it
-          // Set their reportsToPositionId to null (they become dept heads)
+          // They should now report to the deleted position's supervisor (next level up)
           return {
             departments: state.departments.map((dept) => ({
               ...dept,
               positions: dept.positions
                 .filter((pos) => pos.id !== positionId)
-                .map((pos) => 
-                  pos.reportsToPositionId === positionId 
-                    ? { ...pos, reportsToPositionId: null, level: 1 as PositionLevel }
-                    : pos
-                ),
+                .map((pos) => {
+                  if (pos.reportsToPositionId !== positionId) return pos;
+                  
+                  // Calculate new level based on inherited reporting
+                  const allPositions = state.departments.flatMap(d => d.positions).filter(p => p.id !== positionId);
+                  const newLevel = inheritedReportsTo
+                    ? Math.min(5, calculateLevel(inheritedReportsTo, allPositions) + 1) as PositionLevel
+                    : 1;
+                  
+                  return { 
+                    ...pos, 
+                    reportsToPositionId: inheritedReportsTo,
+                    level: newLevel,
+                  };
+                }),
               updatedAt: dept.positions.some(p => p.id === positionId || p.reportsToPositionId === positionId)
                 ? new Date().toISOString()
                 : dept.updatedAt,
