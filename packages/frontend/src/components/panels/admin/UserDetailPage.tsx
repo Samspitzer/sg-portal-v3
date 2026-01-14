@@ -21,7 +21,6 @@ import {
   Check,
   X,
   Pencil,
-  UserCheck,
   GitBranch,
   Lock,
   Unlock,
@@ -30,6 +29,8 @@ import {
 } from 'lucide-react';
 import { Page } from '@/components/layout';
 import { Button, ConfirmModal, Input, Toggle } from '@/components/common';
+import { SelectFilter } from '@/components/common/SelectFilter';
+import { PositionSelector } from '@/components/common/PositionSelector';
 import { CollapsibleSection } from '@/components/common/CollapsibleSection';
 import { UserDeactivationModal } from '@/components/common/UserDeactivationModal';
 import { useUsersStore, useFieldsStore, useCompanyStore, useClientsStore, useToast } from '@/contexts';
@@ -195,6 +196,162 @@ function InlineField({
           <Pencil className="w-3 h-3 text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity ml-auto" />
         )}
       </div>
+    </div>
+  );
+}
+
+// Additional Supervisor Selector with User/Position tabs
+function AdditionalSupervisorSelector({
+  users,
+  departments,
+  currentUserId,
+  excludeUserIds = [],
+  onSelect,
+}: {
+  users: any[];
+  departments: any[];
+  currentUserId: string;
+  excludeUserIds?: string[];
+  onSelect: (value: string) => void;
+}) {
+  const toast = useToast();
+  const [mode, setMode] = useState<'user' | 'position'>('user');
+  const [selectedPositionId, setSelectedPositionId] = useState('');
+  
+  // User options - all active users except current and excluded
+  const userOptions = useMemo(() => {
+    return users
+      .filter((u) => u.isActive && u.id !== currentUserId && !excludeUserIds.includes(u.id))
+      .map((u) => ({
+        value: u.id,
+        label: u.name,
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [users, currentUserId, excludeUserIds]);
+  
+  // Listen for pending toast events from PositionSelector
+  useEffect(() => {
+    const handlePendingEvent = (e: CustomEvent) => {
+      toast.warning('Supervisor Not Added', e.detail.message);
+    };
+    window.addEventListener('position-selector-pending', handlePendingEvent as EventListener);
+    return () => window.removeEventListener('position-selector-pending', handlePendingEvent as EventListener);
+  }, [toast]);
+  
+  // When position is selected, find the user(s) in that position
+  const handlePositionSelect = (positionId: string) => {
+    if (!positionId) {
+      setSelectedPositionId('');
+      return;
+    }
+    setSelectedPositionId(positionId);
+    // Find users in this position (excluding already selected)
+    const usersInPosition = users.filter(
+      u => u.positionId === positionId && u.isActive && u.id !== currentUserId && !excludeUserIds.includes(u.id)
+    );
+    if (usersInPosition.length === 1) {
+      // Auto-select if only one user
+      onSelect(usersInPosition[0].id);
+      setSelectedPositionId('');
+    }
+  };
+  
+  // Get users in selected position (for when multiple users hold position)
+  const usersInSelectedPosition = useMemo(() => {
+    if (!selectedPositionId) return [];
+    return users
+      .filter(u => u.positionId === selectedPositionId && u.isActive && u.id !== currentUserId && !excludeUserIds.includes(u.id))
+      .map(u => ({ value: u.id, label: u.name }));
+  }, [selectedPositionId, users, currentUserId, excludeUserIds]);
+  
+  // Get selected position name for toast message
+  const selectedPositionName = useMemo(() => {
+    if (!selectedPositionId) return '';
+    for (const dept of departments) {
+      const pos = dept.positions?.find((p: any) => p.id === selectedPositionId);
+      if (pos) return pos.name;
+    }
+    return '';
+  }, [selectedPositionId, departments]);
+  
+  // Determine if position selection is pending (selected but no users to pick)
+  const isPending = !!(selectedPositionId && usersInSelectedPosition.length === 0);
+  
+  return (
+    <div className="space-y-2">
+      {/* Mode tabs */}
+      <div className="flex gap-1 p-0.5 bg-slate-100 dark:bg-slate-800 rounded-lg w-fit">
+        <button
+          onClick={() => { setMode('user'); setSelectedPositionId(''); }}
+          className={clsx(
+            'px-2 py-1 text-xs font-medium rounded transition-colors',
+            mode === 'user'
+              ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
+              : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+          )}
+        >
+          By User
+        </button>
+        <button
+          onClick={() => setMode('position')}
+          className={clsx(
+            'px-2 py-1 text-xs font-medium rounded transition-colors',
+            mode === 'position'
+              ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
+              : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+          )}
+        >
+          By Position
+        </button>
+      </div>
+      
+      {/* Selector based on mode */}
+      {mode === 'user' ? (
+        <SelectFilter
+          label="Select user..."
+          value=""
+          options={userOptions}
+          onChange={onSelect}
+          icon={<User className="w-3.5 h-3.5" />}
+          showAllOption={false}
+          searchThreshold={3}
+        />
+      ) : (
+        <div className="space-y-2">
+          <PositionSelector
+            value={selectedPositionId}
+            departments={departments}
+            onChange={handlePositionSelect}
+            icon={<Briefcase className="w-3.5 h-3.5" />}
+            placeholder="Select position..."
+            pending={isPending}
+            pendingMessage={`No one is assigned to "${selectedPositionName}"`}
+          />
+          
+          {/* Show user selector if position has multiple users */}
+          {selectedPositionId && usersInSelectedPosition.length > 1 && (
+            <SelectFilter
+              label="Select user in position..."
+              value=""
+              options={usersInSelectedPosition}
+              onChange={(userId) => {
+                onSelect(userId);
+                setSelectedPositionId('');
+              }}
+              icon={<User className="w-3.5 h-3.5" />}
+              showAllOption={false}
+              searchThreshold={3}
+            />
+          )}
+          
+          {/* Show message if position is vacant */}
+          {isPending && (
+            <p className="text-xs text-amber-600 dark:text-amber-400">
+              No one currently holds this position
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -556,51 +713,15 @@ export function UserDetailPage() {
     }));
   }, [user?.departmentId, getPositionsByDepartment]);
   
-  // Supervisor options (users in supervisor position)
-  const supervisorOptions = useMemo(() => {
-    const options = usersInSupervisorPosition.map((u) => ({
-      value: u.id,
-      label: u.name,
-    }));
-    if (autoSupervisor && usersInSupervisorPosition.length === 1) {
-      return options; // Auto-selected, no need for empty option
-    }
-    return [{ value: '', label: 'Select supervisor...' }, ...options];
-  }, [usersInSupervisorPosition, autoSupervisor]);
-  
-  // All active users for override (excluding current user)
-  const allUserOptions = useMemo(() => {
-    return users
-      .filter((u) => u.isActive && u.id !== user?.id)
-      .map((u) => ({
-        value: u.id,
-        label: u.name,
-      }))
-      .sort((a, b) => a.label.localeCompare(b.label));
-  }, [users, user?.id]);
-  
-  // Reporting structure state
-  const hasAdditionalSupervisor = !!(user as any)?.supervisorId;
-  const additionalSupervisorId = (user as any)?.supervisorId;
-  const additionalSupervisor = additionalSupervisorId ? users.find(u => u.id === additionalSupervisorId) : null;
-  const isDefaultSupervisorDisabled = !!(user as any)?.defaultSupervisorDisabled;
-  
-  // Effective supervisors list
-  const effectiveSupervisors = useMemo(() => {
-    const supervisors: { id: string; name: string; type: 'default' | 'additional' }[] = [];
-    
-    // Add default supervisor (if not disabled and exists)
-    if (!isDefaultSupervisorDisabled && autoSupervisor) {
-      supervisors.push({ id: autoSupervisor.id, name: autoSupervisor.name, type: 'default' });
-    }
-    
-    // Add additional supervisor (if set and different from default)
-    if (additionalSupervisor && additionalSupervisor.id !== autoSupervisor?.id) {
-      supervisors.push({ id: additionalSupervisor.id, name: additionalSupervisor.name, type: 'additional' });
-    }
-    
-    return supervisors;
-  }, [autoSupervisor, additionalSupervisor, isDefaultSupervisorDisabled]);
+  // Reporting structure state - support multiple additional supervisors
+  const additionalSupervisorIds: string[] = (user as any)?.supervisorIds || 
+    ((user as any)?.supervisorId ? [(user as any).supervisorId] : []);
+  const additionalSupervisors = useMemo(() => {
+    return additionalSupervisorIds
+      .map(id => users.find(u => u.id === id))
+      .filter(Boolean) as typeof users;
+  }, [additionalSupervisorIds, users]);
+  const hasAdditionalSupervisors = additionalSupervisors.length > 0;
   
   // Office options
   const officeOptions = useMemo(() => 
@@ -632,39 +753,31 @@ export function UserDetailPage() {
     toast.success('Updated', `${field.charAt(0).toUpperCase() + field.slice(1)} updated`);
   };
   
-  // Reporting structure handlers
-  const handleToggleDefaultSupervisor = () => {
-    if (!user) return;
-    const newValue = !isDefaultSupervisorDisabled;
-    updateUser(user.id, { defaultSupervisorDisabled: newValue } as any);
-    toast.success('Updated', newValue ? 'Default supervisor disabled' : 'Default supervisor enabled');
-  };
-  
-  const handleSetAdditionalSupervisor = (supervisorId: string) => {
-    if (!user) return;
-    if (supervisorId) {
-      updateUser(user.id, { supervisorId } as any);
-      toast.success('Updated', 'Additional supervisor set');
-    } else {
-      // If removing additional supervisor, always re-enable default
-      if (isDefaultSupervisorDisabled) {
-        updateUser(user.id, { supervisorId: undefined, defaultSupervisorDisabled: false } as any);
-        toast.success('Updated', 'Additional supervisor removed, default restored');
-      } else {
-        updateUser(user.id, { supervisorId: undefined } as any);
-        toast.success('Updated', 'Additional supervisor removed');
-      }
+  const handleAddAdditionalSupervisor = (supervisorId: string) => {
+    if (!user || !supervisorId) return;
+    // Don't add duplicates
+    if (additionalSupervisorIds.includes(supervisorId)) {
+      toast.error('Already Added', 'This supervisor is already in the list');
+      return;
     }
+    const newIds = [...additionalSupervisorIds, supervisorId];
+    updateUser(user.id, { supervisorIds: newIds } as any);
+    toast.success('Updated', 'Additional supervisor added');
   };
   
-  const handleRemoveAdditionalSupervisor = () => {
+  const handleRemoveAdditionalSupervisor = (supervisorId: string) => {
     if (!user) return;
-    // Always re-enable default when removing additional supervisor
-    if (isDefaultSupervisorDisabled) {
-      updateUser(user.id, { supervisorId: undefined, defaultSupervisorDisabled: false } as any);
-      toast.success('Updated', 'Additional supervisor removed, default restored');
+    const newIds = additionalSupervisorIds.filter(id => id !== supervisorId);
+    
+    // If removing last additional supervisor and default is disabled, re-enable default
+    if (newIds.length === 0 && (user as any)?.defaultSupervisorDisabled) {
+      updateUser(user.id, { 
+        supervisorIds: undefined, 
+        defaultSupervisorDisabled: false 
+      } as any);
+      toast.success('Updated', 'Additional supervisor removed - default supervisor re-enabled');
     } else {
-      updateUser(user.id, { supervisorId: undefined } as any);
+      updateUser(user.id, { supervisorIds: newIds.length > 0 ? newIds : undefined } as any);
       toast.success('Updated', 'Additional supervisor removed');
     }
   };
@@ -724,8 +837,7 @@ export function UserDetailPage() {
   const userDepartment = departments.find(d => d.id === user.departmentId);
   const hasMissingDepartment = user.departmentId && !userDepartment;
   const hasMissingPosition = user.positionId && !userPosition;
-  const additionalSupervisorUser = additionalSupervisorId ? users.find(u => u.id === additionalSupervisorId) : null;
-  const hasMissingSupervisor = additionalSupervisorId && !additionalSupervisorUser;
+  const hasMissingSupervisor = additionalSupervisorIds.length > 0 && additionalSupervisors.length < additionalSupervisorIds.length;
   const hasDataIssues = hasMissingDepartment || hasMissingPosition || hasMissingSupervisor;
   
   return (
@@ -783,15 +895,20 @@ export function UserDetailPage() {
                     Additional supervisor not found
                   </p>
                   <p className="text-xs text-amber-700 dark:text-amber-300">
-                    The additional supervisor has been deleted or deactivated.
+                    One or more additional supervisors have been deleted or deactivated.
                   </p>
                 </div>
                 <Button 
                   variant="secondary" 
                   size="sm"
-                  onClick={handleRemoveAdditionalSupervisor}
+                  onClick={() => {
+                    // Clear invalid supervisor IDs by keeping only the valid ones
+                    const validIds = additionalSupervisors.map(s => s.id);
+                    updateUser(user.id, { supervisorIds: validIds.length > 0 ? validIds : undefined } as any);
+                    toast.success('Updated', 'Invalid supervisors removed');
+                  }}
                 >
-                  Remove
+                  Clear Invalid
                 </Button>
               </div>
             </div>
@@ -888,181 +1005,131 @@ export function UserDetailPage() {
                 />
               </div>
               
-              {/* Reporting Structure */}
+              {/* Reporting Structure - Simple Display */}
               {userPosition && (
                 <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <GitBranch className="w-4 h-4 text-slate-500" />
-                      <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                        Reporting Structure
-                      </span>
-                    </div>
-                    {effectiveSupervisors.length > 0 && (
-                      <span className="px-2 py-0.5 text-xs font-medium bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 rounded">
-                        {effectiveSupervisors.length} supervisor{effectiveSupervisors.length !== 1 ? 's' : ''}
-                      </span>
-                    )}
+                  <div className="flex items-center gap-2 mb-3">
+                    <GitBranch className="w-4 h-4 text-slate-500" />
+                    <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                      Reporting Structure
+                    </span>
                   </div>
                   
-                  {/* Current Supervisors Summary */}
-                  {effectiveSupervisors.length > 0 && (
-                    <div className="mb-3 p-3 bg-brand-50 dark:bg-brand-900/20 rounded-lg border border-brand-200 dark:border-brand-800">
-                      <div className="text-xs font-medium text-brand-700 dark:text-brand-300 mb-2">
-                        Currently Reports To:
-                      </div>
-                      <div className="space-y-1.5">
-                        {effectiveSupervisors.map((sup) => (
-                          <div key={sup.id} className="flex items-center gap-2 text-sm">
-                            <UserCheck className="w-4 h-4 text-brand-600 dark:text-brand-400" />
-                            <span className="font-medium text-slate-900 dark:text-white">{sup.name}</span>
-                            <span className={clsx(
-                              'px-1.5 py-0.5 text-xs rounded',
-                              sup.type === 'default' 
-                                ? 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
-                                : 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400'
+                  {/* Two column layout with divider */}
+                  <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+                    {/* Left - Supervisors List */}
+                    <div className="flex-1 space-y-2">
+                      {/* Default Reports To (from position) */}
+                      <div>
+                        <label className="text-xs font-medium text-slate-500 dark:text-slate-400 block mb-1">
+                          Reports to
+                        </label>
+                        {supervisorPosition ? (
+                          <div className="flex items-center justify-between">
+                            <div className={clsx(
+                              "text-sm",
+                              (user as any)?.defaultSupervisorDisabled 
+                                ? "text-slate-400 line-through" 
+                                : "text-slate-900 dark:text-white"
                             )}>
-                              {sup.type === 'default' ? 'Default' : 'Additional'}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  
-                  {/* Default Supervisor from Position */}
-                  {supervisorPosition && (
-                    <div className={clsx(
-                      'p-3 rounded-lg mb-3',
-                      isDefaultSupervisorDisabled 
-                        ? 'bg-slate-100 dark:bg-slate-800 border border-dashed border-slate-300 dark:border-slate-600'
-                        : 'bg-slate-50 dark:bg-slate-800/50'
-                    )}>
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                            Default from Position Settings
-                          </span>
-                          {isDefaultSupervisorDisabled && (
-                            <span className="px-1.5 py-0.5 text-xs bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 rounded">
-                              Disabled
-                            </span>
-                          )}
-                        </div>
-                        {/* Only show disable/enable when user has an additional supervisor */}
-                        {hasAdditionalSupervisor && (
-                          <button
-                            onClick={handleToggleDefaultSupervisor}
-                            className={clsx(
-                              'text-xs px-2 py-0.5 rounded transition-colors',
-                              isDefaultSupervisorDisabled
-                                ? 'bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400 hover:bg-brand-200 dark:hover:bg-brand-900/50'
-                                : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-600'
-                            )}
-                          >
-                            {isDefaultSupervisorDisabled ? 'Enable' : 'Disable'}
-                          </button>
-                        )}
-                      </div>
-                      <div className={clsx(
-                        'space-y-1.5',
-                        isDefaultSupervisorDisabled && 'opacity-50'
-                      )}>
-                        <div className="flex items-center gap-2 text-sm">
-                          <span className="text-slate-500">Reports to position:</span>
-                          <span className={clsx(
-                            'font-medium',
-                            isDefaultSupervisorDisabled 
-                              ? 'text-slate-400 line-through' 
-                              : 'text-slate-900 dark:text-white'
-                          )}>
-                            {supervisorPosition.name}
-                          </span>
-                        </div>
-                        {usersInSupervisorPosition.length === 0 ? (
-                          <div className="flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400">
-                            <AlertCircle className="w-4 h-4" />
-                            <span>No one currently holds this position</span>
-                          </div>
-                        ) : usersInSupervisorPosition.length === 1 ? (
-                          <div className="flex items-center gap-2 text-sm">
-                            <span className="text-slate-500">Assigned to:</span>
-                            <span className={clsx(
-                              'font-medium',
-                              isDefaultSupervisorDisabled 
-                                ? 'text-slate-400 line-through' 
-                                : 'text-slate-900 dark:text-white'
-                            )}>
-                              {autoSupervisor?.name}
-                            </span>
+                              <span className="font-medium">{supervisorPosition.name}</span>
+                              {usersInSupervisorPosition.length === 1 && autoSupervisor && (
+                                <span className="text-slate-500"> ({autoSupervisor.name})</span>
+                              )}
+                              {usersInSupervisorPosition.length === 0 && (
+                                <span className="text-amber-600 dark:text-amber-400"> (vacant)</span>
+                              )}
+                              {usersInSupervisorPosition.length > 1 && (
+                                <span className="text-amber-600 dark:text-amber-400"> ({usersInSupervisorPosition.length} people)</span>
+                              )}
+                            </div>
+                            <button
+                              onClick={() => {
+                                const isCurrentlyDisabled = (user as any)?.defaultSupervisorDisabled;
+                                // Can't disable if no additional supervisors
+                                if (!isCurrentlyDisabled && !hasAdditionalSupervisors) {
+                                  toast.warning('Cannot Disable', 'Add an additional supervisor first before disabling the default');
+                                  return;
+                                }
+                                const newValue = !isCurrentlyDisabled;
+                                updateUser(user.id, { defaultSupervisorDisabled: newValue } as any);
+                                toast.success('Updated', newValue ? 'Default supervisor disabled' : 'Default supervisor enabled');
+                              }}
+                              className={clsx(
+                                "text-xs px-2 py-1 rounded transition-colors",
+                                (user as any)?.defaultSupervisorDisabled
+                                  ? "text-brand-600 hover:text-brand-700 bg-brand-50 dark:bg-brand-900/20"
+                                  : hasAdditionalSupervisors
+                                    ? "text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700"
+                                    : "text-slate-300 cursor-not-allowed"
+                              )}
+                              title={!hasAdditionalSupervisors && !(user as any)?.defaultSupervisorDisabled ? 'Add an additional supervisor first' : undefined}
+                            >
+                              {(user as any)?.defaultSupervisorDisabled ? 'Enable' : 'Disable'}
+                            </button>
                           </div>
                         ) : (
-                          <div className="flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400">
-                            <AlertCircle className="w-4 h-4" />
-                            <span>{usersInSupervisorPosition.length} people hold this position - select one as default</span>
+                          <div className="text-sm text-slate-700 dark:text-slate-300">
+                            {userPosition.reportsToPositionId === null ? 'Department Head' : 'Not defined'}
                           </div>
                         )}
                       </div>
                       
-                      {/* Select from multiple in position */}
-                      {usersInSupervisorPosition.length > 1 && !isDefaultSupervisorDisabled && (
-                        <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
-                          <SelectField
-                            label="Select default supervisor"
-                            value="" // TODO: Would need to track selected default when multiple
-                            options={supervisorOptions}
-                            onChange={() => toast.info('Coming Soon', 'Multi-person position selection coming soon')}
-                            placeholder="Select from position..."
-                            icon={<UserCheck className="w-3.5 h-3.5" />}
-                          />
+                      {/* Additional Supervisors - shown under main supervisor */}
+                      {hasAdditionalSupervisors && (
+                        <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                          {additionalSupervisors.map((supervisor) => {
+                            // Find position info for this supervisor
+                            const supervisorUser = users.find(u => u.id === supervisor.id);
+                            const supervisorPos = supervisorUser?.positionId 
+                              ? getPositionById(supervisorUser.positionId)
+                              : null;
+                            
+                            return (
+                              <div key={supervisor.id} className="flex items-center justify-between">
+                                <div>
+                                  <label className="text-xs font-medium text-slate-500 dark:text-slate-400 block mb-0.5">
+                                    Additional
+                                  </label>
+                                  <div className="text-sm text-slate-900 dark:text-white">
+                                    {supervisorPos && (
+                                      <span className="font-medium">{supervisorPos.name} </span>
+                                    )}
+                                    <span className={supervisorPos ? "text-slate-500" : "font-medium"}>
+                                      {supervisorPos ? `(${supervisor.name})` : supervisor.name}
+                                    </span>
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={() => handleRemoveAdditionalSupervisor(supervisor.id)}
+                                  className="text-xs text-danger-500 hover:text-danger-600"
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
                     </div>
-                  )}
-                  
-                  {/* No supervisor position defined */}
-                  {!supervisorPosition && (
-                    <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg mb-3">
-                      <div className="flex items-center gap-2 text-sm text-slate-500">
-                        <Info className="w-4 h-4" />
-                        <span>
-                          {userPosition.reportsToPositionId === null
-                            ? 'Department Head'
-                            : 'No reporting structure defined for this position'}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                  
-                  {/* Additional Supervisor */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                        Additional Supervisor (Optional)
+                    
+                    {/* Divider */}
+                    <div className="hidden sm:block w-px bg-slate-200 dark:bg-slate-700 self-stretch min-h-[60px]" />
+                    <div className="sm:hidden h-px bg-slate-200 dark:bg-slate-700 w-full" />
+                    
+                    {/* Right - Add Additional Supervisor */}
+                    <div className="flex-1">
+                      <label className="text-xs font-medium text-slate-500 dark:text-slate-400 block mb-1">
+                        Add Additional Supervisor
                       </label>
-                      {hasAdditionalSupervisor && (
-                        <button
-                          onClick={handleRemoveAdditionalSupervisor}
-                          className="text-xs text-danger-600 hover:text-danger-700 dark:text-danger-400 dark:hover:text-danger-300"
-                        >
-                          Remove
-                        </button>
-                      )}
+                      <AdditionalSupervisorSelector
+                        users={users}
+                        departments={departments}
+                        currentUserId={user?.id || ''}
+                        excludeUserIds={additionalSupervisorIds}
+                        onSelect={handleAddAdditionalSupervisor}
+                      />
                     </div>
-                    
-                    <SelectField
-                      label=""
-                      value={additionalSupervisorId || ''}
-                      options={[{ value: '', label: 'No additional supervisor' }, ...allUserOptions]}
-                      onChange={handleSetAdditionalSupervisor}
-                      placeholder="Select additional supervisor..."
-                      icon={<UserCheck className="w-3.5 h-3.5" />}
-                    />
-                    
-                    <p className="text-xs text-slate-400">
-                      Add a supervisor in addition to the default from position settings. 
-                      This user will report to both supervisors.
-                    </p>
                   </div>
                 </div>
               )}

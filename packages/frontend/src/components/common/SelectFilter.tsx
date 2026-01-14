@@ -44,9 +44,11 @@ export function SelectFilter({
 }: SelectFilterProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [dropdownPosition, setDropdownPosition] = useState<'bottom' | 'top'>('bottom');
   const containerRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Determine if search should be shown
   const showSearch = options.length > searchThreshold;
@@ -122,6 +124,31 @@ export function SelectFilter({
           searchInputRef.current?.focus();
         }, 0);
       }
+      
+      // Calculate dropdown position
+      setTimeout(() => {
+        if (buttonRef.current && dropdownRef.current) {
+          const buttonRect = buttonRef.current.getBoundingClientRect();
+          const dropdownHeight = dropdownRef.current.offsetHeight;
+          const viewportHeight = window.innerHeight;
+          const spaceBelow = viewportHeight - buttonRect.bottom;
+          const spaceAbove = buttonRect.top;
+          
+          // If not enough space below but enough above, flip to top
+          if (spaceBelow < dropdownHeight && spaceAbove > dropdownHeight) {
+            setDropdownPosition('top');
+          } else {
+            setDropdownPosition('bottom');
+            // If dropdown extends below viewport, scroll to show it
+            if (buttonRect.bottom + dropdownHeight > viewportHeight) {
+              const scrollAmount = buttonRect.bottom + dropdownHeight - viewportHeight + 20;
+              window.scrollBy({ top: scrollAmount, behavior: 'smooth' });
+            }
+          }
+        }
+      }, 10);
+    } else {
+      setDropdownPosition('bottom');
     }
   }, [isOpen]);
 
@@ -218,14 +245,9 @@ export function SelectFilter({
       if (highlighted) {
         handleSelect(highlighted.value);
       }
-    } else if (e.key === ' ' && dropdownKeyboard.highlightedIndex >= 0) {
-      // Space selects when an item is highlighted via arrow keys
-      e.preventDefault();
-      const highlighted = allOptions[dropdownKeyboard.highlightedIndex];
-      if (highlighted) {
-        handleSelect(highlighted.value);
-      }
     }
+    // Space in search box should just type a space, not select
+    // Selection is done via Enter or Tab
   };
 
   return (
@@ -260,7 +282,13 @@ export function SelectFilter({
 
       {/* Dropdown */}
       {isOpen && (
-        <div className="absolute z-50 mt-1 min-w-[200px] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg overflow-hidden">
+        <div 
+          ref={dropdownRef}
+          className={clsx(
+            'absolute z-50 min-w-[200px] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg overflow-hidden',
+            dropdownPosition === 'top' ? 'bottom-full mb-1' : 'top-full mt-1'
+          )}
+        >
           {/* Search Input */}
           {showSearch && (
             <div className="p-2 border-b border-slate-200 dark:border-slate-700">
