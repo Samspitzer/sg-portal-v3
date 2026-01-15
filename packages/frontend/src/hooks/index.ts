@@ -15,8 +15,10 @@ export {
 export {
   useCompanyBySlug,
   useContactBySlug,
+  useUserBySlug,
   getCompanyUrl,
   getContactUrl,
+  getUserUrl,
 } from './useSlugParam';
 // Re-export registry functions from contexts for convenience
 export {

@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useAuthStore, useUIStore, useToast, useCompanyStore } from '@/contexts';
 import { PANELS } from '@/config/panels';
+import { HeaderDropdown, type HeaderDropdownItem } from '@/components/common';
 
 export function PanelHeader() {
   const navigate = useSafeNavigate(); 
@@ -26,15 +27,9 @@ export function PanelHeader() {
 
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [focusedIndex, setFocusedIndex] = useState<number>(-1);
-  const [showUserMenu, setShowUserMenu] = useState(false);
-  const [showThemeMenu, setShowThemeMenu] = useState(false);
-  const [showNotifications, setShowNotifications] = useState(false);
   
   const dropdownRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
   const dropdownItemRefs = useRef<{ [key: string]: (HTMLButtonElement | null)[] }>({});
-  const userMenuRef = useRef<HTMLDivElement>(null);
-  const themeMenuRef = useRef<HTMLDivElement>(null);
-  const notificationRef = useRef<HTMLDivElement>(null);
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Convert PANELS object to array for mapping
@@ -62,15 +57,6 @@ export function PanelHeader() {
       );
       if (clickedOutsideNav) {
         setOpenDropdown(null);
-      }
-      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
-        setShowUserMenu(false);
-      }
-      if (themeMenuRef.current && !themeMenuRef.current.contains(event.target as Node)) {
-        setShowThemeMenu(false);
-      }
-      if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
-        setShowNotifications(false);
       }
     }
 
@@ -104,36 +90,40 @@ export function PanelHeader() {
   const handlePanelKeyDown = useCallback((
     e: React.KeyboardEvent,
     panelId: string,
+    panelPath: string,
     hasTiles: boolean,
     tilesCount: number
   ) => {
-    if (!hasTiles) return;
-
     switch (e.key) {
-      case 'ArrowDown':
+      case 'Enter':
+      case ' ':
+        // Enter/Space always navigates to the panel page
         e.preventDefault();
-        if (openDropdown !== panelId) {
-          setOpenDropdown(panelId);
-          setFocusedIndex(0);
-        } else {
-          setFocusedIndex(0);
+        navigate(panelPath);
+        setOpenDropdown(null);
+        break;
+      case 'ArrowDown':
+        // Arrow Down opens dropdown (if has tiles)
+        if (hasTiles) {
+          e.preventDefault();
+          if (openDropdown !== panelId) {
+            setOpenDropdown(panelId);
+            setFocusedIndex(0);
+          } else {
+            setFocusedIndex((prev) => (prev + 1) % tilesCount);
+          }
         }
         break;
       case 'ArrowUp':
-        e.preventDefault();
-        if (openDropdown !== panelId) {
-          setOpenDropdown(panelId);
-          setFocusedIndex(tilesCount - 1);
-        } else {
-          setFocusedIndex(tilesCount - 1);
-        }
-        break;
-      case 'Enter':
-      case ' ':
-        if (openDropdown !== panelId) {
+        // Arrow Up opens dropdown at last item (if has tiles)
+        if (hasTiles) {
           e.preventDefault();
-          setOpenDropdown(panelId);
-          setFocusedIndex(0);
+          if (openDropdown !== panelId) {
+            setOpenDropdown(panelId);
+            setFocusedIndex(tilesCount - 1);
+          } else {
+            setFocusedIndex((prev) => (prev - 1 + tilesCount) % tilesCount);
+          }
         }
         break;
       case 'Escape':
@@ -141,7 +131,7 @@ export function PanelHeader() {
         setOpenDropdown(null);
         break;
     }
-  }, [openDropdown]);
+  }, [openDropdown, navigate]);
 
   const handleDropdownKeyDown = useCallback((
     e: React.KeyboardEvent,
@@ -185,10 +175,53 @@ export function PanelHeader() {
     }
   };
 
-  const themeOptions = [
-    { value: 'light' as const, label: 'Light', icon: Sun },
-    { value: 'dark' as const, label: 'Dark', icon: Moon },
-    { value: 'system' as const, label: 'System', icon: Monitor },
+  // Theme menu items
+  const themeItems: HeaderDropdownItem[] = [
+    {
+      id: 'light',
+      label: 'Light',
+      icon: <Sun className="w-4 h-4" />,
+      onClick: () => setTheme('light'),
+      className: theme === 'light' ? 'text-brand-600 dark:text-brand-400' : 'text-slate-700 dark:text-slate-300',
+    },
+    {
+      id: 'dark',
+      label: 'Dark',
+      icon: <Moon className="w-4 h-4" />,
+      onClick: () => setTheme('dark'),
+      className: theme === 'dark' ? 'text-brand-600 dark:text-brand-400' : 'text-slate-700 dark:text-slate-300',
+    },
+    {
+      id: 'system',
+      label: 'System',
+      icon: <Monitor className="w-4 h-4" />,
+      onClick: () => setTheme('system'),
+      className: theme === 'system' ? 'text-brand-600 dark:text-brand-400' : 'text-slate-700 dark:text-slate-300',
+    },
+  ];
+
+  // User menu items
+  const userMenuItems: HeaderDropdownItem[] = [
+    {
+      id: 'profile',
+      label: 'Profile',
+      icon: <User className="w-4 h-4" />,
+      onClick: () => navigate('/profile'),
+    },
+    {
+      id: 'notifications',
+      label: 'Notification Settings',
+      icon: <Bell className="w-4 h-4" />,
+      onClick: () => navigate('/notifications'),
+    },
+    {
+      id: 'logout',
+      label: 'Sign out',
+      icon: <LogOut className="w-4 h-4" />,
+      onClick: handleLogout,
+      className: 'text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20',
+      dividerBefore: true,
+    },
   ];
 
   const CurrentThemeIcon = theme === 'dark' ? Moon : theme === 'light' ? Sun : Monitor;
@@ -258,13 +291,13 @@ export function PanelHeader() {
                     navigate(panel.basePath);
                     setOpenDropdown(null);
                   }}
-                  onKeyDown={(e) => handlePanelKeyDown(e, panel.id, hasTiles, panel.tiles.length)}
+                  onKeyDown={(e) => handlePanelKeyDown(e, panel.id, panel.basePath, hasTiles, panel.tiles.length)}
                   aria-expanded={openDropdown === panel.id}
                   aria-haspopup={hasTiles ? 'menu' : undefined}
                   className={clsx(
                     'flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
                     location.pathname.startsWith(panel.basePath)
-                      ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
+                      ? 'bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-400'
                       : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                   )}
                 >
@@ -362,217 +395,104 @@ export function PanelHeader() {
             <span className="text-sm">Search...</span>
           </button>
 
-          {/* Theme toggle */}
-          <div ref={themeMenuRef} className="relative">
-            <button
-              onClick={() => setShowThemeMenu(!showThemeMenu)}
-              className={clsx(
-                'p-2 rounded-lg',
-                'text-slate-500 dark:text-slate-400',
-                'hover:bg-slate-100 dark:hover:bg-slate-800',
-                'transition-colors'
-              )}
-            >
-              {CurrentThemeIcon && <CurrentThemeIcon className="w-5 h-5" />}
-            </button>
+          {/* Theme toggle - Using HeaderDropdown */}
+          <HeaderDropdown
+            trigger={<CurrentThemeIcon className="w-5 h-5" />}
+            triggerClassName={clsx(
+              'p-2 rounded-lg',
+              'text-slate-500 dark:text-slate-400',
+              'hover:bg-slate-100 dark:hover:bg-slate-800',
+              'transition-colors'
+            )}
+            items={themeItems}
+            width="sm"
+            align="right"
+          />
 
-            <AnimatePresence>
-              {showThemeMenu && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 10 }}
-                  className={clsx(
-                    'absolute right-0 top-full mt-2',
-                    'w-36 py-1',
-                    'bg-white dark:bg-slate-800',
-                    'rounded-lg shadow-lg',
-                    'border border-slate-200 dark:border-slate-700'
-                  )}
-                >
-                  {themeOptions.map((option) => (
-                    <button
-                      key={option.value}
-                      onClick={() => {
-                        setTheme(option.value);
-                        setShowThemeMenu(false);
-                      }}
-                      className={clsx(
-                        'w-full flex items-center gap-2',
-                        'px-3 py-2 text-sm',
-                        'hover:bg-slate-100 dark:hover:bg-slate-700',
-                        theme === option.value
-                          ? 'text-primary-600 dark:text-primary-400'
-                          : 'text-slate-700 dark:text-slate-300'
-                      )}
-                    >
-                      <option.icon className="w-4 h-4" />
-                      {option.label}
-                    </button>
-                  ))}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-
-          {/* Notifications */}
-          <div ref={notificationRef} className="relative">
-            <button
-              onClick={() => setShowNotifications(!showNotifications)}
-              className={clsx(
-                'relative p-2 rounded-lg',
-                'text-slate-500 dark:text-slate-400',
-                'hover:bg-slate-100 dark:hover:bg-slate-800',
-                'transition-colors'
-              )}
-            >
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-red-500" />
-            </button>
-
-            <AnimatePresence>
-              {showNotifications && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 10 }}
-                  className={clsx(
-                    'absolute right-0 top-full mt-2',
-                    'w-80 py-2',
-                    'bg-white dark:bg-slate-800',
-                    'rounded-lg shadow-lg',
-                    'border border-slate-200 dark:border-slate-700'
-                  )}
-                >
-                  <div className="px-4 py-2 border-b border-slate-200 dark:border-slate-700">
-                    <h3 className="font-semibold text-slate-900 dark:text-white">Notifications</h3>
-                  </div>
-                  <div className="py-8 text-center text-slate-500 dark:text-slate-400 text-sm">
-                    No new notifications
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
+          {/* Notifications - Using HeaderDropdown */}
+          <HeaderDropdown
+            trigger={
+              <div className="relative">
+                <Bell className="w-5 h-5" />
+                <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-red-500" />
+              </div>
+            }
+            triggerClassName={clsx(
+              'p-2 rounded-lg',
+              'text-slate-500 dark:text-slate-400',
+              'hover:bg-slate-100 dark:hover:bg-slate-800',
+              'transition-colors'
+            )}
+            items={[]}
+            header={
+              <h3 className="font-semibold text-slate-900 dark:text-white">Notifications</h3>
+            }
+            emptyState={
+              <p className="text-center text-slate-500 dark:text-slate-400 text-sm py-4">
+                No new notifications
+              </p>
+            }
+            width="lg"
+            align="right"
+          />
 
           {/* Divider */}
           <div className="h-6 w-px bg-slate-200 dark:bg-slate-700 mx-2" />
 
-          {/* User menu */}
-          <div ref={userMenuRef} className="relative">
-            <button
-              onClick={() => setShowUserMenu(!showUserMenu)}
-              className={clsx(
-                'flex items-center gap-2',
-                'px-2 py-1.5 rounded-lg',
-                'hover:bg-slate-100 dark:hover:bg-slate-800',
-                'transition-colors'
-              )}
-            >
-              <div
-                className={clsx(
-                  'w-8 h-8 rounded-full',
-                  'bg-primary-100 dark:bg-primary-900',
-                  'flex items-center justify-center',
-                  'text-primary-600 dark:text-primary-400 font-medium text-sm',
-                  'overflow-hidden'
-                )}
-              >
-                {user?.avatarUrl ? (
-                  <img 
-                    src={user.avatarUrl} 
-                    alt={user?.displayName}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <>{user?.firstName?.[0]}{user?.lastName?.[0]}</>
-                )}
-              </div>
-              <div className="hidden md:block text-left">
-                <p className="text-sm font-medium text-slate-900 dark:text-white leading-tight">
-                  {user?.displayName}
-                </p>
-                <p className="text-xs text-slate-500 dark:text-slate-400 capitalize">
-                  {user?.role}
-                </p>
-              </div>
-              <ChevronDown className="w-4 h-4 text-slate-400 hidden md:block" />
-            </button>
-
-            <AnimatePresence>
-              {showUserMenu && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 10 }}
+          {/* User menu - Using HeaderDropdown */}
+          <HeaderDropdown
+            trigger={
+              <div className="flex items-center gap-2">
+                <div
                   className={clsx(
-                    'absolute right-0 top-full mt-2',
-                    'w-56 py-1',
-                    'bg-white dark:bg-slate-800',
-                    'rounded-lg shadow-lg',
-                    'border border-slate-200 dark:border-slate-700'
+                    'w-8 h-8 rounded-full',
+                    'bg-brand-100 dark:bg-brand-900',
+                    'flex items-center justify-center',
+                    'text-brand-600 dark:text-brand-400 font-medium text-sm',
+                    'overflow-hidden'
                   )}
                 >
-                  <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700">
-                    <p className="text-sm font-medium text-slate-900 dark:text-white">
-                      {user?.displayName}
-                    </p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
-                      {user?.email}
-                    </p>
-                  </div>
-
-                  <div className="py-1">
-                    <button
-                      onClick={() => {
-                        navigate('/profile');
-                        setShowUserMenu(false);
-                      }}
-                      className={clsx(
-                        'w-full flex items-center gap-2',
-                        'px-4 py-2 text-sm',
-                        'text-slate-700 dark:text-slate-300',
-                        'hover:bg-slate-100 dark:hover:bg-slate-700'
-                      )}
-                    >
-                      <User className="w-4 h-4" />
-                      Profile
-                    </button>
-                    <button
-                      onClick={() => {
-                        navigate('/notifications');
-                        setShowUserMenu(false);
-                      }}
-                      className={clsx(
-                        'w-full flex items-center gap-2',
-                        'px-4 py-2 text-sm',
-                        'text-slate-700 dark:text-slate-300',
-                        'hover:bg-slate-100 dark:hover:bg-slate-700'
-                      )}
-                    >
-                      <Bell className="w-4 h-4" />
-                      Notification Settings
-                    </button>
-                  </div>
-
-                  <div className="py-1 border-t border-slate-200 dark:border-slate-700">
-                    <button
-                      onClick={handleLogout}
-                      className={clsx(
-                        'w-full flex items-center gap-2',
-                        'px-4 py-2 text-sm',
-                        'text-red-600 dark:text-red-400',
-                        'hover:bg-red-50 dark:hover:bg-red-900/20'
-                      )}
-                    >
-                      <LogOut className="w-4 h-4" />
-                      Sign out
-                    </button>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
+                  {user?.avatarUrl ? (
+                    <img 
+                      src={user.avatarUrl} 
+                      alt={user?.displayName}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <>{user?.firstName?.[0]}{user?.lastName?.[0]}</>
+                  )}
+                </div>
+                <div className="hidden md:block text-left">
+                  <p className="text-sm font-medium text-slate-900 dark:text-white leading-tight">
+                    {user?.displayName}
+                  </p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 capitalize">
+                    {user?.role}
+                  </p>
+                </div>
+                <ChevronDown className="w-4 h-4 text-slate-400 hidden md:block" />
+              </div>
+            }
+            triggerClassName={clsx(
+              'flex items-center gap-2',
+              'px-2 py-1.5 rounded-lg',
+              'hover:bg-slate-100 dark:hover:bg-slate-800',
+              'transition-colors'
+            )}
+            items={userMenuItems}
+            header={
+              <div>
+                <p className="text-sm font-medium text-slate-900 dark:text-white">
+                  {user?.displayName}
+                </p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                  {user?.email}
+                </p>
+              </div>
+            }
+            width="md"
+            align="right"
+          />
         </div>
       </div>
     </header>

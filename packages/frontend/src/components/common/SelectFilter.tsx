@@ -266,17 +266,17 @@ export function SelectFilter({
             : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
         )}
       >
-        {icon && <span className="text-slate-500 dark:text-slate-400">{icon}</span>}
-        <span className={clsx(!hasSelection && 'text-slate-500 dark:text-slate-400')}>
+        {icon && <span className="text-slate-500 dark:text-slate-400 flex-shrink-0">{icon}</span>}
+        <span className={clsx('flex-1 text-left', !hasSelection && 'text-slate-500 dark:text-slate-400')}>
           {hasSelection ? displayLabel : label}
         </span>
         {hasSelection ? (
           <X
-            className="w-4 h-4 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+            className="w-4 h-4 flex-shrink-0 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
             onClick={handleClear}
           />
         ) : (
-          <ChevronDown className={clsx('w-4 h-4 transition-transform', isOpen && 'rotate-180')} />
+          <ChevronDown className={clsx('w-4 h-4 flex-shrink-0 transition-transform', isOpen && 'rotate-180')} />
         )}
       </button>
 

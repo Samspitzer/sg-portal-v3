@@ -1,8 +1,12 @@
+// PATH: src/contexts/usersStore.ts
+
 import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
+import { generateUserSlug } from '@/utils/slugUtils';
 
 export interface User {
   id: string;
+  slug?: string; // URL-friendly identifier (e.g., "john-smith")
   name: string;
   email: string;
   phone: string;
@@ -28,6 +32,7 @@ interface UsersStore extends UsersState {
   getUsersByOffice: (officeId: string) => User[];
   getUsersByPosition: (positionId: string) => User[];
   getUserById: (id: string) => User | undefined;
+  migrateSlug: () => void;
 }
 
 export const useUsersStore = create<UsersStore>()(
@@ -83,9 +88,27 @@ export const useUsersStore = create<UsersStore>()(
         getUserById: (id) => {
           return get().users.find((user) => user.id === id);
         },
+
+        // Migration: Generate slugs for users that don't have one
+        migrateSlug: () => {
+          const { users } = get();
+          const needsMigration = users.some(u => !u.slug);
+          
+          if (needsMigration) {
+            const updatedUsers = users.map(user => {
+              if (user.slug) return user;
+              const slug = generateUserSlug(user.name, users, user.id);
+              return { ...user, slug };
+            });
+            set({ users: updatedUsers });
+          }
+        },
       }),
       { name: 'sg-portal-users' }
     ),
     { name: 'UsersStore' }
   )
 );
+
+// Auto-run migration on store load
+useUsersStore.getState().migrateSlug();

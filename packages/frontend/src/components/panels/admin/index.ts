@@ -3,5 +3,5 @@ export { UserDetailPage } from './UserDetailPage';
 export { CompanySettingsPage } from './CompanySettingsPage';
 export { PermissionsPage } from './PermissionsPage';
 export { FieldSettingsPage } from './FieldSettingsPage';
-export { ManageRolesPage } from './ManageRolesPage';
+
 // REMOVED: ManageDepartmentsPage - replaced by FieldSettingsPage

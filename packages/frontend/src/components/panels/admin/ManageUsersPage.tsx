@@ -1,5 +1,6 @@
-import { useState, useMemo, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+// PATH: src/components/panels/admin/ManageUsersPage.tsx
+
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { clsx } from 'clsx';
 import {
   Plus,
@@ -8,9 +9,7 @@ import {
   Loader2,
   Mail,
   Phone,
-  Shield,
   UserCheck,
-  Trash2,
   MapPin,
   AlertTriangle,
 } from 'lucide-react';
@@ -20,8 +19,9 @@ import { DataTable, type DataTableColumn } from '@/components/common/DataTable';
 import { SelectFilter } from '@/components/common/SelectFilter';
 import { UserDeactivationModal } from '@/components/common/UserDeactivationModal';
 import { useToast, useFieldsStore, useUsersStore, useCompanyStore, type User } from '@/contexts';
-import { useFormChanges, useDocumentTitle } from '@/hooks';
+import { useFormChanges, useDocumentTitle, getUserUrl, useSafeNavigate } from '@/hooks';
 import { validateEmail, validatePhone } from '@/utils/validation';
+import { generateUserSlug } from '@/utils/slugUtils';
 
 interface UserFormData {
   name: string;
@@ -30,7 +30,6 @@ interface UserFormData {
   departmentId: string;
   positionId: string;
   officeId: string;
-  isActive: boolean;
 }
 
 const initialFormData: UserFormData = {
@@ -40,30 +39,24 @@ const initialFormData: UserFormData = {
   departmentId: '',
   positionId: '',
   officeId: '',
-  isActive: true,
 };
 
 type SortField = 'name' | 'department';
 type SortDirection = 'asc' | 'desc';
 
-// User Modal Component
-function UserModal({
+// Add User Modal Component (Add only - editing happens on UserDetailPage)
+function AddUserModal({
   isOpen,
   onClose,
-  user,
   onSave,
-  onDelete,
   isLoading,
 }: {
   isOpen: boolean;
   onClose: () => void;
-  user?: User | null;
   onSave: (data: UserFormData) => void;
-  onDelete?: () => void;
   isLoading: boolean;
 }) {
   const toast = useToast();
-  useDocumentTitle('Manage Users');
   const { departments } = useFieldsStore();
   const { company } = useCompanyStore();
 
@@ -71,22 +64,7 @@ function UserModal({
   const offices = company.offices || [];
   const showOfficeSelector = offices.length >= 2;
 
-  const getInitialData = (): UserFormData => {
-    if (user) {
-      return {
-        name: user.name,
-        email: user.email,
-        phone: user.phone,
-        departmentId: user.departmentId,
-        positionId: user.positionId,
-        officeId: user.officeId || '',
-        isActive: user.isActive,
-      };
-    }
-    return initialFormData;
-  };
-
-  const { formData, setFormData, hasChanges, resetForm, initializeForm } = useFormChanges<UserFormData>(getInitialData());
+  const { formData, setFormData, hasChanges, resetForm, initializeForm } = useFormChanges<UserFormData>(initialFormData);
 
   // Get positions for selected department
   const selectedDepartment = departments.find(d => d.id === formData.departmentId);
@@ -113,12 +91,12 @@ function UserModal({
     [offices]
   );
 
-  // Reset form when modal opens or user changes
+  // Reset form when modal opens
   useEffect(() => {
     if (isOpen) {
-      initializeForm(getInitialData());
+      initializeForm(initialFormData);
     }
-  }, [isOpen, user?.id]); // Re-initialize when modal opens or different user is selected
+  }, [isOpen, initializeForm]);
 
   // Reset position when department changes (if position not in new department)
   useEffect(() => {
@@ -128,7 +106,7 @@ function UserModal({
         setFormData({ ...formData, positionId: '' });
       }
     }
-  }, [formData.departmentId]); // Only run when department changes
+  }, [formData.departmentId, formData.positionId, availablePositions, setFormData, formData]);
 
   // Validation checks
   const hasEmailError = formData.email !== '' && !validateEmail(formData.email);
@@ -163,48 +141,34 @@ function UserModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={user ? 'Edit User' : 'Add New User'}
-      size="xl"
+      title="Add New User"
+      size="lg"
       hasUnsavedChanges={hasChanges}
       onSaveChanges={handleSubmit}
       onDiscardChanges={handleDiscard}
       footer={
-        <div className="flex items-center justify-between w-full">
-          <div>
-            {user && onDelete && (
-              <Button
-                type="button"
-                variant="danger"
-                onClick={onDelete}
-              >
-                <Trash2 className="w-4 h-4 mr-2" />
-                Delete User
-              </Button>
+        <div className="flex justify-end gap-3">
+          <Button type="button" variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="primary"
+            onClick={handleSubmit}
+            disabled={isLoading || !formData.name || !formData.email || hasValidationErrors}
+          >
+            {isLoading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                Adding...
+              </>
+            ) : (
+              <>
+                <Check className="w-4 h-4 mr-2" />
+                Add User
+              </>
             )}
-          </div>
-          <div className="flex gap-3">
-            <Button type="button" variant="secondary" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="primary"
-              onClick={handleSubmit}
-              disabled={isLoading || !formData.name || !formData.email || hasValidationErrors}
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <Check className="w-4 h-4 mr-2" />
-                  {user ? 'Update User' : 'Add User'}
-                </>
-              )}
-            </Button>
-          </div>
+          </Button>
         </div>
       }
     >
@@ -296,41 +260,6 @@ function UserModal({
             </p>
           </div>
         )}
-
-        {/* Status */}
-        <div>
-          <h3 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-4">
-            Status
-          </h3>
-          <Toggle
-            checked={formData.isActive}
-            onChange={(checked) => setFormData({ ...formData, isActive: checked })}
-            label={formData.isActive ? 'Active' : 'Inactive'}
-            activeColor="brand"
-          />
-        </div>
-
-        {/* Permission Overrides - Placeholder */}
-        <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-dashed border-slate-300 dark:border-slate-700">
-          <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
-            <Shield className="w-4 h-4" />
-            <span className="text-sm font-medium">Permission Overrides</span>
-          </div>
-          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-            Coming soon - Configure user-specific permission overrides
-          </p>
-        </div>
-
-        {/* Temporary Access - Placeholder */}
-        <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-dashed border-slate-300 dark:border-slate-700">
-          <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
-            <UserCheck className="w-4 h-4" />
-            <span className="text-sm font-medium">Temporary Access</span>
-          </div>
-          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-            Coming soon - Grant temporary access with expiration dates
-          </p>
-        </div>
       </div>
     </Modal>
   );
@@ -338,13 +267,12 @@ function UserModal({
 
 // Main Page Component
 export function ManageUsersPage() {
-  const navigate = useNavigate();
+  const navigate = useSafeNavigate();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('');
   const [officeFilter, setOfficeFilter] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingUser, setEditingUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
   const [userToToggle, setUserToToggle] = useState<User | null>(null);
@@ -354,7 +282,7 @@ export function ManageUsersPage() {
   useDocumentTitle('Manage Users');
 
   // Use the shared stores
-  const { users, addUser, updateUser, deleteUser, toggleUserActive } = useUsersStore();
+  const { users, addUser, deleteUser, toggleUserActive } = useUsersStore();
   const { departments } = useFieldsStore();
   const { company } = useCompanyStore();
 
@@ -362,112 +290,229 @@ export function ManageUsersPage() {
   const offices = company.offices || [];
   const showOfficeColumn = offices.length >= 2;
 
-  const getDepartmentName = (departmentId: string) => {
+  const getDepartmentName = useCallback((departmentId: string) => {
     const dept = departments.find(d => d.id === departmentId);
     return dept?.name || '—';
-  };
+  }, [departments]);
 
-  const isDepartmentMissing = (departmentId: string) => {
+  const isDepartmentMissing = useCallback((departmentId: string) => {
     if (!departmentId) return false;
     return !departments.find(d => d.id === departmentId);
-  };
+  }, [departments]);
 
-  const getPositionName = (departmentId: string, positionId: string) => {
+  const getPositionName = useCallback((departmentId: string, positionId: string) => {
     const dept = departments.find(d => d.id === departmentId);
     const pos = dept?.positions.find(p => p.id === positionId);
     return pos?.name || '—';
-  };
+  }, [departments]);
 
-  const isPositionMissing = (departmentId: string, positionId: string) => {
+  const isPositionMissing = useCallback((departmentId: string, positionId: string) => {
     if (!positionId) return false;
     const dept = departments.find(d => d.id === departmentId);
     if (!dept) return true; // If dept missing, position is also effectively missing
     return !dept.positions.find(p => p.id === positionId);
-  };
+  }, [departments]);
 
-  const getOfficeName = (officeId?: string) => {
+  const getOfficeName = useCallback((officeId?: string) => {
     if (!officeId) return '—';
     const office = offices.find(o => o.id === officeId);
     return office?.label || '—';
-  };
+  }, [offices]);
 
-  // Status filter options
-  const statusOptions = [
-    { value: 'active', label: 'Active' },
-    { value: 'inactive', label: 'Inactive' },
-  ];
-
-  // Department filter options
-  const departmentOptions = useMemo(() => {
-    const deptCounts = new Map<string, number>();
+  // Status filter options - cascading with other filters
+  const statusOptions = useMemo(() => {
+    const statusCounts = { active: 0, inactive: 0 };
+    const filteredStatusCounts = { active: 0, inactive: 0 };
+    
     users.forEach((user) => {
-      if (user.departmentId) {
-        deptCounts.set(user.departmentId, (deptCounts.get(user.departmentId) || 0) + 1);
+      // Count all users by status
+      if (user.isActive) statusCounts.active++;
+      else statusCounts.inactive++;
+      
+      // Check if user matches other active filters
+      let matchesFilters = true;
+      
+      if (departmentFilter && matchesFilters) {
+        matchesFilters = user.departmentId === departmentFilter;
+      }
+      
+      if (officeFilter && matchesFilters) {
+        matchesFilters = user.officeId === officeFilter;
+      }
+      
+      if (matchesFilters) {
+        if (user.isActive) filteredStatusCounts.active++;
+        else filteredStatusCounts.inactive++;
       }
     });
+    
+    const hasActiveFilter = departmentFilter || officeFilter;
+    
+    return [
+      { 
+        value: 'active', 
+        label: 'Active', 
+        count: hasActiveFilter ? filteredStatusCounts.active : statusCounts.active,
+        disabled: hasActiveFilter ? filteredStatusCounts.active === 0 : undefined,
+      },
+      { 
+        value: 'inactive', 
+        label: 'Inactive', 
+        count: hasActiveFilter ? filteredStatusCounts.inactive : statusCounts.inactive,
+        disabled: hasActiveFilter ? filteredStatusCounts.inactive === 0 : undefined,
+      },
+    ];
+  }, [users, departmentFilter, officeFilter]);
+
+  // Department filter options - cascading with status and office filters
+  // Shows ALL departments with counts (0 count = disabled, sorted to bottom)
+  const departmentFilterOptions = useMemo(() => {
+    const allDeptCounts = new Map<string, number>();
+    const filteredDeptCounts = new Map<string, number>();
+    
+    users.forEach((user) => {
+      if (!user.departmentId) return;
+      
+      // Count all users by department
+      allDeptCounts.set(user.departmentId, (allDeptCounts.get(user.departmentId) || 0) + 1);
+      
+      // Check if user matches other active filters
+      let matchesFilters = true;
+      
+      if (statusFilter && matchesFilters) {
+        matchesFilters = statusFilter === 'active' ? user.isActive : !user.isActive;
+      }
+      
+      if (officeFilter && matchesFilters) {
+        matchesFilters = user.officeId === officeFilter;
+      }
+      
+      if (matchesFilters) {
+        filteredDeptCounts.set(user.departmentId, (filteredDeptCounts.get(user.departmentId) || 0) + 1);
+      }
+    });
+    
+    const hasActiveFilter = statusFilter || officeFilter;
+    
     return departments
-      .filter((d) => deptCounts.has(d.id))
-      .map((dept) => ({
-        value: dept.id,
-        label: dept.name,
-        count: deptCounts.get(dept.id),
-      }))
-      .sort((a, b) => a.label.localeCompare(b.label));
-  }, [departments, users]);
+      .map(dept => {
+        const totalCount = allDeptCounts.get(dept.id) || 0;
+        const matchCount = hasActiveFilter 
+          ? (filteredDeptCounts.get(dept.id) || 0) 
+          : totalCount;
+        return {
+          value: dept.id,
+          label: dept.name,
+          count: matchCount,
+          disabled: matchCount === 0,
+        };
+      })
+      .sort((a, b) => {
+        if (a.disabled !== b.disabled) return a.disabled ? 1 : -1;
+        return a.label.localeCompare(b.label);
+      });
+  }, [departments, users, statusFilter, officeFilter]);
 
-  // Office filter options (only if 2+ offices)
+  // Office filter options - cascading with status and department filters
+  // Shows ALL offices with counts (0 count = disabled, sorted to bottom)
   const officeFilterOptions = useMemo(() => {
-    if (!showOfficeColumn) return [];
-    const officeCounts = new Map<string, number>();
+    const allOfficeCounts = new Map<string, number>();
+    const filteredOfficeCounts = new Map<string, number>();
+    
     users.forEach((user) => {
-      if (user.officeId) {
-        officeCounts.set(user.officeId, (officeCounts.get(user.officeId) || 0) + 1);
+      if (!user.officeId) return;
+      
+      // Count all users by office
+      allOfficeCounts.set(user.officeId, (allOfficeCounts.get(user.officeId) || 0) + 1);
+      
+      // Check if user matches other active filters
+      let matchesFilters = true;
+      
+      if (statusFilter && matchesFilters) {
+        matchesFilters = statusFilter === 'active' ? user.isActive : !user.isActive;
+      }
+      
+      if (departmentFilter && matchesFilters) {
+        matchesFilters = user.departmentId === departmentFilter;
+      }
+      
+      if (matchesFilters) {
+        filteredOfficeCounts.set(user.officeId, (filteredOfficeCounts.get(user.officeId) || 0) + 1);
       }
     });
+    
+    const hasActiveFilter = statusFilter || departmentFilter;
+    
     return offices
-      .map((office) => ({
-        value: office.id,
-        label: office.isMain ? `${office.label} (Main)` : office.label,
-        count: officeCounts.get(office.id) || 0,
-      }))
-      .sort((a, b) => a.label.localeCompare(b.label));
-  }, [offices, users, showOfficeColumn]);
+      .map(office => {
+        const totalCount = allOfficeCounts.get(office.id) || 0;
+        const matchCount = hasActiveFilter 
+          ? (filteredOfficeCounts.get(office.id) || 0) 
+          : totalCount;
+        return {
+          value: office.id,
+          label: office.isMain ? `${office.label} (Main)` : office.label,
+          count: matchCount,
+          disabled: matchCount === 0,
+        };
+      })
+      .sort((a, b) => {
+        if (a.disabled !== b.disabled) return a.disabled ? 1 : -1;
+        return a.label.localeCompare(b.label);
+      });
+  }, [offices, users, statusFilter, departmentFilter]);
 
   // Filter and sort users
   const filteredAndSortedUsers = useMemo(() => {
-    let result = users.filter((user) => {
-      const matchesSearch = user.name.toLowerCase().includes(search.toLowerCase()) ||
-        user.email.toLowerCase().includes(search.toLowerCase());
-      const matchesStatus = !statusFilter ||
-        (statusFilter === 'active' && user.isActive) ||
-        (statusFilter === 'inactive' && !user.isActive);
-      const matchesDepartment = !departmentFilter || user.departmentId === departmentFilter;
-      const matchesOffice = !officeFilter || user.officeId === officeFilter;
-      return matchesSearch && matchesStatus && matchesDepartment && matchesOffice;
-    });
+    let filtered = [...users];
 
-    result = [...result].sort((a, b) => {
-      let aVal = '';
-      let bVal = '';
+    // Search filter
+    if (search) {
+      const searchLower = search.toLowerCase();
+      filtered = filtered.filter(
+        (user) =>
+          user.name.toLowerCase().includes(searchLower) ||
+          user.email.toLowerCase().includes(searchLower) ||
+          user.phone.includes(search)
+      );
+    }
 
-      switch (sortField) {
-        case 'name':
-          aVal = a.name.toLowerCase();
-          bVal = b.name.toLowerCase();
-          break;
-        case 'department':
-          aVal = getDepartmentName(a.departmentId).toLowerCase();
-          bVal = getDepartmentName(b.departmentId).toLowerCase();
-          break;
+    // Status filter
+    if (statusFilter) {
+      filtered = filtered.filter((user) =>
+        statusFilter === 'active' ? user.isActive : !user.isActive
+      );
+    }
+
+    // Department filter
+    if (departmentFilter) {
+      filtered = filtered.filter((user) => user.departmentId === departmentFilter);
+    }
+
+    // Office filter
+    if (officeFilter) {
+      filtered = filtered.filter((user) => user.officeId === officeFilter);
+    }
+
+    // Sort
+    filtered.sort((a, b) => {
+      let aValue: string;
+      let bValue: string;
+
+      if (sortField === 'name') {
+        aValue = a.name;
+        bValue = b.name;
+      } else {
+        aValue = getDepartmentName(a.departmentId);
+        bValue = getDepartmentName(b.departmentId);
       }
 
-      if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
-      if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
-      return 0;
+      const comparison = aValue.localeCompare(bValue);
+      return sortDirection === 'asc' ? comparison : -comparison;
     });
 
-    return result;
-  }, [users, search, statusFilter, departmentFilter, officeFilter, sortField, sortDirection, departments]);
+    return filtered;
+  }, [users, search, statusFilter, departmentFilter, officeFilter, sortField, sortDirection, getDepartmentName]);
 
   const handleSort = (field: string) => {
     if (sortField === field) {
@@ -482,24 +527,18 @@ export function ManageUsersPage() {
     setIsLoading(true);
     await new Promise((resolve) => setTimeout(resolve, 500));
 
-    if (editingUser) {
-      updateUser(editingUser.id, formData);
-      toast.success('Updated', formData.name + ' has been updated');
-    } else {
-      addUser(formData);
-      toast.success('Created', formData.name + ' has been added');
-    }
+    // Generate slug for new user
+    const slug = generateUserSlug(formData.name, users);
+
+    addUser({
+      ...formData,
+      slug,
+      isActive: true, // New users are always active
+    });
+    toast.success('Created', formData.name + ' has been added');
 
     setIsLoading(false);
     setIsModalOpen(false);
-    setEditingUser(null);
-  };
-
-  const handleDeleteFromModal = () => {
-    if (editingUser) {
-      setUserToDelete(editingUser);
-      setIsModalOpen(false);
-    }
   };
 
   const confirmDelete = (reassignToUserId: string | null) => {
@@ -510,7 +549,6 @@ export function ManageUsersPage() {
         : `${userToDelete.name} has been removed`;
       toast.success('Deleted', message);
       setUserToDelete(null);
-      setEditingUser(null);
     }
   };
 
@@ -538,7 +576,7 @@ export function ManageUsersPage() {
   };
 
   const openUserDetail = (user: User) => {
-    navigate(`/admin/users/${user.id}`);
+    navigate(getUserUrl(user));
   };
 
   // Clear all filters
@@ -577,8 +615,8 @@ export function ManageUsersPage() {
       key: 'email',
       header: 'Email',
       render: (user) => (
-        <a
-          href={'mailto:' + user.email}
+        
+          <a href={'mailto:' + user.email}
           className="text-brand-600 dark:text-brand-400 hover:underline flex items-center gap-1"
           onClick={(e) => e.stopPropagation()}
         >
@@ -677,7 +715,7 @@ export function ManageUsersPage() {
         <Button
           variant="primary"
           leftIcon={<Plus className="w-4 h-4" />}
-          onClick={() => { setEditingUser(null); setIsModalOpen(true); }}
+          onClick={() => setIsModalOpen(true)}
         >
           Add User
         </Button>
@@ -706,16 +744,14 @@ export function ManageUsersPage() {
               onChange={setStatusFilter}
               icon={<UserCheck className="w-4 h-4" />}
             />
-            {departmentOptions.length > 0 && (
-              <SelectFilter
-                label="Department"
-                value={departmentFilter}
-                options={departmentOptions}
-                onChange={setDepartmentFilter}
-                icon={<Users className="w-4 h-4" />}
-              />
-            )}
-            {showOfficeColumn && officeFilterOptions.length > 0 && (
+            <SelectFilter
+              label="Department"
+              value={departmentFilter}
+              options={departmentFilterOptions}
+              onChange={setDepartmentFilter}
+              icon={<Users className="w-4 h-4" />}
+            />
+            {showOfficeColumn && (
               <SelectFilter
                 label="Office"
                 value={officeFilter}
@@ -746,7 +782,7 @@ export function ManageUsersPage() {
               <Button
                 variant="primary"
                 className="mt-4"
-                onClick={() => { setEditingUser(null); setIsModalOpen(true); }}
+                onClick={() => setIsModalOpen(true)}
               >
                 <Plus className="w-4 h-4 mr-2" />
                 Add User
@@ -756,13 +792,11 @@ export function ManageUsersPage() {
         }
       />
 
-      {/* User Modal */}
-      <UserModal
+      {/* Add User Modal */}
+      <AddUserModal
         isOpen={isModalOpen}
-        onClose={() => { setIsModalOpen(false); setEditingUser(null); }}
-        user={editingUser}
+        onClose={() => setIsModalOpen(false)}
         onSave={handleSave}
-        onDelete={editingUser ? handleDeleteFromModal : undefined}
         isLoading={isLoading}
       />
 

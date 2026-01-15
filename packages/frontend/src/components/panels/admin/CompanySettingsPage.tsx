@@ -69,7 +69,6 @@ function InlineField({
   onEditingChange?: (isEditing: boolean, hasChanges: boolean) => void;
 }) {
   const toast = useToast();
-  useDocumentTitle('Company Settings');
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(value);
   const [validationError, setValidationError] = useState<string | null>(null);

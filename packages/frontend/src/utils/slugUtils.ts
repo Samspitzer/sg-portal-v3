@@ -1,9 +1,12 @@
+// PATH: src/utils/slugUtils.ts
+
 /**
  * Slug Utilities for URL-friendly identifiers
  * 
  * Generates clean, readable URLs like:
  * - /clients/companies/acme-construction
  * - /clients/contacts/john-doe
+ * - /admin/users/john-smith
  * 
  * Handles duplicates by appending numbers:
  * - acme-construction, acme-construction-2, acme-construction-3
@@ -109,11 +112,27 @@ export function generateContactSlug(
 }
 
 /**
+ * Generate a user slug from user name
+ * Format: first-last (e.g., "john-smith")
+ */
+export function generateUserSlug(
+  name: string,
+  existingUsers: Array<{ id: string; slug?: string }>,
+  excludeId?: string
+): string {
+  const existingSlugs = existingUsers
+    .filter(u => u.id !== excludeId && u.slug)
+    .map(u => u.slug!);
+  
+  return generateUniqueSlug(name, existingSlugs);
+}
+
+/**
  * Check if a string looks like an old-style ID (for redirect purposes)
- * Old IDs look like: "company-1767885526746" or "contact-1767885526746"
+ * Old IDs look like: "company-1767885526746", "contact-1767885526746", or "user-1767885526746"
  */
 export function isLegacyId(param: string): boolean {
-  return /^(company|contact)-\d{10,}$/.test(param);
+  return /^(company|contact|user)-\d{10,}$/.test(param);
 }
 
 /**
