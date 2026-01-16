@@ -7,6 +7,8 @@ export { PROJECTS_PANEL } from './projects';
 export { ESTIMATING_PANEL } from './estimating';
 export { CUSTOMERS_PANEL } from './customers';
 export { ADMIN_PANEL } from './admin';
+export { SALES_PANEL } from './sales';
+export { TASKS_PANEL } from './tasks';
 
 // Master registry - import all panels
 import { ACCOUNTING_PANEL } from './accounting';
@@ -14,6 +16,8 @@ import { PROJECTS_PANEL } from './projects';
 import { ESTIMATING_PANEL } from './estimating';
 import { CUSTOMERS_PANEL } from './customers';
 import { ADMIN_PANEL } from './admin';
+import { SALES_PANEL } from './sales';
+import { TASKS_PANEL } from './tasks';
 
 export interface PanelConfig {
   id: string;
@@ -30,6 +34,8 @@ export const PANELS: Record<string, PanelConfig> = {
   estimating: ESTIMATING_PANEL,
   customers: CUSTOMERS_PANEL,
   admin: ADMIN_PANEL,
+  sales: SALES_PANEL,
+  tasks: TASKS_PANEL,
 };
 
 // Helper to get a panel by ID

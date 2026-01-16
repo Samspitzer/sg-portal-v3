@@ -13,3 +13,5 @@ export {
   DeveloperPage,
 } from './PlaceholderPages';
 export { CompaniesPage, ContactsPage } from './customers';
+export { SalesPage } from './SalesPage';
+export { TasksPage } from './TasksPage';

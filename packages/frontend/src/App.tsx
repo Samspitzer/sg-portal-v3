@@ -11,6 +11,8 @@ import {
   EstimatingLayout,
   CustomersLayout,
   AdminLayout,
+  SalesLayout,
+  TasksLayout,
 } from '@/components/layout';
 import { ToastContainer, PageNavigationGuard } from '@/components/common';
 import {
@@ -27,6 +29,8 @@ import {
   DeveloperPage,
   ProfilePage,
   NotificationSettingsPage,
+  SalesPage,
+  TasksPage,
 } from '@/components/panels';
 import { useClientsStore } from '@/contexts';
 
@@ -205,6 +209,39 @@ function AppRoutes() {
           </AuthGuard>
         }
       />
+
+      {/* Sales Panel */}
+<Route
+  path="/sales/*"
+  element={
+    <AuthGuard>
+      <SalesLayout>
+        <Routes>
+          <Route index element={<SalesPage />} />
+          <Route path="pipeline" element={<SalesPage />} />
+          <Route path="leads" element={<SalesPage />} />
+          <Route path="activities" element={<SalesPage />} />
+        </Routes>
+      </SalesLayout>
+    </AuthGuard>
+  }
+/>
+
+{/* Tasks Panel */}
+<Route
+  path="/tasks/*"
+  element={
+    <AuthGuard>
+      <TasksLayout>
+        <Routes>
+          <Route index element={<TasksPage />} />
+          <Route path="calendar" element={<TasksPage />} />
+          <Route path="list" element={<TasksPage />} />
+        </Routes>
+      </TasksLayout>
+    </AuthGuard>
+  }
+/>
       
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

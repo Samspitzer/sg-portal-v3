@@ -10,6 +10,8 @@ export {
   ProjectsLayout, 
   EstimatingLayout, 
   CustomersLayout, 
-  AdminLayout 
+  AdminLayout,
+  SalesLayout,
+  TasksLayout
 } from './PanelLayout';
 export { PanelDashboard, type PanelDashboardTile } from './PanelDashboard';

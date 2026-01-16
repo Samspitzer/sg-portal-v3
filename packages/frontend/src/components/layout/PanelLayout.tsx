@@ -43,3 +43,11 @@ export function CustomersLayout({ children }: { children: ReactNode }) {
 export function AdminLayout({ children }: { children: ReactNode }) {
   return <PanelLayout panelId="admin">{children}</PanelLayout>;
 }
+
+export function SalesLayout({ children }: { children: ReactNode }) {
+  return <PanelLayout panelId="sales">{children}</PanelLayout>;
+}
+
+export function TasksLayout({ children }: { children: ReactNode }) {
+  return <PanelLayout panelId="tasks">{children}</PanelLayout>;
+}
