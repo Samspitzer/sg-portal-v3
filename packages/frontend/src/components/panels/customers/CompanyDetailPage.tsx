@@ -19,6 +19,7 @@ import {
   CalendarClock,
   Users,
   Info,
+  Printer,
 } from 'lucide-react';
 import { Page } from '@/components/layout';
 import { Button, ConfirmModal, Modal, Input, AddressInput, UnsavedChangesModal, Select, Textarea, Toggle } from '@/components/common';
@@ -33,6 +34,14 @@ import {
 } from '@/utils/validation';
 import { useDocumentTitle, useCompanyBySlug, getContactUrl } from '@/hooks';
 
+// Additional contact method type
+interface AdditionalContactMethod {
+  id: string;
+  type: 'phone' | 'fax' | 'email';
+  label: string;
+  value: string;
+}
+
 // Contact form data interface
 interface ContactFormData {
   firstName: string;
@@ -42,6 +51,7 @@ interface ContactFormData {
   phoneMobile: string;
   role: ContactRole | '';
   notes: string;
+  additionalContacts: AdditionalContactMethod[];
 }
 
 const initialContactFormData: ContactFormData = {
@@ -52,6 +62,7 @@ const initialContactFormData: ContactFormData = {
   phoneMobile: '',
   role: '',
   notes: '',
+  additionalContacts: [],
 };
 
 // Non-collapsible Section Header (matches CollapsibleSection style)
@@ -477,6 +488,13 @@ export function CompanyDetailPage() {
   const [showAddContactModal, setShowAddContactModal] = useState(false);
   const [contactFormData, setContactFormData] = useState<ContactFormData>(initialContactFormData);
 
+  // Additional contact method modal state (for Add Contact modal)
+  const [showAddMethodModal, setShowAddMethodModal] = useState(false);
+  const [newMethodType, setNewMethodType] = useState<'phone' | 'fax' | 'email'>('phone');
+  const [newMethodLabel, setNewMethodLabel] = useState('');
+  const [newMethodValue, setNewMethodValue] = useState('');
+  const [methodValidationError, setMethodValidationError] = useState<string | null>(null);
+
   // Add Address Modal state
   const [showAddAddressModal, setShowAddAddressModal] = useState(false);
   const [newAddressLabel, setNewAddressLabel] = useState('');
@@ -742,6 +760,7 @@ export function CompanyDetailPage() {
       phoneMobile: contactFormData.phoneMobile || undefined,
       role: contactFormData.role || undefined,
       notes: contactFormData.notes || undefined,
+      additionalContacts: contactFormData.additionalContacts.length > 0 ? contactFormData.additionalContacts : undefined,
     });
 
     toast.success('Created', `${contactFormData.firstName} ${contactFormData.lastName} has been added`);
@@ -755,7 +774,80 @@ export function CompanyDetailPage() {
     contactFormData.phoneOffice !== '' ||
     contactFormData.phoneMobile !== '' ||
     contactFormData.role !== '' ||
-    contactFormData.notes !== '';
+    contactFormData.notes !== '' ||
+    contactFormData.additionalContacts.length > 0;
+
+  // Additional contact method handlers
+  const handleMethodTypeChange = (type: 'phone' | 'fax' | 'email') => {
+    setNewMethodType(type);
+    setNewMethodValue('');
+    setMethodValidationError(null);
+  };
+
+  const handleNewMethodValueChange = (value: string) => {
+    let formattedValue = value;
+    
+    if (newMethodType !== 'email') {
+      const currentDigits = newMethodValue.replace(/\D/g, '').length;
+      const newDigits = value.replace(/\D/g, '').length;
+      if (newDigits > currentDigits) {
+        formattedValue = formatPhoneNumber(value);
+      }
+    }
+    
+    setNewMethodValue(formattedValue);
+    
+    // Validate
+    if (formattedValue) {
+      if (newMethodType === 'email') {
+        setMethodValidationError(validateEmail(formattedValue) ? null : 'Invalid email address');
+      } else {
+        setMethodValidationError(validatePhone(formattedValue) ? null : 'Invalid phone number');
+      }
+    } else {
+      setMethodValidationError(null);
+    }
+  };
+
+  const handleAddMethod = () => {
+    if (!newMethodLabel.trim()) {
+      toast.error('Error', 'Label is required');
+      return;
+    }
+    if (!newMethodValue.trim()) {
+      toast.error('Error', 'Value is required');
+      return;
+    }
+    if (methodValidationError) {
+      return;
+    }
+
+    const newMethod: AdditionalContactMethod = {
+      id: crypto.randomUUID(),
+      type: newMethodType,
+      label: newMethodLabel.trim(),
+      value: newMethodValue.trim(),
+    };
+
+    setContactFormData({
+      ...contactFormData,
+      additionalContacts: [...contactFormData.additionalContacts, newMethod],
+    });
+
+    // Reset and close modal
+    setShowAddMethodModal(false);
+    setNewMethodType('phone');
+    setNewMethodLabel('');
+    setNewMethodValue('');
+    setMethodValidationError(null);
+  };
+
+  const handleRemoveMethod = (methodId: string) => {
+    setContactFormData({
+      ...contactFormData,
+      additionalContacts: contactFormData.additionalContacts.filter((m) => m.id !== methodId),
+    });
+  };
 
   // Address handlers
   const openAddAddressModal = () => {
@@ -1361,7 +1453,11 @@ export function CompanyDetailPage() {
       {/* Add Contact Modal */}
       <Modal
         isOpen={showAddContactModal}
-        onClose={closeAddContactModal}
+        onClose={() => {
+          // Don't close if the Add Method modal is open
+          if (showAddMethodModal) return;
+          closeAddContactModal();
+        }}
         title="Add Contact"
         size="lg"
         hasUnsavedChanges={hasContactChanges}
@@ -1427,16 +1523,79 @@ export function CompanyDetailPage() {
               label="Office Phone"
               type="tel"
               value={contactFormData.phoneOffice}
-              onChange={(e) => setContactFormData({ ...contactFormData, phoneOffice: e.target.value })}
+              onChange={(e) => {
+                const currentDigits = contactFormData.phoneOffice.replace(/\D/g, '').length;
+                const newDigits = e.target.value.replace(/\D/g, '').length;
+                if (newDigits > currentDigits) {
+                  setContactFormData({ ...contactFormData, phoneOffice: formatPhoneNumber(e.target.value) });
+                } else {
+                  setContactFormData({ ...contactFormData, phoneOffice: e.target.value });
+                }
+              }}
               placeholder="(555) 123-4567"
             />
             <Input
               label="Mobile Phone"
               type="tel"
               value={contactFormData.phoneMobile}
-              onChange={(e) => setContactFormData({ ...contactFormData, phoneMobile: e.target.value })}
+              onChange={(e) => {
+                const currentDigits = contactFormData.phoneMobile.replace(/\D/g, '').length;
+                const newDigits = e.target.value.replace(/\D/g, '').length;
+                if (newDigits > currentDigits) {
+                  setContactFormData({ ...contactFormData, phoneMobile: formatPhoneNumber(e.target.value) });
+                } else {
+                  setContactFormData({ ...contactFormData, phoneMobile: e.target.value });
+                }
+              }}
               placeholder="(555) 987-6543"
             />
+          </div>
+
+          {/* Additional Contact Methods */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                Additional Contact Methods
+              </label>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowAddMethodModal(true)}
+              >
+                <Plus className="w-3 h-3 mr-1" />
+                Add
+              </Button>
+            </div>
+            
+            {contactFormData.additionalContacts.length > 0 ? (
+              <div className="space-y-2">
+                {contactFormData.additionalContacts.map((method) => (
+                  <div
+                    key={method.id}
+                    className="flex items-center justify-between px-3 py-2 bg-slate-50 dark:bg-slate-800/50 rounded-lg"
+                  >
+                    <div className="flex items-center gap-2">
+                      {method.type === 'phone' && <Phone className="w-4 h-4 text-slate-400" />}
+                      {method.type === 'fax' && <Printer className="w-4 h-4 text-slate-400" />}
+                      {method.type === 'email' && <Mail className="w-4 h-4 text-slate-400" />}
+                      <div>
+                        <span className="text-xs text-slate-500 dark:text-slate-400">{method.label}</span>
+                        <p className="text-sm text-slate-900 dark:text-white">{method.value}</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveMethod(method.id)}
+                      className="p-1 text-slate-400 hover:text-danger-600 rounded transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-400 italic">No additional contact methods</p>
+            )}
           </div>
 
           <Textarea
@@ -1446,6 +1605,113 @@ export function CompanyDetailPage() {
             placeholder="Additional notes..."
             rows={3}
           />
+        </div>
+      </Modal>
+
+      {/* Add Contact Method Modal */}
+      <Modal
+        isOpen={showAddMethodModal}
+        onClose={() => {
+          setShowAddMethodModal(false);
+          setNewMethodType('phone');
+          setNewMethodLabel('');
+          setNewMethodValue('');
+          setMethodValidationError(null);
+        }}
+        title="Add Contact Method"
+        size="sm"
+        footer={
+          <div className="flex justify-end gap-3">
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setShowAddMethodModal(false);
+                setNewMethodType('phone');
+                setNewMethodLabel('');
+                setNewMethodValue('');
+                setMethodValidationError(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={handleAddMethod}>
+              Add
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          {/* Type Selection */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+              Type
+            </label>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => handleMethodTypeChange('phone')}
+                className={clsx(
+                  'flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border transition-colors',
+                  newMethodType === 'phone'
+                    ? 'bg-brand-50 dark:bg-brand-900/20 border-brand-500 text-brand-700 dark:text-brand-300'
+                    : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
+                )}
+              >
+                <Phone className="w-4 h-4" />
+                Phone
+              </button>
+              <button
+                type="button"
+                onClick={() => handleMethodTypeChange('fax')}
+                className={clsx(
+                  'flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border transition-colors',
+                  newMethodType === 'fax'
+                    ? 'bg-brand-50 dark:bg-brand-900/20 border-brand-500 text-brand-700 dark:text-brand-300'
+                    : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
+                )}
+              >
+                <Printer className="w-4 h-4" />
+                Fax
+              </button>
+              <button
+                type="button"
+                onClick={() => handleMethodTypeChange('email')}
+                className={clsx(
+                  'flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border transition-colors',
+                  newMethodType === 'email'
+                    ? 'bg-brand-50 dark:bg-brand-900/20 border-brand-500 text-brand-700 dark:text-brand-300'
+                    : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
+                )}
+              >
+                <Mail className="w-4 h-4" />
+                Email
+              </button>
+            </div>
+          </div>
+
+          {/* Label */}
+          <Input
+            label="Label *"
+            value={newMethodLabel}
+            onChange={(e) => setNewMethodLabel(e.target.value)}
+            placeholder="e.g., Work, Home, Assistant"
+          />
+
+          {/* Value */}
+          <div>
+            <Input
+              label={newMethodType === 'email' ? 'Email Address *' : newMethodType === 'fax' ? 'Fax Number *' : 'Phone Number *'}
+              value={newMethodValue}
+              onChange={(e) => handleNewMethodValueChange(e.target.value)}
+              placeholder={newMethodType === 'email' ? 'email@example.com' : '(555) 123-4567'}
+              error={methodValidationError || undefined}
+            />
+            {newMethodType !== 'email' && (
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                Use # for extension (e.g., (555) 123-4567 #123)
+              </p>
+            )}
+          </div>
         </div>
       </Modal>
 

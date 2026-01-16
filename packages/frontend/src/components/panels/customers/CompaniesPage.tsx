@@ -6,6 +6,7 @@ import {
   Globe,
   MapPin,
   User,
+  Trash2,
 } from 'lucide-react';
 import { Page } from '@/components/layout';
 import { useClientsStore, useUsersStore, useToast, type Company, getCompanySalesRepIds } from '@/contexts';
@@ -15,8 +16,19 @@ import { AlphabetFilter } from '@/components/common/AlphabetFilter';
 import { DataTable, type DataTableColumn } from '@/components/common/DataTable';
 import { SelectFilter } from '@/components/common/SelectFilter';
 import { DuplicateCompanyModal } from '@/components/common/DuplicateCompanyModal';
-import { validatePhone, validateWebsite } from '@/utils/validation';
+import { validatePhone, validateWebsite, formatPhoneNumber } from '@/utils/validation';
 import { useDocumentTitle, getCompanyUrl } from '@/hooks';
+
+// Secondary address interface
+interface SecondaryAddress {
+  id: string;
+  label: string;
+  street: string;
+  suite?: string;
+  city: string;
+  state: string;
+  zip: string;
+}
 
 interface CompanyFormData {
   name: string;
@@ -29,6 +41,7 @@ interface CompanyFormData {
   zip: string;
   notes: string;
   salesRepIds: string[];
+  secondaryAddresses: SecondaryAddress[];
 }
 
 const initialFormData: CompanyFormData = {
@@ -42,6 +55,7 @@ const initialFormData: CompanyFormData = {
   zip: '',
   notes: '',
   salesRepIds: [],
+  secondaryAddresses: [],
 };
 
 type SortField = 'name' | 'location' | 'salesRep' | 'contacts';
@@ -70,15 +84,29 @@ export function CompaniesPage() {
 
   // Duplicate company detection
   const [showDuplicateModal, setShowDuplicateModal] = useState(false);
+  const [duplicateType, setDuplicateType] = useState<'exact' | 'different-address' | 'different-website'>('exact');
   const [duplicateCompany, setDuplicateCompany] = useState<{
     id: string;
     slug?: string;
     name: string;
     phone?: string;
     website?: string;
+    street?: string;
     city?: string;
     state?: string;
+    zip?: string;
   } | null>(null);
+
+  // Secondary address modal state
+  const [showSecondaryAddressModal, setShowSecondaryAddressModal] = useState(false);
+  const [secondaryAddressLabel, setSecondaryAddressLabel] = useState('');
+  const [secondaryAddressData, setSecondaryAddressData] = useState({
+    street: '',
+    suite: '',
+    city: '',
+    state: '',
+    zip: '',
+  });
 
   // Helper functions
   const getSalesRepName = (salesRepId?: string) => {
@@ -482,10 +510,47 @@ export function CompaniesPage() {
     setFormData(initialFormData);
   };
 
-  // Check for duplicate company by name
-  const findDuplicateCompany = (name: string) => {
+  // Check for duplicate company by name and determine type
+  const checkForDuplicate = (name: string) => {
     const normalizedName = name.trim().toLowerCase();
-    return companies.find((company) => company.name.toLowerCase() === normalizedName);
+    const existing = companies.find((company) => company.name.toLowerCase() === normalizedName);
+    
+    if (!existing) return null;
+
+    // Check if addresses match
+    const newAddress = {
+      street: formData.street.trim().toLowerCase(),
+      city: formData.city.trim().toLowerCase(),
+      state: formData.state.trim().toLowerCase(),
+      zip: formData.zip.trim(),
+    };
+    const existingAddress = {
+      street: (existing.address?.street || '').trim().toLowerCase(),
+      city: (existing.address?.city || '').trim().toLowerCase(),
+      state: (existing.address?.state || '').trim().toLowerCase(),
+      zip: (existing.address?.zip || '').trim(),
+    };
+
+    const addressMatches = 
+      newAddress.street === existingAddress.street &&
+      newAddress.city === existingAddress.city &&
+      newAddress.state === existingAddress.state &&
+      newAddress.zip === existingAddress.zip;
+
+    // Check if websites match (both empty counts as match)
+    const newWebsite = (formData.website || '').trim().toLowerCase();
+    const existingWebsite = (existing.website || '').trim().toLowerCase();
+    const websiteMatches = newWebsite === existingWebsite;
+
+    // Determine duplicate type
+    let type: 'exact' | 'different-address' | 'different-website' = 'exact';
+    if (!addressMatches) {
+      type = 'different-address';
+    } else if (!websiteMatches) {
+      type = 'different-website';
+    }
+
+    return { existing, type };
   };
 
   const handleSave = () => {
@@ -507,17 +572,21 @@ export function CompaniesPage() {
     }
 
     // Check for duplicate
-    const existing = findDuplicateCompany(formData.name);
-    if (existing) {
+    const duplicateCheck = checkForDuplicate(formData.name);
+    if (duplicateCheck) {
+      const { existing, type } = duplicateCheck;
       setDuplicateCompany({
         id: existing.id,
         slug: existing.slug,
         name: existing.name,
         phone: existing.phone,
         website: existing.website,
+        street: existing.address?.street,
         city: existing.address?.city,
         state: existing.address?.state,
+        zip: existing.address?.zip,
       });
+      setDuplicateType(type);
       setShowDuplicateModal(true);
       return;
     }
@@ -527,6 +596,17 @@ export function CompaniesPage() {
   };
 
   const createCompany = () => {
+    // Build secondary addresses array
+    const addresses = formData.secondaryAddresses.map((addr) => ({
+      id: addr.id,
+      label: addr.label,
+      street: addr.street,
+      suite: addr.suite || undefined,
+      city: addr.city,
+      state: addr.state,
+      zip: addr.zip,
+    }));
+
     const companyData = {
       name: formData.name.trim(),
       phone: formData.phone || undefined,
@@ -541,6 +621,7 @@ export function CompaniesPage() {
               zip: formData.zip,
             }
           : undefined,
+      addresses: addresses.length > 0 ? addresses : undefined,
       notes: formData.notes || undefined,
       salesRepIds: formData.salesRepIds.length > 0 ? formData.salesRepIds : undefined,
     };
@@ -560,6 +641,97 @@ export function CompaniesPage() {
     closeModal();
   };
 
+  const handleAddAsNewLocation = () => {
+    if (duplicateCompany) {
+      // Add the new address to the existing company
+      const { updateCompany } = useClientsStore.getState();
+      const existingCompany = companies.find(c => c.id === duplicateCompany.id);
+      
+      if (existingCompany) {
+        const newAddress = {
+          id: crypto.randomUUID(),
+          label: formData.city && formData.state ? `${formData.city}, ${formData.state}` : 'Office',
+          street: formData.street,
+          suite: formData.suite || undefined,
+          city: formData.city,
+          state: formData.state,
+          zip: formData.zip,
+        };
+
+        const existingAddresses = existingCompany.addresses || [];
+        updateCompany(duplicateCompany.id, {
+          addresses: [...existingAddresses, newAddress],
+        });
+
+        toast.success('Location Added', `New office added to ${existingCompany.name}`);
+        navigate(`/clients/companies/${duplicateCompany.slug || duplicateCompany.id}`);
+      }
+    }
+    setShowDuplicateModal(false);
+    setDuplicateCompany(null);
+    closeModal();
+  };
+
+  const handleCreateSeparateCompany = () => {
+    setShowDuplicateModal(false);
+    setDuplicateCompany(null);
+    createCompany();
+  };
+
+  // Secondary address handlers
+  const openSecondaryAddressModal = () => {
+    setSecondaryAddressLabel('');
+    setSecondaryAddressData({ street: '', suite: '', city: '', state: '', zip: '' });
+    setShowSecondaryAddressModal(true);
+  };
+
+  const handleAddSecondaryAddress = () => {
+    if (!secondaryAddressLabel.trim()) {
+      toast.error('Error', 'Label is required');
+      return;
+    }
+    if (!secondaryAddressData.street && !secondaryAddressData.city) {
+      toast.error('Error', 'Please enter at least street or city');
+      return;
+    }
+
+    const newAddress: SecondaryAddress = {
+      id: crypto.randomUUID(),
+      label: secondaryAddressLabel.trim(),
+      street: secondaryAddressData.street,
+      suite: secondaryAddressData.suite || undefined,
+      city: secondaryAddressData.city,
+      state: secondaryAddressData.state,
+      zip: secondaryAddressData.zip,
+    };
+
+    setFormData({
+      ...formData,
+      secondaryAddresses: [...formData.secondaryAddresses, newAddress],
+    });
+
+    setShowSecondaryAddressModal(false);
+  };
+
+  const handleRemoveSecondaryAddress = (addressId: string) => {
+    setFormData({
+      ...formData,
+      secondaryAddresses: formData.secondaryAddresses.filter(a => a.id !== addressId),
+    });
+  };
+
+  // Phone input handler with formatting
+  const handlePhoneChange = (value: string) => {
+    const currentDigits = formData.phone.replace(/\D/g, '').length;
+    const newDigits = value.replace(/\D/g, '').length;
+    
+    if (newDigits > currentDigits) {
+      setFormData({ ...formData, phone: formatPhoneNumber(value) });
+    } else {
+      setFormData({ ...formData, phone: value });
+    }
+  };
+
   const handleCloseDuplicateModal = () => {
     setShowDuplicateModal(false);
     setDuplicateCompany(null);
@@ -575,7 +747,8 @@ export function CompaniesPage() {
     formData.state !== '' ||
     formData.zip !== '' ||
     formData.notes !== '' ||
-    formData.salesRepIds.length > 0;
+    formData.salesRepIds.length > 0 ||
+    formData.secondaryAddresses.length > 0;
 
   // Clear all filters
   const clearFilters = () => {
@@ -670,7 +843,10 @@ export function CompaniesPage() {
       {/* Add Company Modal */}
       <Modal
         isOpen={showModal}
-        onClose={closeModal}
+        onClose={() => {
+          if (showSecondaryAddressModal) return;
+          closeModal();
+        }}
         title="Add Company"
         size="lg"
         hasUnsavedChanges={hasChanges}
@@ -713,7 +889,7 @@ export function CompaniesPage() {
               label="Phone"
               type="tel"
               value={formData.phone}
-              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+              onChange={(e) => handlePhoneChange(e.target.value)}
               placeholder="(555) 123-4567"
             />
             <Input
@@ -727,7 +903,7 @@ export function CompaniesPage() {
 
           <div className="space-y-1">
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-              Address
+              Main Office Address
             </label>
             <AddressInput
               street={formData.street}
@@ -749,6 +925,53 @@ export function CompaniesPage() {
             />
           </div>
 
+          {/* Secondary Addresses */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                Additional Offices
+              </label>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={openSecondaryAddressModal}
+              >
+                <Plus className="w-3 h-3 mr-1" />
+                Add Office
+              </Button>
+            </div>
+            
+            {formData.secondaryAddresses.length > 0 ? (
+              <div className="space-y-2">
+                {formData.secondaryAddresses.map((addr) => (
+                  <div
+                    key={addr.id}
+                    className="flex items-center justify-between px-3 py-2 bg-slate-50 dark:bg-slate-800/50 rounded-lg"
+                  >
+                    <div className="flex items-center gap-2">
+                      <MapPin className="w-4 h-4 text-slate-400" />
+                      <div>
+                        <span className="text-xs text-slate-500 dark:text-slate-400">{addr.label}</span>
+                        <p className="text-sm text-slate-900 dark:text-white">
+                          {[addr.street, addr.city, addr.state, addr.zip].filter(Boolean).join(', ')}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveSecondaryAddress(addr.id)}
+                      className="p-1 text-slate-400 hover:text-danger-600 rounded transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-400 italic">No additional offices</p>
+            )}
+          </div>
+
           <Textarea
             label="Notes"
             value={formData.notes}
@@ -759,12 +982,74 @@ export function CompaniesPage() {
         </div>
       </Modal>
 
+      {/* Add Secondary Address Modal */}
+      <Modal
+        isOpen={showSecondaryAddressModal}
+        onClose={() => setShowSecondaryAddressModal(false)}
+        title="Add Additional Office"
+        size="md"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setShowSecondaryAddressModal(false)}>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={handleAddSecondaryAddress}>
+              Add Office
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <Input
+            label="Office Label *"
+            value={secondaryAddressLabel}
+            onChange={(e) => setSecondaryAddressLabel(e.target.value)}
+            placeholder="e.g., Warehouse, Branch Office, Distribution Center"
+            autoFocus
+          />
+          <div className="space-y-1">
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+              Address
+            </label>
+            <AddressInput
+              street={secondaryAddressData.street}
+              suite={secondaryAddressData.suite}
+              city={secondaryAddressData.city}
+              state={secondaryAddressData.state}
+              zip={secondaryAddressData.zip}
+              autoSave
+              onSave={(address) => {
+                setSecondaryAddressData({
+                  street: address.street,
+                  suite: address.suite || '',
+                  city: address.city,
+                  state: address.state,
+                  zip: address.zip,
+                });
+              }}
+            />
+          </div>
+        </div>
+      </Modal>
+
       {/* Duplicate Company Modal */}
       <DuplicateCompanyModal
         isOpen={showDuplicateModal}
+        duplicateType={duplicateType}
         existingCompany={duplicateCompany}
+        newCompanyInfo={{
+          name: formData.name,
+          phone: formData.phone,
+          website: formData.website,
+          street: formData.street,
+          city: formData.city,
+          state: formData.state,
+          zip: formData.zip,
+        }}
         onClose={handleCloseDuplicateModal}
-        onUseExisting={handleViewExistingCompany}
+        onViewExisting={handleViewExistingCompany}
+        onAddAsNewLocation={handleAddAsNewLocation}
+        onCreateSeparate={handleCreateSeparateCompany}
       />
     </Page>
   );

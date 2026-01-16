@@ -5,6 +5,7 @@ import { useDocumentTitle } from '@/hooks';
 
 export function PermissionsPage() {
   useDocumentTitle('Permissions');
+  
   return (
     <Page
       title="Permissions"

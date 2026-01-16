@@ -1,5 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { clsx } from 'clsx';
 import {
   Plus,
   User,
@@ -10,16 +11,27 @@ import {
   AlertCircle,
   AlertTriangle,
   MapPin,
+  Printer,
+  Trash2,
 } from 'lucide-react';
 import { Page } from '@/components/layout';
-import { CardContent, Button, Input, Modal, SearchInput, Select, Textarea } from '@/components/common';
+import { CardContent, Button, Input, Modal, SearchInput, Select, Textarea, AddressInput } from '@/components/common';
 import { AlphabetFilter } from '@/components/common/AlphabetFilter';
 import { DataTable, type DataTableColumn } from '@/components/common/DataTable';
 import { SelectFilter } from '@/components/common/SelectFilter';
 import { DuplicateContactModal } from '@/components/common/DuplicateContactModal';
+import { DuplicateCompanyModal } from '@/components/common/DuplicateCompanyModal';
 import { useClientsStore, useUsersStore, useFieldsStore, useToast, type ContactRole, type Contact, type Company, getCompanySalesRepIds } from '@/contexts';
 import { useDropdownKeyboard, useDocumentTitle, getContactUrl, getCompanyUrl } from '@/hooks';
-import { validateEmail, validatePhone } from '@/utils/validation';
+import { validateEmail, validatePhone, formatPhoneNumber } from '@/utils/validation';
+
+// Additional contact method type
+interface AdditionalContactMethod {
+  id: string;
+  type: 'phone' | 'fax' | 'email';
+  label: string;
+  value: string;
+}
 
 interface ContactFormData {
   companyId: string;
@@ -30,6 +42,18 @@ interface ContactFormData {
   phoneMobile: string;
   role: ContactRole | '';
   notes: string;
+  additionalContacts: AdditionalContactMethod[];
+}
+
+// Secondary address interface
+interface SecondaryAddress {
+  id: string;
+  label: string;
+  street: string;
+  suite?: string;
+  city: string;
+  state: string;
+  zip: string;
 }
 
 interface CompanyFormData {
@@ -37,11 +61,13 @@ interface CompanyFormData {
   phone: string;
   website: string;
   street: string;
+  suite: string;
   city: string;
   state: string;
   zip: string;
   notes: string;
   salesRepId: string;
+  secondaryAddresses: SecondaryAddress[];
 }
 
 const initialContactFormData: ContactFormData = {
@@ -53,6 +79,7 @@ const initialContactFormData: ContactFormData = {
   phoneMobile: '',
   role: '',
   notes: '',
+  additionalContacts: [],
 };
 
 const initialCompanyFormData: CompanyFormData = {
@@ -60,11 +87,13 @@ const initialCompanyFormData: CompanyFormData = {
   phone: '',
   website: '',
   street: '',
+  suite: '',
   city: '',
   state: '',
   zip: '',
   notes: '',
   salesRepId: '',
+  secondaryAddresses: [],
 };
 
 type SortField = 'name' | 'role' | 'company' | 'email';
@@ -93,6 +122,39 @@ export function ContactsPage() {
 
   const [showAddCompanyModal, setShowAddCompanyModal] = useState(false);
   const [companyFormData, setCompanyFormData] = useState<CompanyFormData>(initialCompanyFormData);
+
+  // Duplicate company detection for Add Company modal
+  const [showDuplicateCompanyModal, setShowDuplicateCompanyModal] = useState(false);
+  const [duplicateCompanyType, setDuplicateCompanyType] = useState<'exact' | 'different-address' | 'different-website'>('exact');
+  const [duplicateCompany, setDuplicateCompany] = useState<{
+    id: string;
+    slug?: string;
+    name: string;
+    phone?: string;
+    website?: string;
+    street?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
+  } | null>(null);
+
+  // Secondary address modal state for Add Company
+  const [showSecondaryAddressModal, setShowSecondaryAddressModal] = useState(false);
+  const [secondaryAddressLabel, setSecondaryAddressLabel] = useState('');
+  const [secondaryAddressData, setSecondaryAddressData] = useState({
+    street: '',
+    suite: '',
+    city: '',
+    state: '',
+    zip: '',
+  });
+
+  // Additional contact method modal state
+  const [showAddMethodModal, setShowAddMethodModal] = useState(false);
+  const [newMethodType, setNewMethodType] = useState<'phone' | 'fax' | 'email'>('phone');
+  const [newMethodLabel, setNewMethodLabel] = useState('');
+  const [newMethodValue, setNewMethodValue] = useState('');
+  const [methodValidationError, setMethodValidationError] = useState<string | null>(null);
 
   // Ref for company dropdown in modal
   const companyDropdownRef = useRef<HTMLDivElement>(null);
@@ -897,6 +959,7 @@ export function ContactsPage() {
       phoneMobile: formData.phoneMobile || undefined,
       role: formData.role || undefined,
       notes: formData.notes || undefined,
+      additionalContacts: formData.additionalContacts.length > 0 ? formData.additionalContacts : undefined,
     };
     addContact(contactData);
     toast.success('Created', formData.firstName + ' ' + formData.lastName + ' has been added');
@@ -951,18 +1014,105 @@ export function ContactsPage() {
     setCompanyFormData(initialCompanyFormData);
   };
 
+  // Check for duplicate company by name and determine type
+  const checkForDuplicateCompany = (name: string) => {
+    const normalizedName = name.trim().toLowerCase();
+    const existing = companies.find((company) => company.name.toLowerCase() === normalizedName);
+    
+    if (!existing) return null;
+
+    // Check if addresses match
+    const newAddress = {
+      street: companyFormData.street.trim().toLowerCase(),
+      city: companyFormData.city.trim().toLowerCase(),
+      state: companyFormData.state.trim().toLowerCase(),
+      zip: companyFormData.zip.trim(),
+    };
+    const existingAddress = {
+      street: (existing.address?.street || '').trim().toLowerCase(),
+      city: (existing.address?.city || '').trim().toLowerCase(),
+      state: (existing.address?.state || '').trim().toLowerCase(),
+      zip: (existing.address?.zip || '').trim(),
+    };
+
+    const addressMatches = 
+      newAddress.street === existingAddress.street &&
+      newAddress.city === existingAddress.city &&
+      newAddress.state === existingAddress.state &&
+      newAddress.zip === existingAddress.zip;
+
+    // Check if websites match (both empty counts as match)
+    const newWebsite = (companyFormData.website || '').trim().toLowerCase();
+    const existingWebsite = (existing.website || '').trim().toLowerCase();
+    const websiteMatches = newWebsite === existingWebsite;
+
+    // Determine duplicate type
+    let type: 'exact' | 'different-address' | 'different-website' = 'exact';
+    if (!addressMatches) {
+      type = 'different-address';
+    } else if (!websiteMatches) {
+      type = 'different-website';
+    }
+
+    return { existing, type };
+  };
+
   const handleSaveCompany = () => {
     if (!companyFormData.name.trim()) {
       toast.error('Error', 'Company name is required');
       return;
     }
+
+    // Check for duplicate
+    const duplicateCheck = checkForDuplicateCompany(companyFormData.name);
+    if (duplicateCheck) {
+      const { existing, type } = duplicateCheck;
+      setDuplicateCompany({
+        id: existing.id,
+        slug: existing.slug,
+        name: existing.name,
+        phone: existing.phone,
+        website: existing.website,
+        street: existing.address?.street,
+        city: existing.address?.city,
+        state: existing.address?.state,
+        zip: existing.address?.zip,
+      });
+      setDuplicateCompanyType(type);
+      setShowDuplicateCompanyModal(true);
+      return;
+    }
+
+    // No duplicate, create company
+    createCompany();
+  };
+
+  const createCompany = () => {
+    // Build secondary addresses array
+    const addresses = companyFormData.secondaryAddresses.map((addr) => ({
+      id: addr.id,
+      label: addr.label,
+      street: addr.street,
+      suite: addr.suite || undefined,
+      city: addr.city,
+      state: addr.state,
+      zip: addr.zip,
+    }));
+
     const companyData = {
       name: companyFormData.name.trim(),
       phone: companyFormData.phone || undefined,
       website: companyFormData.website || undefined,
       address: companyFormData.street || companyFormData.city || companyFormData.state || companyFormData.zip
-        ? { street: companyFormData.street, city: companyFormData.city, state: companyFormData.state, zip: companyFormData.zip }
+        ? { 
+            street: companyFormData.street, 
+            suite: companyFormData.suite || undefined,
+            city: companyFormData.city, 
+            state: companyFormData.state, 
+            zip: companyFormData.zip 
+          }
         : undefined,
+      addresses: addresses.length > 0 ? addresses : undefined,
       notes: companyFormData.notes || undefined,
       salesRepId: companyFormData.salesRepId || undefined,
     };
@@ -978,6 +1128,173 @@ export function ContactsPage() {
     closeAddCompanyModal();
   };
 
+  const handleViewExistingCompany = () => {
+    if (duplicateCompany) {
+      navigate(`/clients/companies/${duplicateCompany.slug || duplicateCompany.id}`);
+    }
+    setShowDuplicateCompanyModal(false);
+    setDuplicateCompany(null);
+    closeAddCompanyModal();
+  };
+
+  const handleAddAsNewLocation = () => {
+    if (duplicateCompany) {
+      const { updateCompany } = useClientsStore.getState();
+      const existingCompany = companies.find(c => c.id === duplicateCompany.id);
+      
+      if (existingCompany) {
+        const newAddress = {
+          id: crypto.randomUUID(),
+          label: companyFormData.city && companyFormData.state ? `${companyFormData.city}, ${companyFormData.state}` : 'Office',
+          street: companyFormData.street,
+          suite: companyFormData.suite || undefined,
+          city: companyFormData.city,
+          state: companyFormData.state,
+          zip: companyFormData.zip,
+        };
+
+        const existingAddresses = existingCompany.addresses || [];
+        updateCompany(duplicateCompany.id, {
+          addresses: [...existingAddresses, newAddress],
+        });
+
+        toast.success('Location Added', `New office added to ${existingCompany.name}`);
+        
+        // Select this company for the contact
+        setFormData({ ...formData, companyId: existingCompany.id });
+        setCompanySearch(existingCompany.name);
+      }
+    }
+    setShowDuplicateCompanyModal(false);
+    setDuplicateCompany(null);
+    closeAddCompanyModal();
+  };
+
+  const handleCreateSeparateCompany = () => {
+    setShowDuplicateCompanyModal(false);
+    setDuplicateCompany(null);
+    createCompany();
+  };
+
+  const handleCloseDuplicateCompanyModal = () => {
+    setShowDuplicateCompanyModal(false);
+    setDuplicateCompany(null);
+  };
+
+  // Secondary address handlers for Add Company modal
+  const openSecondaryAddressModal = () => {
+    setSecondaryAddressLabel('');
+    setSecondaryAddressData({ street: '', suite: '', city: '', state: '', zip: '' });
+    setShowSecondaryAddressModal(true);
+  };
+
+  const handleAddSecondaryAddress = () => {
+    if (!secondaryAddressLabel.trim()) {
+      toast.error('Error', 'Label is required');
+      return;
+    }
+    if (!secondaryAddressData.street && !secondaryAddressData.city) {
+      toast.error('Error', 'Please enter at least street or city');
+      return;
+    }
+
+    const newAddress: SecondaryAddress = {
+      id: crypto.randomUUID(),
+      label: secondaryAddressLabel.trim(),
+      street: secondaryAddressData.street,
+      suite: secondaryAddressData.suite || undefined,
+      city: secondaryAddressData.city,
+      state: secondaryAddressData.state,
+      zip: secondaryAddressData.zip,
+    };
+
+    setCompanyFormData({
+      ...companyFormData,
+      secondaryAddresses: [...companyFormData.secondaryAddresses, newAddress],
+    });
+
+    setShowSecondaryAddressModal(false);
+  };
+
+  const handleRemoveSecondaryAddress = (addressId: string) => {
+    setCompanyFormData({
+      ...companyFormData,
+      secondaryAddresses: companyFormData.secondaryAddresses.filter(a => a.id !== addressId),
+    });
+  };
+
+  // Additional contact method handlers
+  const handleMethodTypeChange = (type: 'phone' | 'fax' | 'email') => {
+    setNewMethodType(type);
+    setNewMethodValue('');
+    setMethodValidationError(null);
+  };
+
+  const handleNewMethodValueChange = (value: string) => {
+    let formattedValue = value;
+    
+    if (newMethodType !== 'email') {
+      const currentDigits = newMethodValue.replace(/\D/g, '').length;
+      const newDigits = value.replace(/\D/g, '').length;
+      if (newDigits > currentDigits) {
+        formattedValue = formatPhoneNumber(value);
+      }
+    }
+    
+    setNewMethodValue(formattedValue);
+    
+    // Validate
+    if (formattedValue) {
+      if (newMethodType === 'email') {
+        setMethodValidationError(validateEmail(formattedValue) ? null : 'Invalid email address');
+      } else {
+        setMethodValidationError(validatePhone(formattedValue) ? null : 'Invalid phone number');
+      }
+    } else {
+      setMethodValidationError(null);
+    }
+  };
+
+  const handleAddMethod = () => {
+    if (!newMethodLabel.trim()) {
+      toast.error('Error', 'Label is required');
+      return;
+    }
+    if (!newMethodValue.trim()) {
+      toast.error('Error', 'Value is required');
+      return;
+    }
+    if (methodValidationError) {
+      return;
+    }
+
+    const newMethod: AdditionalContactMethod = {
+      id: crypto.randomUUID(),
+      type: newMethodType,
+      label: newMethodLabel.trim(),
+      value: newMethodValue.trim(),
+    };
+
+    setFormData({
+      ...formData,
+      additionalContacts: [...formData.additionalContacts, newMethod],
+    });
+
+    // Reset and close modal
+    setShowAddMethodModal(false);
+    setNewMethodType('phone');
+    setNewMethodLabel('');
+    setNewMethodValue('');
+    setMethodValidationError(null);
+  };
+
+  const handleRemoveMethod = (methodId: string) => {
+    setFormData({
+      ...formData,
+      additionalContacts: formData.additionalContacts.filter((m) => m.id !== methodId),
+    });
+  };
+
   // Clear all filters
   const clearFilters = () => {
     setSearch('');
@@ -990,8 +1307,8 @@ export function ContactsPage() {
 
   const hasActiveFilters = search || letterFilter || companyFilter || locationFilter || salesRepFilter || attentionFilter !== 'all';
 
-  const hasContactChanges = formData.companyId !== '' || formData.firstName.trim() !== '' || formData.lastName.trim() !== '' || formData.email !== '' || formData.phoneOffice !== '' || formData.phoneMobile !== '' || formData.role !== '' || formData.notes !== '';
-  const hasCompanyChanges = companyFormData.name.trim() !== '' || companyFormData.phone !== '' || companyFormData.website !== '' || companyFormData.street !== '' || companyFormData.city !== '' || companyFormData.state !== '' || companyFormData.zip !== '' || companyFormData.notes !== '' || companyFormData.salesRepId !== '';
+  const hasContactChanges = formData.companyId !== '' || formData.firstName.trim() !== '' || formData.lastName.trim() !== '' || formData.email !== '' || formData.phoneOffice !== '' || formData.phoneMobile !== '' || formData.role !== '' || formData.notes !== '' || formData.additionalContacts.length > 0;
+  const hasCompanyChanges = companyFormData.name.trim() !== '' || companyFormData.phone !== '' || companyFormData.website !== '' || companyFormData.street !== '' || companyFormData.suite !== '' || companyFormData.city !== '' || companyFormData.state !== '' || companyFormData.zip !== '' || companyFormData.notes !== '' || companyFormData.salesRepId !== '' || companyFormData.secondaryAddresses.length > 0;
 
   return (
     <Page
@@ -1106,7 +1423,7 @@ export function ContactsPage() {
       <Modal
         isOpen={showModal}
         onClose={() => {
-          if (showAddCompanyModal) return;
+          if (showAddCompanyModal || showAddMethodModal) return;
           closeModal();
         }}
         title="Add Contact"
@@ -1232,16 +1549,79 @@ export function ContactsPage() {
               label="Phone (Office)"
               type="tel"
               value={formData.phoneOffice}
-              onChange={(e) => setFormData({ ...formData, phoneOffice: e.target.value })}
+              onChange={(e) => {
+                const currentDigits = formData.phoneOffice.replace(/\D/g, '').length;
+                const newDigits = e.target.value.replace(/\D/g, '').length;
+                if (newDigits > currentDigits) {
+                  setFormData({ ...formData, phoneOffice: formatPhoneNumber(e.target.value) });
+                } else {
+                  setFormData({ ...formData, phoneOffice: e.target.value });
+                }
+              }}
               placeholder="(555) 123-4567"
             />
             <Input
               label="Phone (Mobile)"
               type="tel"
               value={formData.phoneMobile}
-              onChange={(e) => setFormData({ ...formData, phoneMobile: e.target.value })}
+              onChange={(e) => {
+                const currentDigits = formData.phoneMobile.replace(/\D/g, '').length;
+                const newDigits = e.target.value.replace(/\D/g, '').length;
+                if (newDigits > currentDigits) {
+                  setFormData({ ...formData, phoneMobile: formatPhoneNumber(e.target.value) });
+                } else {
+                  setFormData({ ...formData, phoneMobile: e.target.value });
+                }
+              }}
               placeholder="(555) 987-6543"
             />
+          </div>
+
+          {/* Additional Contact Methods */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                Additional Contact Methods
+              </label>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowAddMethodModal(true)}
+              >
+                <Plus className="w-3 h-3 mr-1" />
+                Add
+              </Button>
+            </div>
+            
+            {formData.additionalContacts.length > 0 ? (
+              <div className="space-y-2">
+                {formData.additionalContacts.map((method) => (
+                  <div
+                    key={method.id}
+                    className="flex items-center justify-between px-3 py-2 bg-slate-50 dark:bg-slate-800/50 rounded-lg"
+                  >
+                    <div className="flex items-center gap-2">
+                      {method.type === 'phone' && <Phone className="w-4 h-4 text-slate-400" />}
+                      {method.type === 'fax' && <Printer className="w-4 h-4 text-slate-400" />}
+                      {method.type === 'email' && <Mail className="w-4 h-4 text-slate-400" />}
+                      <div>
+                        <span className="text-xs text-slate-500 dark:text-slate-400">{method.label}</span>
+                        <p className="text-sm text-slate-900 dark:text-white">{method.value}</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveMethod(method.id)}
+                      className="p-1 text-slate-400 hover:text-danger-600 rounded transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-400 italic">No additional contact methods</p>
+            )}
           </div>
 
           <Textarea
@@ -1254,10 +1634,120 @@ export function ContactsPage() {
         </div>
       </Modal>
 
+      {/* Add Contact Method Modal */}
+      <Modal
+        isOpen={showAddMethodModal}
+        onClose={() => {
+          setShowAddMethodModal(false);
+          setNewMethodType('phone');
+          setNewMethodLabel('');
+          setNewMethodValue('');
+          setMethodValidationError(null);
+        }}
+        title="Add Contact Method"
+        size="sm"
+        footer={
+          <div className="flex justify-end gap-3">
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setShowAddMethodModal(false);
+                setNewMethodType('phone');
+                setNewMethodLabel('');
+                setNewMethodValue('');
+                setMethodValidationError(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={handleAddMethod}>
+              Add
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          {/* Type Selection */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+              Type
+            </label>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => handleMethodTypeChange('phone')}
+                className={clsx(
+                  'flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border transition-colors',
+                  newMethodType === 'phone'
+                    ? 'bg-brand-50 dark:bg-brand-900/20 border-brand-500 text-brand-700 dark:text-brand-300'
+                    : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
+                )}
+              >
+                <Phone className="w-4 h-4" />
+                Phone
+              </button>
+              <button
+                type="button"
+                onClick={() => handleMethodTypeChange('fax')}
+                className={clsx(
+                  'flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border transition-colors',
+                  newMethodType === 'fax'
+                    ? 'bg-brand-50 dark:bg-brand-900/20 border-brand-500 text-brand-700 dark:text-brand-300'
+                    : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
+                )}
+              >
+                <Printer className="w-4 h-4" />
+                Fax
+              </button>
+              <button
+                type="button"
+                onClick={() => handleMethodTypeChange('email')}
+                className={clsx(
+                  'flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border transition-colors',
+                  newMethodType === 'email'
+                    ? 'bg-brand-50 dark:bg-brand-900/20 border-brand-500 text-brand-700 dark:text-brand-300'
+                    : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
+                )}
+              >
+                <Mail className="w-4 h-4" />
+                Email
+              </button>
+            </div>
+          </div>
+
+          {/* Label */}
+          <Input
+            label="Label *"
+            value={newMethodLabel}
+            onChange={(e) => setNewMethodLabel(e.target.value)}
+            placeholder="e.g., Work, Home, Assistant"
+          />
+
+          {/* Value */}
+          <div>
+            <Input
+              label={newMethodType === 'email' ? 'Email Address *' : newMethodType === 'fax' ? 'Fax Number *' : 'Phone Number *'}
+              value={newMethodValue}
+              onChange={(e) => handleNewMethodValueChange(e.target.value)}
+              placeholder={newMethodType === 'email' ? 'email@example.com' : '(555) 123-4567'}
+              error={methodValidationError || undefined}
+            />
+            {newMethodType !== 'email' && (
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                Use # for extension (e.g., (555) 123-4567 #123)
+              </p>
+            )}
+          </div>
+        </div>
+      </Modal>
+
       {/* Add Company Modal */}
       <Modal
         isOpen={showAddCompanyModal}
-        onClose={closeAddCompanyModal}
+        onClose={() => {
+          if (showSecondaryAddressModal || showDuplicateCompanyModal) return;
+          closeAddCompanyModal();
+        }}
         title="Add New Company"
         size="lg"
         hasUnsavedChanges={hasCompanyChanges}
@@ -1298,7 +1788,15 @@ export function ContactsPage() {
               label="Phone"
               type="tel"
               value={companyFormData.phone}
-              onChange={(e) => setCompanyFormData({ ...companyFormData, phone: e.target.value })}
+              onChange={(e) => {
+                const currentDigits = companyFormData.phone.replace(/\D/g, '').length;
+                const newDigits = e.target.value.replace(/\D/g, '').length;
+                if (newDigits > currentDigits) {
+                  setCompanyFormData({ ...companyFormData, phone: formatPhoneNumber(e.target.value) });
+                } else {
+                  setCompanyFormData({ ...companyFormData, phone: e.target.value });
+                }
+              }}
               placeholder="(555) 123-4567"
             />
             <Input
@@ -1310,32 +1808,75 @@ export function ContactsPage() {
             />
           </div>
 
-          <Input
-            label="Street Address"
-            value={companyFormData.street}
-            onChange={(e) => setCompanyFormData({ ...companyFormData, street: e.target.value })}
-            placeholder="123 Main Street"
-          />
+          <div className="space-y-1">
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+              Main Office Address
+            </label>
+            <AddressInput
+              street={companyFormData.street}
+              suite={companyFormData.suite}
+              city={companyFormData.city}
+              state={companyFormData.state}
+              zip={companyFormData.zip}
+              autoSave
+              onSave={(address) => {
+                setCompanyFormData({
+                  ...companyFormData,
+                  street: address.street,
+                  suite: address.suite || '',
+                  city: address.city,
+                  state: address.state,
+                  zip: address.zip,
+                });
+              }}
+            />
+          </div>
 
-          <div className="grid grid-cols-3 gap-4">
-            <Input
-              label="City"
-              value={companyFormData.city}
-              onChange={(e) => setCompanyFormData({ ...companyFormData, city: e.target.value })}
-              placeholder="New York"
-            />
-            <Input
-              label="State"
-              value={companyFormData.state}
-              onChange={(e) => setCompanyFormData({ ...companyFormData, state: e.target.value })}
-              placeholder="NY"
-            />
-            <Input
-              label="ZIP Code"
-              value={companyFormData.zip}
-              onChange={(e) => setCompanyFormData({ ...companyFormData, zip: e.target.value })}
-              placeholder="10001"
-            />
+          {/* Secondary Addresses */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                Additional Offices
+              </label>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={openSecondaryAddressModal}
+              >
+                <Plus className="w-3 h-3 mr-1" />
+                Add Office
+              </Button>
+            </div>
+            
+            {companyFormData.secondaryAddresses.length > 0 ? (
+              <div className="space-y-2">
+                {companyFormData.secondaryAddresses.map((addr) => (
+                  <div
+                    key={addr.id}
+                    className="flex items-center justify-between px-3 py-2 bg-slate-50 dark:bg-slate-800/50 rounded-lg"
+                  >
+                    <div className="flex items-center gap-2">
+                      <MapPin className="w-4 h-4 text-slate-400" />
+                      <div>
+                        <span className="text-xs text-slate-500 dark:text-slate-400">{addr.label}</span>
+                        <p className="text-sm text-slate-900 dark:text-white">
+                          {[addr.street, addr.city, addr.state, addr.zip].filter(Boolean).join(', ')}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveSecondaryAddress(addr.id)}
+                      className="p-1 text-slate-400 hover:text-danger-600 rounded transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-400 italic">No additional offices</p>
+            )}
           </div>
 
           <Textarea
@@ -1347,6 +1888,76 @@ export function ContactsPage() {
           />
         </div>
       </Modal>
+
+      {/* Add Secondary Address Modal */}
+      <Modal
+        isOpen={showSecondaryAddressModal}
+        onClose={() => setShowSecondaryAddressModal(false)}
+        title="Add Additional Office"
+        size="md"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setShowSecondaryAddressModal(false)}>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={handleAddSecondaryAddress}>
+              Add Office
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <Input
+            label="Office Label *"
+            value={secondaryAddressLabel}
+            onChange={(e) => setSecondaryAddressLabel(e.target.value)}
+            placeholder="e.g., Warehouse, Branch Office, Distribution Center"
+            autoFocus
+          />
+          <div className="space-y-1">
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+              Address
+            </label>
+            <AddressInput
+              street={secondaryAddressData.street}
+              suite={secondaryAddressData.suite}
+              city={secondaryAddressData.city}
+              state={secondaryAddressData.state}
+              zip={secondaryAddressData.zip}
+              autoSave
+              onSave={(address) => {
+                setSecondaryAddressData({
+                  street: address.street,
+                  suite: address.suite || '',
+                  city: address.city,
+                  state: address.state,
+                  zip: address.zip,
+                });
+              }}
+            />
+          </div>
+        </div>
+      </Modal>
+
+      {/* Duplicate Company Modal */}
+      <DuplicateCompanyModal
+        isOpen={showDuplicateCompanyModal}
+        duplicateType={duplicateCompanyType}
+        existingCompany={duplicateCompany}
+        newCompanyInfo={{
+          name: companyFormData.name,
+          phone: companyFormData.phone,
+          website: companyFormData.website,
+          street: companyFormData.street,
+          city: companyFormData.city,
+          state: companyFormData.state,
+          zip: companyFormData.zip,
+        }}
+        onClose={handleCloseDuplicateCompanyModal}
+        onViewExisting={handleViewExistingCompany}
+        onAddAsNewLocation={handleAddAsNewLocation}
+        onCreateSeparate={handleCreateSeparateCompany}
+      />
 
       {/* Duplicate Contact Modal */}
       <DuplicateContactModal

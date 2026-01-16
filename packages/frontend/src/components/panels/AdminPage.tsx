@@ -2,7 +2,7 @@ import { Routes, Route } from 'react-router-dom';
 import { Users, Building2, Shield, Settings, SlidersHorizontal } from 'lucide-react';
 import { PanelDashboard } from '@/components/layout';
 import { useDocumentTitle } from '@/hooks';
-import { ManageUsersPage, UserDetailPage, CompanySettingsPage, FieldSettingsPage, ManageRolesPage } from './admin';
+import { ManageUsersPage, UserDetailPage, CompanySettingsPage, FieldSettingsPage, PermissionsPage } from './admin';
 
 // Admin Dashboard using reusable PanelDashboard
 function AdminDashboard() {
@@ -60,9 +60,7 @@ export function AdminPage() {
       <Route path="users" element={<ManageUsersPage />} />
       <Route path="users/:userId" element={<UserDetailPage />} />
       <Route path="fields" element={<FieldSettingsPage />} />
-      <Route path="permissions" element={<ManageRolesPage />} />
-      {/* Keep /roles as alias for backward compatibility */}
-      <Route path="roles" element={<ManageRolesPage />} />
+      <Route path="permissions" element={<PermissionsPage />} />
       <Route path="company" element={<CompanySettingsPage />} />
     </Routes>
   );

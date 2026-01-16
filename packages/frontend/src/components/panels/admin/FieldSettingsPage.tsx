@@ -13,7 +13,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { Page } from '@/components/layout';
-import { Button, Input, Modal, Select } from '@/components/common';
+import { Button, Input, Modal, Select, Toggle } from '@/components/common';
 import { CollapsibleSection } from '@/components/common/CollapsibleSection';
 import { useFieldsStore, useUsersStore, type Department, type Position } from '@/contexts';
 import { useToast } from '@/contexts';
@@ -785,14 +785,8 @@ export function FieldSettingsPage() {
             autoFocus
           />
           
-          {/* Department Head Checkbox */}
-          <label className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-            <input
-              type="checkbox"
-              checked={isDepartmentHead}
-              onChange={(e) => handleDepartmentHeadToggle(e.target.checked)}
-              className="w-4 h-4 text-brand-600 bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 rounded focus:ring-brand-500"
-            />
+          {/* Department Head Toggle */}
+          <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
             <div>
               <span className="text-sm font-medium text-slate-900 dark:text-white">
                 Department Head
@@ -801,7 +795,11 @@ export function FieldSettingsPage() {
                 Top position in this department
               </p>
             </div>
-          </label>
+            <Toggle
+              checked={isDepartmentHead}
+              onChange={handleDepartmentHeadToggle}
+            />
+          </div>
           
           {/* Reports To - Different options based on department head status */}
           {isDepartmentHead ? (
@@ -839,16 +837,12 @@ export function FieldSettingsPage() {
                 }
                 
                 return (
-                  <select
+                  <Select
                     value={positionReportsTo || ''}
                     onChange={(e) => setPositionReportsTo(e.target.value || null)}
-                    className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
-                  >
-                    <option value="">None (no executive supervisor)</option>
-                    {execOptions.map(p => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
-                    ))}
-                  </select>
+                    options={execOptions.map(p => ({ value: p.id, label: p.name }))}
+                    placeholder="None (no executive supervisor)"
+                  />
                 );
               })()}
             </div>
@@ -871,16 +865,12 @@ export function FieldSettingsPage() {
                 }
                 
                 return (
-                  <select
+                  <Select
                     value={positionReportsTo || ''}
                     onChange={(e) => setPositionReportsTo(e.target.value || null)}
-                    className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
-                  >
-                    <option value="">Select supervisor...</option>
-                    {sameDeptOptions.map(p => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
-                    ))}
-                  </select>
+                    options={sameDeptOptions.map(p => ({ value: p.id, label: p.name }))}
+                    placeholder="Select supervisor..."
+                  />
                 );
               })()}
               {!positionReportsTo && (
@@ -1060,34 +1050,25 @@ function DeleteConfirmationModal({
             </div>
             
             <div className="space-y-3 mt-4">
-              <div>
-                <label className="block text-sm font-medium text-amber-800 dark:text-amber-200 mb-1">
-                  Select the new Department Head:
-                </label>
-                <select
-                  value={newDeptHeadId}
-                  onChange={(e) => setNewDeptHeadId(e.target.value)}
-                  className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-700 rounded-lg text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
-                >
-                  <option value="">Select a position...</option>
-                  {positionDeps!.reportingPositions.map((p: any) => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                  ))}
-                </select>
-              </div>
+              <Select
+                label="Select the new Department Head:"
+                value={newDeptHeadId}
+                onChange={(e) => setNewDeptHeadId(e.target.value)}
+                options={positionDeps!.reportingPositions.map((p: any) => ({ value: p.id, label: p.name }))}
+                placeholder="Select a position..."
+              />
               
               {positionDeps?.execSupervisor && newDeptHeadId && (
-                <label className="flex items-center gap-2 text-sm text-amber-800 dark:text-amber-200 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={inheritExecSupervisor}
-                    onChange={(e) => setInheritExecSupervisor(e.target.checked)}
-                    className="w-4 h-4 text-amber-600 bg-white dark:bg-slate-700 border-amber-300 dark:border-amber-600 rounded focus:ring-amber-500"
-                  />
-                  <span>
+                <div className="flex items-center justify-between p-3 bg-amber-100 dark:bg-amber-900/30 rounded-lg">
+                  <span className="text-sm text-amber-800 dark:text-amber-200">
                     New Department Head reports to <strong>{positionDeps.execSupervisor.name}</strong>
                   </span>
-                </label>
+                  <Toggle
+                    checked={inheritExecSupervisor}
+                    onChange={setInheritExecSupervisor}
+                    size="sm"
+                  />
+                </div>
               )}
               
               {newDeptHeadId && (
