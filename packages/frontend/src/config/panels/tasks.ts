@@ -1,4 +1,4 @@
-import { CheckSquare, Calendar, List } from 'lucide-react';
+import { CheckSquare } from 'lucide-react';
 import type { PanelTile } from './accounting';
 
 export const TASKS_PANEL = {
@@ -8,25 +8,11 @@ export const TASKS_PANEL = {
   icon: CheckSquare,
   tiles: [
     {
-      id: 'my-tasks',
-      name: 'My Tasks',
+      id: 'tasks',
+      name: 'Tasks',
       path: '/tasks',
       icon: CheckSquare,
-      description: 'Your assigned tasks',
-    },
-    {
-      id: 'calendar',
-      name: 'Calendar',
-      path: '/tasks/calendar',
-      icon: Calendar,
-      description: 'Calendar view of tasks',
-    },
-    {
-      id: 'list',
-      name: 'List',
-      path: '/tasks/list',
-      icon: List,
-      description: 'List view of tasks',
+      description: 'Manage tasks and activities',
     },
   ] as PanelTile[],
 };

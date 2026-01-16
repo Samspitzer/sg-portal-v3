@@ -210,38 +210,42 @@ function AppRoutes() {
         }
       />
 
-      {/* Sales Panel */}
-<Route
-  path="/sales/*"
-  element={
-    <AuthGuard>
-      <SalesLayout>
-        <Routes>
-          <Route index element={<SalesPage />} />
-          <Route path="pipeline" element={<SalesPage />} />
-          <Route path="leads" element={<SalesPage />} />
-          <Route path="activities" element={<SalesPage />} />
-        </Routes>
-      </SalesLayout>
-    </AuthGuard>
-  }
-/>
+       {/* Sales Panel */}
+        <Route
+          path="/sales/*"
+          element={
+            <AuthGuard>
+              <Layout>
+                <SalesLayout>
+                  <Routes>
+                    <Route index element={<SalesPage />} />
+                    <Route path="pipeline" element={<SalesPage />} />
+                    <Route path="leads" element={<SalesPage />} />
+                    <Route path="activities" element={<SalesPage />} />
+                  </Routes>
+                </SalesLayout>
+              </Layout>
+            </AuthGuard>
+          }
+        />
 
-{/* Tasks Panel */}
-<Route
-  path="/tasks/*"
-  element={
-    <AuthGuard>
-      <TasksLayout>
-        <Routes>
-          <Route index element={<TasksPage />} />
-          <Route path="calendar" element={<TasksPage />} />
-          <Route path="list" element={<TasksPage />} />
-        </Routes>
-      </TasksLayout>
-    </AuthGuard>
-  }
-/>
+        {/* Tasks Panel */}
+        <Route
+          path="/tasks/*"
+          element={
+            <AuthGuard>
+              <Layout>
+                <TasksLayout>
+                  <Routes>
+                    <Route index element={<TasksPage />} />
+                    <Route path="calendar" element={<TasksPage />} />
+                    <Route path="list" element={<TasksPage />} />
+                  </Routes>
+                </TasksLayout>
+              </Layout>
+            </AuthGuard>
+          }
+        />
       
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

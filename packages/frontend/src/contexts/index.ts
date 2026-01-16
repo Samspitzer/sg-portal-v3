@@ -27,3 +27,14 @@ export {
   getCompanySalesRepIds,
   isCompanyAssignedToRep,
 } from './clientsStore';
+export {
+  useTaskStore,
+  type Task,
+  type TaskType,
+  type TaskStatus,
+  type TaskPriority,
+  type TaskInput,
+  type TaskFilters,
+  type LinkedEntity,
+  type LinkedEntityType,
+} from './taskStore';

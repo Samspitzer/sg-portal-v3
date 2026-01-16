@@ -10,6 +10,8 @@ import {
   Settings,
   Code,
   ArrowRight,
+  Handshake,
+  CheckSquare,
 } from 'lucide-react';
 import { useAuthStore, useCompanyStore } from '@/contexts';
 import { Header } from '@/components/layout';
@@ -61,6 +63,24 @@ const modules: ModuleCard[] = [
     path: '/clients',
     iconBg: 'bg-orange-100 dark:bg-orange-900/30',
     iconColor: 'text-orange-600 dark:text-orange-400',
+  },
+  {
+    id: 'sales',
+    title: 'Sales',
+    description: 'CRM, pipeline management, and lead tracking',
+    icon: <Handshake className="w-5 h-5" />,
+    path: '/sales',
+    iconBg: 'bg-teal-100 dark:bg-teal-900/30',
+    iconColor: 'text-teal-600 dark:text-teal-400',
+  },
+  {
+    id: 'tasks',
+    title: 'Tasks',
+    description: 'Task management with calendar and list views',
+    icon: <CheckSquare className="w-5 h-5" />,
+    path: '/tasks',
+    iconBg: 'bg-cyan-100 dark:bg-cyan-900/30',
+    iconColor: 'text-cyan-600 dark:text-cyan-400',
   },
   {
     id: 'admin',

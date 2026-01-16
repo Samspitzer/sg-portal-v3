@@ -29,5 +29,8 @@
     "npm": ">=10.0.0"
   },
   "author": "S&G Business Solutions",
-  "license": "UNLICENSED"
+  "license": "UNLICENSED",
+  "dependencies": {
+    "zustand": "^5.0.10"
+  }
 }
