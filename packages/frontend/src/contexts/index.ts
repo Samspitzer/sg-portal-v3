@@ -38,3 +38,8 @@ export {
   type LinkedEntity,
   type LinkedEntityType,
 } from './taskStore';
+export { 
+  useTaskTypesStore, TASK_TYPE_ICONS, 
+  type TaskTypeConfig, 
+  type TaskTypeIconName 
+} from './taskTypesStore';

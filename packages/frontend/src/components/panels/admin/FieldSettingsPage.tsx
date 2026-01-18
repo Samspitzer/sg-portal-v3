@@ -11,11 +11,15 @@ import {
   ChevronRight,
   CornerDownRight,
   AlertTriangle,
+  CheckSquare,
+  GripVertical,
 } from 'lucide-react';
 import { Page } from '@/components/layout';
 import { Button, Input, Modal, Select, Toggle } from '@/components/common';
 import { CollapsibleSection } from '@/components/common/CollapsibleSection';
+import { TaskTypeIcon } from '@/components/common/TaskTypeIcon';
 import { useFieldsStore, useUsersStore, type Department, type Position } from '@/contexts';
+import { useTaskTypesStore, TASK_TYPE_ICONS, type TaskTypeConfig, type TaskTypeIconName } from '@/contexts/taskTypesStore';
 import { useToast } from '@/contexts';
 import { useDocumentTitle } from '@/hooks';
 
@@ -29,6 +33,132 @@ function PanelSectionHeader({ title, icon, description }: { title: string; icon:
       <div>
         <h2 className="text-base font-semibold text-slate-900 dark:text-white">{title}</h2>
         {description && <p className="text-xs text-slate-500 dark:text-slate-400">{description}</p>}
+      </div>
+    </div>
+  );
+}
+
+// Icon Picker Component for Task Types
+function IconPicker({ value, onChange }: { value: TaskTypeIconName; onChange: (icon: TaskTypeIconName) => void }) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className={clsx(
+          'w-full h-10 px-3 flex items-center gap-2 rounded-lg border',
+          'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700',
+          'hover:border-slate-300 dark:hover:border-slate-600 transition-colors'
+        )}
+      >
+        <TaskTypeIcon icon={value} className="w-5 h-5 text-slate-600 dark:text-slate-400" />
+        <span className="text-sm text-slate-700 dark:text-slate-300">
+          {TASK_TYPE_ICONS.find(i => i.value === value)?.label || value}
+        </span>
+      </button>
+
+      {isOpen && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
+          <div className="absolute top-full left-0 right-0 mt-1 p-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-50 max-h-60 overflow-y-auto">
+            <div className="grid grid-cols-5 gap-1">
+              {TASK_TYPE_ICONS.map(icon => (
+                <button
+                  key={icon.value}
+                  type="button"
+                  onClick={() => { onChange(icon.value); setIsOpen(false); }}
+                  className={clsx(
+                    'p-2 rounded-lg flex flex-col items-center gap-1 transition-colors',
+                    value === icon.value
+                      ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
+                      : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400'
+                  )}
+                  title={icon.label}
+                >
+                  <TaskTypeIcon icon={icon.value} className="w-5 h-5" />
+                  <span className="text-[10px] truncate w-full text-center">{icon.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// Task Type Row Component
+function TaskTypeRow({
+  taskType,
+  onEdit,
+  onDelete,
+  onToggleActive,
+}: {
+  taskType: TaskTypeConfig;
+  onEdit: () => void;
+  onDelete: () => void;
+  onToggleActive: () => void;
+}) {
+  return (
+    <div className={clsx(
+      'flex items-center gap-3 p-2.5 rounded-lg border transition-colors group',
+      'bg-white dark:bg-slate-900',
+      taskType.isActive
+        ? 'border-slate-200 dark:border-slate-700'
+        : 'border-slate-200 dark:border-slate-700 opacity-50'
+    )}>
+      {/* Drag handle */}
+      <div className="cursor-grab text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
+        <GripVertical className="w-4 h-4" />
+      </div>
+
+      {/* Icon */}
+      <div className={clsx(
+        'w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0',
+        'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
+      )}>
+        <TaskTypeIcon icon={taskType.icon} className="w-4 h-4" />
+      </div>
+
+      {/* Label & Value */}
+      <div className="flex-1 min-w-0">
+        <div className="font-medium text-sm text-slate-900 dark:text-white truncate">
+          {taskType.label}
+        </div>
+        <div className="text-xs text-slate-500 dark:text-slate-400 truncate">
+          {taskType.value}
+        </div>
+      </div>
+
+      {/* Status */}
+      <button
+        onClick={onToggleActive}
+        className={clsx(
+          'px-2 py-1 text-xs font-medium rounded-full transition-colors flex-shrink-0',
+          taskType.isActive
+            ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+            : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400'
+        )}
+      >
+        {taskType.isActive ? 'Active' : 'Inactive'}
+      </button>
+
+      {/* Actions */}
+      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <button
+          onClick={onEdit}
+          className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:text-slate-300 dark:hover:bg-slate-700 transition-colors"
+        >
+          <Edit2 className="w-3.5 h-3.5" />
+        </button>
+        <button
+          onClick={onDelete}
+          className="p-1.5 rounded-lg text-slate-400 hover:text-danger-600 hover:bg-danger-50 dark:hover:text-danger-400 dark:hover:bg-danger-900/20 transition-colors"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
       </div>
     </div>
   );
@@ -253,6 +383,7 @@ export function FieldSettingsPage() {
     getParentDepartment,
   } = useFieldsStore();
   const { users } = useUsersStore();
+  const { taskTypes, createTaskType, updateTaskType, deleteTaskType } = useTaskTypesStore();
   const toast = useToast();
   useDocumentTitle('Field Settings');
 
@@ -275,9 +406,17 @@ export function FieldSettingsPage() {
   const [editingRoleIndex, setEditingRoleIndex] = useState<number | null>(null);
   const [roleName, setRoleName] = useState('');
 
+  // Task type state
+  const [showTaskTypeModal, setShowTaskTypeModal] = useState(false);
+  const [editingTaskType, setEditingTaskType] = useState<TaskTypeConfig | null>(null);
+  const [taskTypeLabel, setTaskTypeLabel] = useState('');
+  const [taskTypeValue, setTaskTypeValue] = useState('');
+  const [taskTypeIcon, setTaskTypeIcon] = useState<TaskTypeIconName>('check-square');
+  const [taskTypeIsActive, setTaskTypeIsActive] = useState(true);
+
   // Delete confirmation
   const [deleteTarget, setDeleteTarget] = useState<{
-    type: 'department' | 'position' | 'role';
+    type: 'department' | 'position' | 'role' | 'taskType';
     id: string;
     name: string;
   } | null>(null);
@@ -390,6 +529,12 @@ export function FieldSettingsPage() {
 
   // Build department hierarchy
   const topLevelDepts = useMemo(() => getDepartmentsByParent(null), [departments]);
+
+  // Sorted task types
+  const sortedTaskTypes = useMemo(() => 
+    [...taskTypes].sort((a, b) => a.sortOrder - b.sortOrder), 
+    [taskTypes]
+  );
 
   // Get parent options for department selector
   const getDeptParentOptions = (excludeId?: string) => {
@@ -544,6 +689,63 @@ export function FieldSettingsPage() {
     setShowRoleModal(false);
   };
 
+  // ============ TASK TYPE HANDLERS ============
+
+  const openAddTaskTypeModal = () => {
+    setEditingTaskType(null);
+    setTaskTypeLabel('');
+    setTaskTypeValue('');
+    setTaskTypeIcon('check-square');
+    setTaskTypeIsActive(true);
+    setShowTaskTypeModal(true);
+  };
+
+  const openEditTaskTypeModal = (taskType: TaskTypeConfig) => {
+    setEditingTaskType(taskType);
+    setTaskTypeLabel(taskType.label);
+    setTaskTypeValue(taskType.value);
+    setTaskTypeIcon(taskType.icon);
+    setTaskTypeIsActive(taskType.isActive);
+    setShowTaskTypeModal(true);
+  };
+
+  const handleSaveTaskType = async () => {
+    if (!taskTypeLabel.trim()) {
+      toast.error('Error', 'Label is required');
+      return;
+    }
+    
+    const finalValue = taskTypeValue.trim() || taskTypeLabel.toLowerCase().replace(/\s+/g, '_');
+    
+    if (editingTaskType) {
+      await updateTaskType(editingTaskType.id, {
+        label: taskTypeLabel.trim(),
+        value: finalValue,
+        icon: taskTypeIcon,
+        isActive: taskTypeIsActive,
+      });
+      toast.success('Updated', 'Task type updated');
+    } else {
+      await createTaskType({
+        label: taskTypeLabel.trim(),
+        value: finalValue,
+        icon: taskTypeIcon,
+        isActive: taskTypeIsActive,
+      });
+      toast.success('Added', 'Task type created');
+    }
+    
+    setShowTaskTypeModal(false);
+  };
+
+  const handleToggleTaskTypeActive = async (taskType: TaskTypeConfig) => {
+    await updateTaskType(taskType.id, { isActive: !taskType.isActive });
+    toast.info(
+      taskType.isActive ? 'Deactivated' : 'Activated',
+      `${taskType.label} is now ${taskType.isActive ? 'inactive' : 'active'}`
+    );
+  };
+
   // ============ DELETE HANDLER ============
 
   const handleConfirmDelete = (options?: { newDeptHeadId?: string; inheritExecSupervisor?: boolean }) => {
@@ -573,6 +775,9 @@ export function FieldSettingsPage() {
       toast.success('Deleted', `${deleteTarget.name} removed`);
     } else if (deleteTarget.type === 'role') {
       deleteContactRole(deleteTarget.id);
+      toast.success('Deleted', `${deleteTarget.name} removed`);
+    } else if (deleteTarget.type === 'taskType') {
+      deleteTaskType(deleteTarget.id);
       toast.success('Deleted', `${deleteTarget.name} removed`);
     }
     
@@ -665,6 +870,61 @@ export function FieldSettingsPage() {
               ) : (
                 renderDepartments(topLevelDepts)
               )}
+            </div>
+          </CollapsibleSection>
+        </section>
+
+        {/* ============ TASKS PANEL SECTION ============ */}
+        <section>
+          <PanelSectionHeader
+            title="Tasks Panel"
+            icon={<CheckSquare className="w-5 h-5 text-slate-600 dark:text-slate-400" />}
+            description="Task types and categories"
+          />
+
+          <CollapsibleSection
+            title="Task Types"
+            icon={<CheckSquare className="w-4 h-4 text-blue-500" />}
+            badge={taskTypes.length > 0 ? `${taskTypes.length}` : undefined}
+            defaultOpen={false}
+            action={
+              <Button size="sm" variant="secondary" onClick={(e) => { e.stopPropagation(); openAddTaskTypeModal(); }}>
+                <Plus className="w-4 h-4 mr-1" />
+                Add Type
+              </Button>
+            }
+          >
+            <div className="p-4">
+              {sortedTaskTypes.length === 0 ? (
+                <div className="text-center py-6">
+                  <CheckSquare className="w-10 h-10 mx-auto text-slate-300 dark:text-slate-600" />
+                  <p className="mt-2 text-sm text-slate-500">No task types configured</p>
+                  <Button variant="primary" size="sm" className="mt-3" onClick={openAddTaskTypeModal}>
+                    <Plus className="w-4 h-4 mr-1" />
+                    Add Task Type
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {sortedTaskTypes.map(taskType => (
+                    <TaskTypeRow
+                      key={taskType.id}
+                      taskType={taskType}
+                      onEdit={() => openEditTaskTypeModal(taskType)}
+                      onDelete={() => setDeleteTarget({ type: 'taskType', id: taskType.id, name: taskType.label })}
+                      onToggleActive={() => handleToggleTaskTypeActive(taskType)}
+                    />
+                  ))}
+                </div>
+              )}
+              
+              {/* Tips */}
+              <div className="mt-4 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  <strong>Tips:</strong> Inactive types won't appear in task forms but existing tasks will keep their type. 
+                  The value field is used internally - avoid changing it after tasks use it.
+                </p>
+              </div>
             </div>
           </CollapsibleSection>
         </section>
@@ -907,8 +1167,66 @@ export function FieldSettingsPage() {
         />
       </Modal>
 
+      {/* ============ TASK TYPE MODAL ============ */}
+      <Modal
+        isOpen={showTaskTypeModal}
+        onClose={() => setShowTaskTypeModal(false)}
+        title={editingTaskType ? 'Edit Task Type' : 'Add Task Type'}
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setShowTaskTypeModal(false)}>Cancel</Button>
+            <Button variant="primary" onClick={handleSaveTaskType}>
+              {editingTaskType ? 'Save' : 'Add'}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <Input
+            label="Label"
+            value={taskTypeLabel}
+            onChange={(e) => setTaskTypeLabel(e.target.value)}
+            placeholder="e.g., Phone Call"
+            autoFocus
+          />
+
+          <div>
+            <Input
+              label="Value (system name)"
+              value={taskTypeValue}
+              onChange={(e) => setTaskTypeValue(e.target.value.toLowerCase().replace(/\s+/g, '_'))}
+              placeholder="e.g., phone_call"
+            />
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Used internally. Auto-generated from label if empty.</p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+              Icon
+            </label>
+            <IconPicker value={taskTypeIcon} onChange={setTaskTypeIcon} />
+          </div>
+
+          <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
+            <div>
+              <span className="text-sm font-medium text-slate-900 dark:text-white">
+                Active
+              </span>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Visible in task forms
+              </p>
+            </div>
+            <Toggle
+              checked={taskTypeIsActive}
+              onChange={setTaskTypeIsActive}
+            />
+          </div>
+        </div>
+      </Modal>
+
       {/* ============ DELETE CONFIRMATION ============ */}
-      {deleteTarget && (
+      {deleteTarget && deleteTarget.type !== 'taskType' && (
         <DeleteConfirmationModal
           target={deleteTarget}
           onClose={() => setDeleteTarget(null)}
@@ -916,6 +1234,26 @@ export function FieldSettingsPage() {
           getPositionDependencies={getPositionDependencies}
           getDepartmentDependencies={getDepartmentDependencies}
         />
+      )}
+
+      {/* Simple delete confirmation for task types */}
+      {deleteTarget && deleteTarget.type === 'taskType' && (
+        <Modal
+          isOpen={true}
+          onClose={() => setDeleteTarget(null)}
+          title="Delete Task Type"
+          size="sm"
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+              <Button variant="danger" onClick={() => handleConfirmDelete()}>Delete</Button>
+            </>
+          }
+        >
+          <p className="text-slate-600 dark:text-slate-400">
+            Delete the task type "{deleteTarget.name}"? Tasks with this type will keep their type but it won't be selectable for new tasks.
+          </p>
+        </Modal>
       )}
     </Page>
   );
@@ -929,7 +1267,7 @@ function DeleteConfirmationModal({
   getPositionDependencies,
   getDepartmentDependencies,
 }: {
-  target: { type: 'department' | 'position' | 'role'; id: string; name: string };
+  target: { type: 'department' | 'position' | 'role' | 'taskType'; id: string; name: string };
   onClose: () => void;
   onConfirm: (options?: { newDeptHeadId?: string; inheritExecSupervisor?: boolean }) => void;
   getPositionDependencies: (id: string) => {

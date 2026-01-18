@@ -8,6 +8,7 @@ export interface SelectFilterOption {
   label: string;
   count?: number;
   disabled?: boolean;
+  icon?: React.ReactNode;
 }
 
 export interface SelectFilterProps {
@@ -29,6 +30,12 @@ export interface SelectFilterProps {
   className?: string;
   /** Minimum options to show search (default: 5) */
   searchThreshold?: number;
+  /** Custom render function for options */
+  renderOption?: (option: SelectFilterOption) => React.ReactNode;
+  /** Custom render function for selected value display */
+  renderValue?: (option: SelectFilterOption) => React.ReactNode;
+  /** Size variant */
+  size?: 'sm' | 'md';
 }
 
 export function SelectFilter({
@@ -41,6 +48,9 @@ export function SelectFilter({
   allLabel = 'All',
   className,
   searchThreshold = 5,
+  renderOption,
+  renderValue,
+  size = 'md',
 }: SelectFilterProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -49,6 +59,12 @@ export function SelectFilter({
   const buttonRef = useRef<HTMLButtonElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Size classes
+  const sizeClasses = size === 'sm' 
+    ? 'h-7 px-2 py-0 text-xs gap-1.5' 
+    : 'px-3 py-2 text-sm gap-2';
+  const iconSize = size === 'sm' ? 'w-3 h-3' : 'w-4 h-4';
 
   // Determine if search should be shown
   const showSearch = options.length > searchThreshold;
@@ -250,6 +266,36 @@ export function SelectFilter({
     // Selection is done via Enter or Tab
   };
 
+  // Render the option content - use custom renderer if provided
+  const renderOptionContent = (option: SelectFilterOption) => {
+    if (renderOption) {
+      return renderOption(option);
+    }
+    // Default rendering with optional icon
+    return (
+      <div className="flex items-center gap-2">
+        {option.icon && <span className="flex-shrink-0">{option.icon}</span>}
+        <span>{option.label}</span>
+      </div>
+    );
+  };
+
+  // Render the selected value display
+  const renderSelectedValue = () => {
+    if (selectedOption && renderValue) {
+      return renderValue(selectedOption);
+    }
+    if (selectedOption && selectedOption.icon) {
+      return (
+        <div className="flex items-center gap-2">
+          <span className="flex-shrink-0">{selectedOption.icon}</span>
+          <span>{displayLabel}</span>
+        </div>
+      );
+    }
+    return <span>{hasSelection ? displayLabel : label}</span>;
+  };
+
   return (
     <div ref={containerRef} className={clsx('relative', className)} onBlur={handleContainerBlur}>
       {/* Trigger Button */}
@@ -259,8 +305,9 @@ export function SelectFilter({
         onClick={() => setIsOpen(!isOpen)}
         onKeyDown={handleButtonKeyDown}
         className={clsx(
-          'flex items-center gap-2 px-3 py-2 text-sm rounded-lg border transition-colors',
+          'flex items-center rounded-lg border transition-colors',
           'focus:outline-none focus:ring-2 focus:ring-brand-500',
+          sizeClasses,
           hasSelection
             ? 'bg-brand-50 dark:bg-brand-900/20 border-brand-300 dark:border-brand-700 text-brand-700 dark:text-brand-300'
             : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
@@ -268,15 +315,15 @@ export function SelectFilter({
       >
         {icon && <span className="text-slate-500 dark:text-slate-400 flex-shrink-0">{icon}</span>}
         <span className={clsx('flex-1 text-left', !hasSelection && 'text-slate-500 dark:text-slate-400')}>
-          {hasSelection ? displayLabel : label}
+          {renderSelectedValue()}
         </span>
         {hasSelection ? (
           <X
-            className="w-4 h-4 flex-shrink-0 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+            className={clsx(iconSize, 'flex-shrink-0 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200')}
             onClick={handleClear}
           />
         ) : (
-          <ChevronDown className={clsx('w-4 h-4 flex-shrink-0 transition-transform', isOpen && 'rotate-180')} />
+          <ChevronDown className={clsx(iconSize, 'flex-shrink-0 transition-transform', isOpen && 'rotate-180')} />
         )}
       </button>
 
@@ -335,10 +382,10 @@ export function SelectFilter({
                     : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
                 )}
               >
-                <span>{option.label}</span>
+                <span className="flex-1">{renderOptionContent(option)}</span>
                 {option.count !== undefined && (
                   <span className={clsx(
-                    'text-xs',
+                    'text-xs ml-2',
                     option.disabled ? 'text-slate-300 dark:text-slate-600' : 'text-slate-400'
                   )}>
                     {option.count}

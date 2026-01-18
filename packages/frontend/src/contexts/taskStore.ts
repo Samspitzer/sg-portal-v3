@@ -1,12 +1,13 @@
-// PATH: src/contexts/taskStore.ts
 import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
 
-// Types
-export type TaskType = 'call' | 'meeting' | 'task' | 'deadline' | 'email' | 'follow_up';
+// Task Types - now managed by taskTypesStore, but we keep string type for flexibility
+export type TaskType = string;
+
 export type TaskStatus = 'todo' | 'in_progress' | 'review' | 'completed' | 'cancelled';
 export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
-export type LinkedEntityType = 'contact' | 'project' | 'estimate' | 'invoice' | 'company' | 'deal';
+
+export type LinkedEntityType = 'contact' | 'company' | 'project' | 'estimate' | 'invoice' | 'deal';
 
 export interface LinkedEntity {
   type: LinkedEntityType;
@@ -30,7 +31,10 @@ export interface Task {
   createdAt: string;
   updatedAt: string;
   completedAt?: string;
-  linkedEntities: LinkedEntity[];
+  // Separate linked contact and item
+  linkedContact: LinkedEntity | null;
+  linkedItem: LinkedEntity | null;
+  // Primary entity for display (derived from linkedContact or linkedItem)
   primaryEntityType?: LinkedEntityType;
   primaryEntityId?: string;
   primaryEntityName?: string;
@@ -46,7 +50,8 @@ export interface TaskInput {
   dueTime?: string;
   assignedUserId: string;
   assignedUserName?: string;
-  linkedEntities?: LinkedEntity[];
+  linkedContact?: LinkedEntity | null;
+  linkedItem?: LinkedEntity | null;
   notes?: string;
 }
 
@@ -94,88 +99,115 @@ export const useTaskStore = create<TaskState & TaskActions>()(
         },
 
         createTask: async (input: TaskInput) => {
-          const primaryEntity = input.linkedEntities?.[0];
+          // Determine primary entity (prefer contact over item for display)
+          const primaryEntity = input.linkedContact || input.linkedItem;
+          
           const newTask: Task = {
             id: `task-${Date.now()}`,
             title: input.title,
             description: input.description,
             type: input.type,
+            status: 'todo',
             priority: input.priority,
             dueDate: input.dueDate,
             dueTime: input.dueTime,
-            status: 'todo',
             assignedUserId: input.assignedUserId,
             assignedUserName: input.assignedUserName || '',
-            createdById: '', // Set from auth context in real implementation
-            createdByName: '',
+            createdById: input.assignedUserId, // TODO: Use actual current user
+            createdByName: input.assignedUserName || '',
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
-            linkedEntities: input.linkedEntities || [],
+            linkedContact: input.linkedContact || null,
+            linkedItem: input.linkedItem || null,
             primaryEntityType: primaryEntity?.type,
             primaryEntityId: primaryEntity?.id,
             primaryEntityName: primaryEntity?.name,
             notes: input.notes,
           };
+
           set(state => ({ tasks: [...state.tasks, newTask] }));
           return newTask;
         },
 
         updateTask: async (id: string, input: Partial<TaskInput>) => {
-          const task = get().tasks.find(t => t.id === id);
-          if (!task) throw new Error('Task not found');
-          
-          const primaryEntity = input.linkedEntities?.[0] || task.linkedEntities?.[0];
-          const updated: Task = {
-            ...task,
+          const { tasks } = get();
+          const existingTask = tasks.find(t => t.id === id);
+          if (!existingTask) throw new Error('Task not found');
+
+          // Recalculate primary entity if links changed
+          const linkedContact = input.linkedContact !== undefined ? input.linkedContact : existingTask.linkedContact;
+          const linkedItem = input.linkedItem !== undefined ? input.linkedItem : existingTask.linkedItem;
+          const primaryEntity = linkedContact || linkedItem;
+
+          const updatedTask: Task = {
+            ...existingTask,
             ...input,
-            linkedEntities: input.linkedEntities ?? task.linkedEntities,
+            linkedContact,
+            linkedItem,
             primaryEntityType: primaryEntity?.type,
             primaryEntityId: primaryEntity?.id,
             primaryEntityName: primaryEntity?.name,
             updatedAt: new Date().toISOString(),
           };
-          
-          set(state => ({ tasks: state.tasks.map(t => t.id === id ? updated : t) }));
-          return updated;
+
+          set(state => ({
+            tasks: state.tasks.map(t => t.id === id ? updatedTask : t),
+          }));
+
+          return updatedTask;
         },
 
         deleteTask: async (id: string) => {
-          set(state => ({ tasks: state.tasks.filter(t => t.id !== id) }));
+          set(state => ({
+            tasks: state.tasks.filter(t => t.id !== id),
+          }));
         },
 
         completeTask: async (id: string) => {
           set(state => ({
-            tasks: state.tasks.map(t => t.id === id 
-              ? { ...t, status: 'completed' as TaskStatus, completedAt: new Date().toISOString(), updatedAt: new Date().toISOString() } 
-              : t
-            )
+            tasks: state.tasks.map(t =>
+              t.id === id
+                ? { ...t, status: 'completed' as TaskStatus, completedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+                : t
+            ),
           }));
         },
 
         reopenTask: async (id: string) => {
           set(state => ({
-            tasks: state.tasks.map(t => t.id === id 
-              ? { ...t, status: 'todo' as TaskStatus, completedAt: undefined, updatedAt: new Date().toISOString() } 
-              : t
-            )
+            tasks: state.tasks.map(t =>
+              t.id === id
+                ? { ...t, status: 'todo' as TaskStatus, completedAt: undefined, updatedAt: new Date().toISOString() }
+                : t
+            ),
           }));
         },
 
-        // Reassign all tasks linked to an entity when that entity changes owner
-        // Example: Contact reassigned to new sales rep -> their tasks follow
-        reassignTasksByEntity: async (entityType, entityId, newUserId, newUserName) => {
+        // When a contact/company is reassigned to a new user, reassign all their tasks too
+        reassignTasksByEntity: async (entityType: LinkedEntityType, entityId: string, newUserId: string, newUserName: string) => {
           set(state => ({
-            tasks: state.tasks.map(t => 
-              t.linkedEntities.some(e => e.type === entityType && e.id === entityId)
-                ? { ...t, assignedUserId: newUserId, assignedUserName: newUserName, updatedAt: new Date().toISOString() }
-                : t
-            )
+            tasks: state.tasks.map(task => {
+              // Check if this task is linked to the entity being reassigned
+              const isLinkedContact = task.linkedContact?.type === entityType && task.linkedContact?.id === entityId;
+              const isLinkedItem = task.linkedItem?.type === entityType && task.linkedItem?.id === entityId;
+              
+              if (isLinkedContact || isLinkedItem) {
+                return {
+                  ...task,
+                  assignedUserId: newUserId,
+                  assignedUserName: newUserName,
+                  updatedAt: new Date().toISOString(),
+                };
+              }
+              return task;
+            }),
           }));
         },
       }),
-      { name: 'task-store' }
-    ),
-    { name: 'TaskStore' }
+      {
+        name: 'task-storage',
+      }
+    )
   )
 );
 

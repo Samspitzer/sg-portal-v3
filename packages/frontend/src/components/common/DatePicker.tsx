@@ -15,19 +15,29 @@ interface DatePickerProps {
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 
+// Helper to parse YYYY-MM-DD without timezone issues
+function parseLocalDate(dateStr: string): Date | null {
+  if (!dateStr) return null;
+  const [year, month, day] = dateStr.split('-').map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day); // month is 0-indexed
+}
+
+// Helper to format date for display
+function formatDisplayDate(dateStr: string): string {
+  const date = parseLocalDate(dateStr);
+  if (!date) return '';
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
 export function DatePicker({ label, value, onChange, placeholder = 'Select date', required, className, error }: DatePickerProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [viewDate, setViewDate] = useState(() => value ? new Date(value) : new Date());
+  const [viewDate, setViewDate] = useState(() => parseLocalDate(value) || new Date());
   const containerRef = useRef<HTMLDivElement>(null);
   const [dropdownPosition, setDropdownPosition] = useState<'bottom' | 'top'>('bottom');
 
-  // Parse the value
-  const selectedDate = value ? new Date(value) : null;
-
-  // Format display value
-  const displayValue = selectedDate 
-    ? selectedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-    : '';
+  // Format display value using the helper
+  const displayValue = formatDisplayDate(value);
 
   // Calculate calendar grid
   const calendarDays = useMemo(() => {
@@ -37,30 +47,36 @@ export function DatePicker({ label, value, onChange, placeholder = 'Select date'
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const daysInPrevMonth = new Date(year, month, 0).getDate();
     
-    const days: { date: Date; isCurrentMonth: boolean; isToday: boolean; isSelected: boolean }[] = [];
+    const days: { date: Date; dateStr: string; isCurrentMonth: boolean; isToday: boolean; isSelected: boolean }[] = [];
     
     // Previous month days
     for (let i = firstDay - 1; i >= 0; i--) {
-      const date = new Date(year, month - 1, daysInPrevMonth - i);
+      const d = daysInPrevMonth - i;
+      const m = month - 1 < 0 ? 11 : month - 1;
+      const y = month - 1 < 0 ? year - 1 : year;
+      const date = new Date(y, m, d);
+      const dateStr = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       days.push({
         date,
+        dateStr,
         isCurrentMonth: false,
         isToday: false,
-        isSelected: false,
+        isSelected: value === dateStr,
       });
     }
     
     // Current month days
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
     
     for (let day = 1; day <= daysInMonth; day++) {
       const date = new Date(year, month, day);
       const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
       days.push({
         date,
+        dateStr,
         isCurrentMonth: true,
-        isToday: date.getTime() === today.getTime(),
+        isToday: dateStr === todayStr,
         isSelected: value === dateStr,
       });
     }
@@ -68,12 +84,16 @@ export function DatePicker({ label, value, onChange, placeholder = 'Select date'
     // Next month days to fill grid (6 rows × 7 days = 42)
     const remaining = 42 - days.length;
     for (let day = 1; day <= remaining; day++) {
-      const date = new Date(year, month + 1, day);
+      const m = month + 1 > 11 ? 0 : month + 1;
+      const y = month + 1 > 11 ? year + 1 : year;
+      const date = new Date(y, m, day);
+      const dateStr = `${y}-${String(m + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
       days.push({
         date,
+        dateStr,
         isCurrentMonth: false,
         isToday: false,
-        isSelected: false,
+        isSelected: value === dateStr,
       });
     }
     
@@ -115,11 +135,8 @@ export function DatePicker({ label, value, onChange, placeholder = 'Select date'
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isOpen]);
 
-  const selectDate = (date: Date) => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    onChange(`${year}-${month}-${day}`);
+  const selectDate = (dateStr: string) => {
+    onChange(dateStr);
     setIsOpen(false);
   };
 
@@ -133,8 +150,9 @@ export function DatePicker({ label, value, onChange, placeholder = 'Select date'
 
   const goToToday = () => {
     const today = new Date();
+    const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
     setViewDate(today);
-    selectDate(today);
+    selectDate(dateStr);
   };
 
   const clear = (e: React.MouseEvent) => {
@@ -234,7 +252,7 @@ export function DatePicker({ label, value, onChange, placeholder = 'Select date'
                 <button
                   key={index}
                   type="button"
-                  onClick={() => selectDate(day.date)}
+                  onClick={() => selectDate(day.dateStr)}
                   className={clsx(
                     'h-8 text-xs rounded transition-colors',
                     day.isCurrentMonth
