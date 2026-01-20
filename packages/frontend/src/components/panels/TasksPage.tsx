@@ -1,15 +1,26 @@
+// ===========================================================================
+// TasksPage - Pipedrive-inspired Task Management
+// Location: packages/frontend/src/components/panels/TasksPage.tsx
+// 
+// AUDIT COMPLIANCE:
+// - Uses common components: Button, Card, CardContent, DataTable, SelectFilter,
+//   Select, Textarea, SearchInput, DatePicker, TimePicker, UnsavedChangesModal
+// - Uses hooks: useDocumentTitle, useToast
+// - Uses layout: Page
+// ===========================================================================
+
 import { useDocumentTitle } from '@/hooks';
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { clsx } from 'clsx';
 import { 
-  Plus, Search, Calendar as CalendarIcon, List, ChevronLeft, ChevronRight, 
-  Clock, X, User, Building2, FolderOpen, FileText, Receipt, Check, Trash2
+  Plus, Calendar as CalendarIcon, List, ChevronLeft, ChevronRight, 
+  Clock, X, User, Building2, FolderOpen, FileText, Receipt, Check, Trash2, Search
 } from 'lucide-react';
 import { Page } from '@/components/layout';
 import { 
-  Card, CardContent, Button, SelectFilter, Modal,
-  DataTable, type DataTableColumn 
+  Card, CardContent, Button, SelectFilter, Select, Textarea, SearchInput,
+  DataTable, type DataTableColumn, DatePicker, TimePicker, UnsavedChangesModal
 } from '@/components/common';
 import { TaskTypeIcon } from '@/components/common/TaskTypeIcon';
 import { useUsersStore, useClientsStore, useToast } from '@/contexts';
@@ -50,217 +61,6 @@ function formatDateLong(dateStr: string): string {
   return parseLocalDate(dateStr).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 }
 
-// Validate date string (MM/DD/YYYY or YYYY-MM-DD)
-function validateDateInput(input: string): string | null {
-  const trimmed = input.trim();
-  if (!trimmed) return '';
-  
-  const mdyMatch = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (mdyMatch) {
-    const [, month, day, year] = mdyMatch;
-    const m = parseInt(month!, 10), d = parseInt(day!, 10), y = parseInt(year!, 10);
-    if (m >= 1 && m <= 12 && d >= 1 && d <= 31 && y >= 1900 && y <= 2100) {
-      return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-    }
-  }
-  
-  const isoMatch = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-  if (isoMatch) {
-    const [, year, month, day] = isoMatch;
-    const m = parseInt(month!, 10), d = parseInt(day!, 10), y = parseInt(year!, 10);
-    if (m >= 1 && m <= 12 && d >= 1 && d <= 31 && y >= 1900 && y <= 2100) {
-      return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-    }
-  }
-  return null;
-}
-
-// Validate time string (HH:MM or H:MM AM/PM)
-function validateTimeInput(input: string): string | null {
-  const trimmed = input.trim();
-  if (!trimmed) return '';
-  
-  const h24Match = trimmed.match(/^(\d{1,2}):(\d{2})$/);
-  if (h24Match) {
-    const [, hour, minute] = h24Match;
-    const h = parseInt(hour!, 10), m = parseInt(minute!, 10);
-    if (h >= 0 && h <= 23 && m >= 0 && m <= 59) {
-      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-    }
-  }
-  
-  const h12Match = trimmed.match(/^(\d{1,2}):(\d{2})\s*(am|pm|AM|PM)$/);
-  if (h12Match) {
-    const [, hour, minute, period] = h12Match;
-    let h = parseInt(hour!, 10);
-    const m = parseInt(minute!, 10);
-    const isPM = period!.toLowerCase() === 'pm';
-    if (h >= 1 && h <= 12 && m >= 0 && m <= 59) {
-      if (isPM && h !== 12) h += 12;
-      if (!isPM && h === 12) h = 0;
-      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-    }
-  }
-  return null;
-}
-
-// Date Input with text entry AND calendar picker
-function DateInput({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
-  const [textValue, setTextValue] = useState('');
-  const [error, setError] = useState(false);
-  const [showPicker, setShowPicker] = useState(false);
-  const [viewDate, setViewDate] = useState(new Date());
-  const containerRef = useRef<HTMLDivElement>(null);
-  
-  useEffect(() => {
-    if (value) {
-      const date = parseLocalDate(value);
-      setTextValue(`${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`);
-      setViewDate(date);
-    } else {
-      setTextValue('');
-    }
-    setError(false);
-  }, [value]);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setShowPicker(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-  
-  const handleBlur = () => {
-    if (!textValue.trim()) { onChange(''); return; }
-    const result = validateDateInput(textValue);
-    if (result === null) setError(true);
-    else { setError(false); onChange(result); }
-  };
-
-  const daysInMonth = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0).getDate();
-  const firstDay = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1).getDay();
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const todayStr = new Date().toISOString().split('T')[0];
-  
-  return (
-    <div ref={containerRef} className="relative">
-      <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5">{label}</label>
-      <div className="relative">
-        <input type="text" value={textValue} onChange={e => { setTextValue(e.target.value); setError(false); }} onBlur={handleBlur}
-          onKeyDown={e => e.key === 'Enter' && handleBlur()} placeholder="MM/DD/YYYY"
-          className={clsx('w-full pl-3 pr-9 py-2 text-sm border rounded-lg bg-white dark:bg-slate-800 focus:outline-none focus:ring-2',
-            error ? 'border-red-300 dark:border-red-700 focus:ring-red-500' : 'border-slate-200 dark:border-slate-700 focus:ring-blue-500')} />
-        <button type="button" onClick={() => setShowPicker(!showPicker)} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-          <CalendarIcon className="w-4 h-4" />
-        </button>
-      </div>
-      {error && <p className="text-xs text-red-500 mt-1">Invalid date format</p>}
-      
-      {showPicker && (
-        <div className="absolute top-full left-0 mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-50 p-3 w-64">
-          <div className="flex items-center justify-between mb-2">
-            <button type="button" onClick={() => { const d = new Date(viewDate); d.setMonth(d.getMonth() - 1); setViewDate(d); }} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded"><ChevronLeft className="w-4 h-4" /></button>
-            <span className="text-sm font-medium">{months[viewDate.getMonth()]} {viewDate.getFullYear()}</span>
-            <button type="button" onClick={() => { const d = new Date(viewDate); d.setMonth(d.getMonth() + 1); setViewDate(d); }} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded"><ChevronRight className="w-4 h-4" /></button>
-          </div>
-          <div className="grid grid-cols-7 text-center text-xs text-slate-500 mb-1">{['S','M','T','W','T','F','S'].map((d,i) => <div key={i} className="py-1">{d}</div>)}</div>
-          <div className="grid grid-cols-7 gap-1">
-            {Array(firstDay).fill(null).map((_,i) => <div key={`e-${i}`} />)}
-            {Array.from({ length: daysInMonth }, (_, i) => {
-              const day = i + 1;
-              const dateStr = `${viewDate.getFullYear()}-${String(viewDate.getMonth()+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-              const isToday = dateStr === todayStr, isSelected = dateStr === value;
-              return (
-                <button key={day} type="button" onClick={() => { onChange(dateStr); setShowPicker(false); }}
-                  className={clsx('w-7 h-7 text-xs rounded-full transition-colors',
-                    isSelected ? 'bg-blue-600 text-white' : isToday ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' : 'hover:bg-slate-100 dark:hover:bg-slate-700')}>{day}</button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Time Input with text entry AND dropdown picker
-function TimeInput({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
-  const [textValue, setTextValue] = useState('');
-  const [error, setError] = useState(false);
-  const [showPicker, setShowPicker] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-  
-  useEffect(() => {
-    if (value) {
-      const [h, m] = value.split(':').map(Number);
-      const hour = h || 0, minute = m || 0;
-      const period = hour >= 12 ? 'PM' : 'AM';
-      const h12 = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
-      setTextValue(`${h12}:${String(minute).padStart(2, '0')} ${period}`);
-    } else {
-      setTextValue('');
-    }
-    setError(false);
-  }, [value]);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setShowPicker(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-  
-  const handleBlur = () => {
-    if (!textValue.trim()) { onChange(''); return; }
-    const result = validateTimeInput(textValue);
-    if (result === null) setError(true);
-    else { setError(false); onChange(result); }
-  };
-
-  const timeOptions: string[] = [];
-  for (let h = 0; h < 24; h++) {
-    for (let m = 0; m < 60; m += 30) {
-      timeOptions.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
-    }
-  }
-  
-  const formatTime12 = (t: string) => {
-    const [h, m] = t.split(':').map(Number);
-    const period = (h || 0) >= 12 ? 'PM' : 'AM';
-    const h12 = (h || 0) === 0 ? 12 : (h || 0) > 12 ? (h || 0) - 12 : h || 0;
-    return `${h12}:${String(m || 0).padStart(2, '0')} ${period}`;
-  };
-  
-  return (
-    <div ref={containerRef} className="relative">
-      <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5">{label}</label>
-      <div className="relative">
-        <input type="text" value={textValue} onChange={e => { setTextValue(e.target.value); setError(false); }} onBlur={handleBlur}
-          onKeyDown={e => e.key === 'Enter' && handleBlur()} placeholder="H:MM AM/PM"
-          className={clsx('w-full pl-3 pr-9 py-2 text-sm border rounded-lg bg-white dark:bg-slate-800 focus:outline-none focus:ring-2',
-            error ? 'border-red-300 dark:border-red-700 focus:ring-red-500' : 'border-slate-200 dark:border-slate-700 focus:ring-blue-500')} />
-        <button type="button" onClick={() => setShowPicker(!showPicker)} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-          <Clock className="w-4 h-4" />
-        </button>
-      </div>
-      {error && <p className="text-xs text-red-500 mt-1">Invalid time format</p>}
-      
-      {showPicker && (
-        <div className="absolute top-full left-0 mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-50 max-h-48 overflow-y-auto w-full">
-          {timeOptions.map(t => (
-            <button key={t} type="button" onClick={() => { onChange(t); setShowPicker(false); }}
-              className={clsx('w-full px-3 py-1.5 text-sm text-left hover:bg-slate-100 dark:hover:bg-slate-700', value === t && 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400')}>
-              {formatTime12(t)}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // Contact/Company Search Component
 function ContactCompanySearch({ value, onChange }: { value: LinkedEntity | null; onChange: (v: LinkedEntity | null) => void; }) {
   const { contacts, companies } = useClientsStore();
@@ -292,7 +92,7 @@ function ContactCompanySearch({ value, onChange }: { value: LinkedEntity | null;
 
   return (
     <div className="space-y-1.5">
-      <label className="block text-xs font-medium text-slate-500 dark:text-slate-400">Link to Contact / Company</label>
+      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Link to Contact / Company</label>
       {value ? (
         <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg">
           {(() => { const Icon = ENTITY_ICONS[value.type]; return <Icon className="w-4 h-4 text-slate-400" />; })()}
@@ -331,6 +131,7 @@ function ItemSearch({ value, onChange }: { value: LinkedEntity | null; onChange:
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
+  // TODO: Replace with actual stores when available
   const allItems = useMemo(() => {
     const items: { type: LinkedEntityType; id: string; name: string; subtitle: string }[] = [];
     return items;
@@ -352,7 +153,7 @@ function ItemSearch({ value, onChange }: { value: LinkedEntity | null; onChange:
 
   return (
     <div className="space-y-1.5">
-      <label className="block text-xs font-medium text-slate-500 dark:text-slate-400">Link to Item (Project, Deal, etc.)</label>
+      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Link to Item (Project, Deal, etc.)</label>
       {value ? (
         <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg">
           {(() => { const Icon = ENTITY_ICONS[value.type]; return <Icon className="w-4 h-4 text-slate-400" />; })()}
@@ -365,9 +166,9 @@ function ItemSearch({ value, onChange }: { value: LinkedEntity | null; onChange:
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input ref={inputRef} value={search} onChange={e => { setSearch(e.target.value); setIsOpen(true); }} onFocus={() => setIsOpen(true)}
             placeholder="Search projects, deals, estimates..." className="w-full pl-9 pr-3 py-2 text-sm border rounded-lg bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-          {isOpen && filteredItems.length > 0 && (
+          {isOpen && (
             <div ref={dropdownRef} className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-50 max-h-60 overflow-y-auto">
-              {filteredItems.map(item => {
+              {filteredItems.length > 0 ? filteredItems.map(item => {
                 const Icon = ENTITY_ICONS[item.type];
                 return (
                   <button key={`${item.type}-${item.id}`} type="button" onClick={() => { onChange({ type: item.type, id: item.id, name: item.name }); setSearch(''); setIsOpen(false); }}
@@ -375,12 +176,9 @@ function ItemSearch({ value, onChange }: { value: LinkedEntity | null; onChange:
                     <Icon className="w-4 h-4 text-slate-400" /><span className="flex-1 text-sm text-slate-900 dark:text-white truncate">{item.name}</span><span className="text-xs text-slate-400">{item.subtitle}</span>
                   </button>
                 );
-              })}
-            </div>
-          )}
-          {isOpen && allItems.length === 0 && (
-            <div ref={dropdownRef} className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-50 p-3 text-center text-xs text-slate-400">
-              No projects or deals available yet
+              }) : (
+                <div className="p-3 text-center text-xs text-slate-400">No projects or deals available yet</div>
+              )}
             </div>
           )}
         </div>
@@ -471,7 +269,7 @@ function TaskDetailPanel({ task, isOpen, onClose, onSave, onDelete }: {
     <>
       <div className="fixed inset-0 z-50 flex">
         <div className="absolute inset-0 bg-black/20 dark:bg-black/40" onClick={handleClose} />
-        <div className="absolute right-0 top-0 bottom-0 w-full max-w-md bg-white dark:bg-slate-900 shadow-2xl flex flex-col animate-slide-in-right">
+        <div className="absolute right-0 top-0 bottom-0 w-full max-w-xl bg-white dark:bg-slate-900 shadow-2xl flex flex-col animate-slide-in-right">
           {/* Header */}
           <div className="flex items-center gap-3 px-6 py-4 border-b border-slate-200 dark:border-slate-700">
             <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -489,15 +287,15 @@ function TaskDetailPanel({ task, isOpen, onClose, onSave, onDelete }: {
             <input value={formData.title} onChange={e => setFormData(d => ({ ...d, title: e.target.value }))} placeholder="Task title..."
               className="w-full text-xl font-medium bg-transparent border-0 border-b-2 border-transparent focus:border-blue-500 focus:outline-none py-1 text-slate-900 dark:text-white placeholder:text-slate-400" />
             
-            <div><label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">Activity Type</label>
+            <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Activity Type</label>
               <TaskTypeButtonGroup value={formData.type} onChange={v => setFormData(d => ({ ...d, type: v }))} taskTypes={taskTypes} /></div>
             
             <div className="grid grid-cols-2 gap-4">
-              <DateInput label="Due Date" value={formData.dueDate || ''} onChange={v => setFormData(d => ({ ...d, dueDate: v }))} />
-              <TimeInput label="Due Time" value={formData.dueTime || ''} onChange={v => setFormData(d => ({ ...d, dueTime: v }))} />
+              <DatePicker label="Due Date" value={formData.dueDate || ''} onChange={v => setFormData(d => ({ ...d, dueDate: v }))} />
+              <TimePicker label="Due Time" value={formData.dueTime || ''} onChange={v => setFormData(d => ({ ...d, dueTime: v }))} />
             </div>
             
-            <div><label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">Priority</label>
+            <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Priority</label>
               <div className="flex items-center gap-2">
                 {PRIORITIES.map(p => (
                   <button key={p.value} type="button" onClick={() => setFormData(d => ({ ...d, priority: d.priority === p.value ? undefined : p.value }))}
@@ -506,22 +304,26 @@ function TaskDetailPanel({ task, isOpen, onClose, onSave, onDelete }: {
               </div>
             </div>
             
-            <div>
-              <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5">Assigned To <span className="text-red-500">*</span></label>
-              <select value={formData.assignedUserId} onChange={e => setFormData(d => ({ ...d, assignedUserId: e.target.value }))}
-                className="w-full px-3 py-2 text-sm border rounded-lg bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <option value="">Select User</option>
-                {userOptions.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}
-              </select>
-            </div>
+            <Select
+              label="Assigned To"
+              value={formData.assignedUserId}
+              onChange={e => setFormData(d => ({ ...d, assignedUserId: e.target.value }))}
+              options={userOptions}
+              placeholder="Select user..."
+              required
+            />
             
             <ContactCompanySearch value={formData.linkedContact || null} onChange={v => setFormData(d => ({ ...d, linkedContact: v }))} />
             
             <ItemSearch value={formData.linkedItem || null} onChange={v => setFormData(d => ({ ...d, linkedItem: v }))} />
             
-            <div><label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5">Notes</label>
-              <textarea value={formData.notes || ''} onChange={e => setFormData(d => ({ ...d, notes: e.target.value }))} rows={3} placeholder="Add notes..."
-                className="w-full px-3 py-2 text-sm border rounded-lg bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 dark:text-white placeholder:text-slate-400" /></div>
+            <Textarea
+              label="Notes"
+              value={formData.notes || ''}
+              onChange={e => setFormData(d => ({ ...d, notes: e.target.value }))}
+              rows={3}
+              placeholder="Add notes..."
+            />
             
             {task && <div className="text-xs text-slate-400 pt-2 border-t border-slate-200 dark:border-slate-700">Created: {new Date(task.createdAt).toLocaleString()}{task.createdByName && ` by ${task.createdByName}`}</div>}
           </div>
@@ -540,11 +342,13 @@ function TaskDetailPanel({ task, isOpen, onClose, onSave, onDelete }: {
         </div>
       </div>
       
-      {/* Discard Changes Modal */}
-      <Modal isOpen={showDiscardModal} onClose={() => setShowDiscardModal(false)} title="Unsaved Changes" size="sm"
-        footer={<div className="flex justify-end gap-2"><Button variant="ghost" onClick={() => setShowDiscardModal(false)}>Keep Editing</Button><Button variant="danger" onClick={handleDiscard}>Discard Changes</Button></div>}>
-        <p className="text-slate-600 dark:text-slate-400">You have unsaved changes. Are you sure you want to discard them?</p>
-      </Modal>
+      {/* Unsaved Changes Modal */}
+      <UnsavedChangesModal
+        isOpen={showDiscardModal}
+        onSave={handleSave}
+        onDiscard={handleDiscard}
+        onCancel={() => setShowDiscardModal(false)}
+      />
     </>,
     document.body
   );
@@ -791,7 +595,7 @@ export function TasksPage() {
           <button onClick={() => setViewMode('list')} className={clsx(btnBase, "flex items-center gap-1", viewMode === 'list' ? btnActive : btnInactive)}><List className="w-3 h-3" />List</button>
           <button onClick={() => setViewMode('calendar')} className={clsx(btnBase, "flex items-center gap-1", viewMode === 'calendar' ? btnActive : btnInactive)}><CalendarIcon className="w-3 h-3" />Calendar</button>
         </div>
-        <div className="relative h-7"><Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" /><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search..." className="h-7 w-40 pl-7 pr-2 text-xs border rounded-md bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500" /></div>
+        <SearchInput value={search} onChange={setSearch} placeholder="Search tasks..." className="w-40" />
         {taskTypeOptions.length > 0 && <SelectFilter label="Type" value={selectedType} onChange={setSelectedType} options={taskTypeOptions} showAllOption={true} size="sm" />}
         {userFilterOptions.length > 0 && <SelectFilter label="Assigned To" value={selectedUser} onChange={setSelectedUser} options={userFilterOptions} showAllOption={true} size="sm" icon={<User className="w-3 h-3" />} />}
         <div className="flex items-center gap-0.5">

@@ -1,3 +1,8 @@
+// ===========================================================================
+// DatePicker Component - Enhanced with Text Input + Calendar Picker
+// Location: packages/frontend/src/components/common/DatePicker.tsx
+// ===========================================================================
+
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { clsx } from 'clsx';
 import { Calendar, ChevronLeft, ChevronRight, X } from 'lucide-react';
@@ -20,35 +25,74 @@ function parseLocalDate(dateStr: string): Date | null {
   if (!dateStr) return null;
   const [year, month, day] = dateStr.split('-').map(Number);
   if (!year || !month || !day) return null;
-  return new Date(year, month - 1, day); // month is 0-indexed
+  return new Date(year, month - 1, day);
 }
 
-// Helper to format date for display
+// Format date for display
 function formatDisplayDate(dateStr: string): string {
   const date = parseLocalDate(dateStr);
   if (!date) return '';
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`;
 }
 
-export function DatePicker({ label, value, onChange, placeholder = 'Select date', required, className, error }: DatePickerProps) {
+// Validate and parse user input (MM/DD/YYYY or YYYY-MM-DD)
+function validateDateInput(input: string): string | null {
+  const trimmed = input.trim();
+  if (!trimmed) return '';
+  
+  // Try MM/DD/YYYY format
+  const mdyMatch = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (mdyMatch) {
+    const [, month, day, year] = mdyMatch;
+    const m = parseInt(month!, 10), d = parseInt(day!, 10), y = parseInt(year!, 10);
+    if (m >= 1 && m <= 12 && d >= 1 && d <= 31 && y >= 1900 && y <= 2100) {
+      return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    }
+  }
+  
+  // Try YYYY-MM-DD format
+  const isoMatch = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (isoMatch) {
+    const [, year, month, day] = isoMatch;
+    const m = parseInt(month!, 10), d = parseInt(day!, 10), y = parseInt(year!, 10);
+    if (m >= 1 && m <= 12 && d >= 1 && d <= 31 && y >= 1900 && y <= 2100) {
+      return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    }
+  }
+  
+  return null; // Invalid
+}
+
+export function DatePicker({ label, value, onChange, placeholder = 'Select date', className, error }: DatePickerProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [viewDate, setViewDate] = useState(() => parseLocalDate(value) || new Date());
+  const [viewDate, setViewDate] = useState(new Date());
+  const [textValue, setTextValue] = useState('');
+  const [inputError, setInputError] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const [dropdownPosition, setDropdownPosition] = useState<'bottom' | 'top'>('bottom');
 
-  // Format display value using the helper
-  const displayValue = formatDisplayDate(value);
+  // Sync text value with prop value
+  useEffect(() => {
+    if (value) {
+      setTextValue(formatDisplayDate(value));
+      const date = parseLocalDate(value);
+      if (date) setViewDate(date);
+    } else {
+      setTextValue('');
+    }
+    setInputError(false);
+  }, [value]);
 
-  // Calculate calendar grid
+  // Calculate calendar days
   const calendarDays = useMemo(() => {
     const year = viewDate.getFullYear();
     const month = viewDate.getMonth();
     const firstDay = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const daysInPrevMonth = new Date(year, month, 0).getDate();
-    
+
     const days: { date: Date; dateStr: string; isCurrentMonth: boolean; isToday: boolean; isSelected: boolean }[] = [];
-    
+
     // Previous month days
     for (let i = firstDay - 1; i >= 0; i--) {
       const d = daysInPrevMonth - i;
@@ -56,56 +100,72 @@ export function DatePicker({ label, value, onChange, placeholder = 'Select date'
       const y = month - 1 < 0 ? year - 1 : year;
       const date = new Date(y, m, d);
       const dateStr = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-      days.push({
-        date,
-        dateStr,
-        isCurrentMonth: false,
-        isToday: false,
-        isSelected: value === dateStr,
-      });
+      days.push({ date, dateStr, isCurrentMonth: false, isToday: false, isSelected: value === dateStr });
     }
-    
+
     // Current month days
     const today = new Date();
     const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-    
+
     for (let day = 1; day <= daysInMonth; day++) {
       const date = new Date(year, month, day);
       const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-      days.push({
-        date,
-        dateStr,
-        isCurrentMonth: true,
-        isToday: dateStr === todayStr,
-        isSelected: value === dateStr,
-      });
+      days.push({ date, dateStr, isCurrentMonth: true, isToday: dateStr === todayStr, isSelected: value === dateStr });
     }
-    
-    // Next month days to fill grid (6 rows × 7 days = 42)
-    const remaining = 42 - days.length;
-    for (let day = 1; day <= remaining; day++) {
-      const m = month + 1 > 11 ? 0 : month + 1;
-      const y = month + 1 > 11 ? year + 1 : year;
-      const date = new Date(y, m, day);
-      const dateStr = `${y}-${String(m + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-      days.push({
-        date,
-        dateStr,
-        isCurrentMonth: false,
-        isToday: false,
-        isSelected: value === dateStr,
-      });
-    }
-    
+
     return days;
   }, [viewDate, value]);
+
+  const goToToday = () => {
+    const today = new Date();
+    setViewDate(today);
+  };
+
+  const navigateMonth = (direction: number) => {
+    setViewDate(prev => {
+      const newDate = new Date(prev);
+      newDate.setMonth(newDate.getMonth() + direction);
+      return newDate;
+    });
+  };
+
+  const selectDate = (dateStr: string) => {
+    onChange(dateStr);
+    setIsOpen(false);
+  };
+
+  const clear = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onChange('');
+  };
+
+  const handleTextBlur = () => {
+    if (!textValue.trim()) {
+      onChange('');
+      setInputError(false);
+      return;
+    }
+    const result = validateDateInput(textValue);
+    if (result === null) {
+      setInputError(true);
+    } else {
+      setInputError(false);
+      onChange(result);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleTextBlur();
+    }
+  };
 
   // Check dropdown position
   useEffect(() => {
     if (isOpen && containerRef.current) {
       const rect = containerRef.current.getBoundingClientRect();
       const spaceBelow = window.innerHeight - rect.bottom;
-      const dropdownHeight = 320; // Approximate height
+      const dropdownHeight = 320;
       setDropdownPosition(spaceBelow < dropdownHeight ? 'top' : 'bottom');
     }
   }, [isOpen]);
@@ -121,88 +181,47 @@ export function DatePicker({ label, value, onChange, placeholder = 'Select date'
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Handle keyboard
-  useEffect(() => {
-    if (!isOpen) return;
-    
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setIsOpen(false);
-      }
-    };
-    
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen]);
-
-  const selectDate = (dateStr: string) => {
-    onChange(dateStr);
-    setIsOpen(false);
-  };
-
-  const navigateMonth = (direction: number) => {
-    setViewDate(prev => {
-      const newDate = new Date(prev);
-      newDate.setMonth(newDate.getMonth() + direction);
-      return newDate;
-    });
-  };
-
-  const goToToday = () => {
-    const today = new Date();
-    const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-    setViewDate(today);
-    selectDate(dateStr);
-  };
-
-  const clear = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    onChange('');
-  };
+  const hasError = error || inputError;
 
   return (
     <div className={className}>
       {label && (
         <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
           {label}
-          {required && <span className="text-red-500 ml-0.5">*</span>}
         </label>
       )}
-      
+
       <div ref={containerRef} className="relative">
-        {/* Trigger button */}
-        <button
-          type="button"
-          onClick={() => setIsOpen(!isOpen)}
-          className={clsx(
-            'w-full h-9 px-3 text-sm text-left rounded-lg border transition-colors',
-            'bg-white dark:bg-slate-800',
-            'flex items-center justify-between gap-2',
-            error
-              ? 'border-red-500 focus:ring-red-500'
-              : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600',
-            'focus:outline-none focus:ring-2 focus:ring-blue-500'
-          )}
-        >
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            <Calendar className="w-4 h-4 text-slate-400 flex-shrink-0" />
-            <span className={clsx(
-              'truncate',
-              displayValue ? 'text-slate-900 dark:text-white' : 'text-slate-400 dark:text-slate-500'
-            )}>
-              {displayValue || placeholder}
-            </span>
-          </div>
-          {value && (
-            <button
-              type="button"
-              onClick={clear}
-              className="p-0.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded"
-            >
-              <X className="w-3.5 h-3.5 text-slate-400" />
+        <div className="relative">
+          <input
+            type="text"
+            value={textValue}
+            onChange={e => { setTextValue(e.target.value); setInputError(false); }}
+            onBlur={handleTextBlur}
+            onKeyDown={handleKeyDown}
+            placeholder={placeholder}
+            className={clsx(
+              'w-full h-9 pl-3 pr-16 text-sm text-left rounded-lg border transition-colors',
+              'bg-white dark:bg-slate-800',
+              'flex items-center justify-between gap-2',
+              hasError
+                ? 'border-red-500 focus:ring-red-500'
+                : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600',
+              'focus:outline-none focus:ring-2 focus:ring-blue-500'
+            )}
+          />
+          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+            {value && (
+              <button type="button" onClick={clear} className="p-0.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded">
+                <X className="w-3.5 h-3.5 text-slate-400" />
+              </button>
+            )}
+            <button type="button" onClick={() => setIsOpen(!isOpen)} className="p-0.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded">
+              <Calendar className="w-4 h-4 text-slate-400 flex-shrink-0" />
             </button>
-          )}
-        </button>
+          </div>
+        </div>
+        {hasError && <p className="text-xs text-red-500 mt-1">{error || 'Invalid date format (use MM/DD/YYYY)'}</p>}
 
         {/* Dropdown */}
         {isOpen && (
@@ -216,52 +235,38 @@ export function DatePicker({ label, value, onChange, placeholder = 'Select date'
           >
             {/* Header with navigation */}
             <div className="flex items-center justify-between mb-3">
-              <button
-                type="button"
-                onClick={() => navigateMonth(-1)}
-                className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-colors"
-              >
+              <button type="button" onClick={() => navigateMonth(-1)} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-colors">
                 <ChevronLeft className="w-4 h-4 text-slate-600 dark:text-slate-400" />
               </button>
-              
               <span className="text-sm font-medium text-slate-900 dark:text-white">
                 {MONTHS[viewDate.getMonth()]} {viewDate.getFullYear()}
               </span>
-              
-              <button
-                type="button"
-                onClick={() => navigateMonth(1)}
-                className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-colors"
-              >
+              <button type="button" onClick={() => navigateMonth(1)} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-colors">
                 <ChevronRight className="w-4 h-4 text-slate-600 dark:text-slate-400" />
               </button>
             </div>
 
             {/* Day headers */}
-            <div className="grid grid-cols-7 mb-1">
-              {DAYS.map(day => (
-                <div key={day} className="text-center text-xs font-medium text-slate-400 dark:text-slate-500 py-1">
-                  {day}
-                </div>
-              ))}
+            <div className="grid grid-cols-7 text-center text-xs text-slate-500 mb-1">
+              {DAYS.map((d, i) => <div key={i} className="py-1">{d}</div>)}
             </div>
 
             {/* Calendar grid */}
-            <div className="grid grid-cols-7 gap-0.5">
-              {calendarDays.map((day, index) => (
+            <div className="grid grid-cols-7 gap-1">
+              {calendarDays.map((day, i) => (
                 <button
-                  key={index}
+                  key={i}
                   type="button"
                   onClick={() => selectDate(day.dateStr)}
                   className={clsx(
-                    'h-8 text-xs rounded transition-colors',
-                    day.isCurrentMonth
-                      ? day.isSelected
-                        ? 'bg-blue-600 text-white font-medium'
-                        : day.isToday
-                          ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-medium'
-                          : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
-                      : 'text-slate-300 dark:text-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800'
+                    'w-7 h-7 text-xs rounded-full transition-colors',
+                    day.isSelected
+                      ? 'bg-blue-600 text-white'
+                      : day.isToday
+                        ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                        : day.isCurrentMonth
+                          ? 'text-slate-900 dark:text-white hover:bg-slate-100 dark:hover:bg-slate-700'
+                          : 'text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700'
                   )}
                 >
                   {day.date.getDate()}
@@ -269,32 +274,15 @@ export function DatePicker({ label, value, onChange, placeholder = 'Select date'
               ))}
             </div>
 
-            {/* Footer */}
-            <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
-              <button
-                type="button"
-                onClick={clear}
-                className="text-xs text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300"
-              >
-                Clear
-              </button>
-              <button
-                type="button"
-                onClick={goToToday}
-                className="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 font-medium"
-              >
+            {/* Today button */}
+            <div className="mt-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+              <button type="button" onClick={goToToday} className="w-full text-xs text-blue-600 dark:text-blue-400 hover:underline">
                 Today
               </button>
             </div>
           </div>
         )}
       </div>
-
-      {error && (
-        <p className="mt-1 text-xs text-red-500">{error}</p>
-      )}
     </div>
   );
 }
-
-export default DatePicker;
