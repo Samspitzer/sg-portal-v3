@@ -26,6 +26,7 @@ export interface SelectFilterProps {
   showAllOption?: boolean;
   /** Placeholder for "All" option */
   allLabel?: string;
+  placeholder?: string;
   /** Additional className */
   className?: string;
   /** Minimum options to show search (default: 5) */
@@ -48,6 +49,7 @@ export function SelectFilter({
   allLabel = 'All',
   className,
   searchThreshold = 5,
+  placeholder = 'Search...',
   renderOption,
   renderValue,
   size = 'md',
@@ -305,7 +307,7 @@ export function SelectFilter({
         onClick={() => setIsOpen(!isOpen)}
         onKeyDown={handleButtonKeyDown}
         className={clsx(
-          'flex items-center rounded-lg border transition-colors',
+          'flex items-center rounded-lg border transition-colors w-full justify-between',
           'focus:outline-none focus:ring-2 focus:ring-brand-500',
           sizeClasses,
           hasSelection
@@ -329,13 +331,13 @@ export function SelectFilter({
 
       {/* Dropdown */}
       {isOpen && (
-        <div 
-          ref={dropdownRef}
-          className={clsx(
-            'absolute z-50 min-w-[200px] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg overflow-hidden',
-            dropdownPosition === 'top' ? 'bottom-full mb-1' : 'top-full mt-1'
-          )}
-        >
+        <div
+            ref={dropdownRef}
+            className={clsx(
+              'absolute z-50 w-full min-w-[200px] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg overflow-hidden',
+              dropdownPosition === 'top' ? 'bottom-full mb-1' : 'top-full mt-1'
+            )}
+          >
           {/* Search Input */}
           {showSearch && (
             <div className="p-2 border-b border-slate-200 dark:border-slate-700">
@@ -347,7 +349,7 @@ export function SelectFilter({
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onKeyDown={handleSearchKeyDown}
-                  placeholder="Search..."
+                  placeholder={placeholder}
                   className="w-full pl-8 pr-3 py-1.5 text-sm bg-slate-100 dark:bg-slate-700 border-0 rounded-md text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
                 />
                 {searchQuery && (

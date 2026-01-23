@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { Page } from '@/components/layout';
 import { 
-  Card, CardContent, Button, SelectFilter, Select, Textarea, SearchInput,
+  Card, CardContent, Button, SelectFilter, Textarea, SearchInput,
   DataTable, type DataTableColumn, DatePicker, TimePicker, UnsavedChangesModal,
   Input, Toggle
 } from '@/components/common';
@@ -656,13 +656,15 @@ function TaskDetailPanel({
             </div>
             
             {/* Assigned To */}
-            <Select
+            <SelectFilter
               label="Assigned To"
               value={formData.assignedUserId}
-              onChange={e => setFormData(d => ({ ...d, assignedUserId: e.target.value }))}
+              onChange={(value) => setFormData(d => ({ ...d, assignedUserId: value }))}
               options={userOptions}
               placeholder="Select user..."
-              required
+              showAllOption={false}
+              size="md"
+              className="w-full"
             />
             
             {/* Link to Contact/Company */}
