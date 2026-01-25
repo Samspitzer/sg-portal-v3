@@ -5,7 +5,7 @@
 
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { clsx } from 'clsx';
-import { Clock, X, ChevronUp, ChevronDown } from 'lucide-react';
+import { Clock, X } from 'lucide-react';
 
 interface TimePickerProps {
   label?: string;
@@ -77,6 +77,10 @@ export function TimePicker({
   const containerRef = useRef<HTMLDivElement>(null);
   const selectedRef = useRef<HTMLButtonElement>(null);
   const [dropdownPosition, setDropdownPosition] = useState<'bottom' | 'top'>('bottom');
+  
+  // Throttle for keyboard repeat
+  const lastKeyTimeRef = useRef(0);
+  const keyRepeatDelay = 150; // ms between repeats when holding key
 
   // Generate time options based on step
   const timeOptions = useMemo(() => {
@@ -149,24 +153,27 @@ export function TimePicker({
     setIsOpen(false);
   };
 
+  // Add/subtract minutes from current time
+  const addMinutes = (currentValue: string, minutes: number): string => {
+    if (!currentValue) return '09:00';
+    
+    const [h, m] = currentValue.split(':').map(Number);
+    let totalMinutes = (h ?? 0) * 60 + (m ?? 0) + minutes;
+    
+    // Wrap around 24 hours
+    while (totalMinutes < 0) totalMinutes += 24 * 60;
+    while (totalMinutes >= 24 * 60) totalMinutes -= 24 * 60;
+    
+    const newHour = Math.floor(totalMinutes / 60);
+    const newMinute = totalMinutes % 60;
+    
+    return `${String(newHour).padStart(2, '0')}:${String(newMinute).padStart(2, '0')}`;
+  };
+
+  // Adjust time by +/- step minutes (called on keyboard +/- or arrow keys)
   const adjustTime = (direction: number) => {
-    if (!value) {
-      // Default to 9:00 AM if no value
-      onChange('09:00');
-      return;
-    }
-
-    const currentIndex = timeOptions.findIndex(o => o.value === value);
-    if (currentIndex === -1) {
-      onChange('09:00');
-      return;
-    }
-
-    const newIndex = Math.max(0, Math.min(timeOptions.length - 1, currentIndex + direction));
-    const newOption = timeOptions[newIndex];
-    if (newOption) {
-      onChange(newOption.value);
-    }
+    const newValue = addMinutes(value || '09:00', direction * step);
+    onChange(newValue);
   };
 
   const clear = (e: React.MouseEvent) => {
@@ -189,12 +196,6 @@ export function TimePicker({
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleTextBlur();
-    }
-  };
-
   const hasError = error || inputError;
 
   return (
@@ -210,12 +211,44 @@ export function TimePicker({
           <input
             type="text"
             value={textValue}
-            onChange={e => { setTextValue(e.target.value); setInputError(false); }}
+            onChange={e => {
+              // Only allow valid time characters: numbers, :, space, a, m, p, A, M, P
+              const filtered = e.target.value.replace(/[^0-9:\sAMPamp]/g, '');
+              setTextValue(filtered);
+              setInputError(false);
+            }}
             onBlur={handleTextBlur}
-            onKeyDown={handleKeyDown}
+            onKeyDown={(e) => {
+              // Handle Enter key
+              if (e.key === 'Enter') {
+                handleTextBlur();
+                return;
+              }
+              // Handle +/- and arrow keys for increment/decrement
+              if (e.key === '+' || e.key === '=' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                // Throttle key repeats
+                const now = Date.now();
+                if (now - lastKeyTimeRef.current >= keyRepeatDelay) {
+                  lastKeyTimeRef.current = now;
+                  adjustTime(1);
+                }
+                return;
+              }
+              if (e.key === '-' || e.key === '_' || e.key === 'ArrowDown') {
+                e.preventDefault();
+                // Throttle key repeats
+                const now = Date.now();
+                if (now - lastKeyTimeRef.current >= keyRepeatDelay) {
+                  lastKeyTimeRef.current = now;
+                  adjustTime(-1);
+                }
+                return;
+              }
+            }}
             placeholder={placeholder}
             className={clsx(
-              'w-full h-9 pl-3 pr-20 text-sm text-left rounded-lg border transition-colors',
+              'w-full h-9 pl-3 pr-16 text-sm text-left rounded-lg border transition-colors',
               'bg-white dark:bg-slate-800',
               hasError
                 ? 'border-red-500 focus:ring-red-500'
@@ -229,14 +262,6 @@ export function TimePicker({
                 <X className="w-3.5 h-3.5 text-slate-400" />
               </button>
             )}
-            <div className="flex flex-col">
-              <button type="button" onClick={() => adjustTime(-1)} className="p-0 hover:bg-slate-100 dark:hover:bg-slate-700 rounded">
-                <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
-              </button>
-              <button type="button" onClick={() => adjustTime(1)} className="p-0 hover:bg-slate-100 dark:hover:bg-slate-700 rounded">
-                <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-              </button>
-            </div>
             <button type="button" onClick={() => setIsOpen(!isOpen)} className="p-0.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded">
               <Clock className="w-4 h-4 text-slate-400 flex-shrink-0" />
             </button>

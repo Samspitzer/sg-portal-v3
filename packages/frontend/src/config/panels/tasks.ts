@@ -6,13 +6,5 @@ export const TASKS_PANEL = {
   name: 'Tasks',
   basePath: '/tasks',
   icon: CheckSquare,
-  tiles: [
-    {
-      id: 'tasks',
-      name: 'Tasks',
-      path: '/tasks',
-      icon: CheckSquare,
-      description: 'Manage tasks and activities',
-    },
-  ] as PanelTile[],
+  tiles: [] as PanelTile[], // Empty - single page panel, no sub-navigation needed
 };

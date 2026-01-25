@@ -563,7 +563,7 @@ function TaskDetailPanel({
         />
         
         {/* Panel */}
-        <div className="absolute right-0 top-0 bottom-0 w-full max-w-xl bg-white dark:bg-slate-900 shadow-2xl flex flex-col animate-slide-in-right">
+        <div className="absolute right-0 top-0 bottom-0 w-full max-w-2xl bg-white dark:bg-slate-900 shadow-2xl flex flex-col animate-slide-in-right">
           {/* Header */}
           <div className="flex items-center gap-3 px-6 py-4 border-b border-slate-200 dark:border-slate-700">
             <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -614,7 +614,7 @@ function TaskDetailPanel({
               />
             </div>
             
-            {/* Due Date & Time */}
+            {/* Due Date & Time - Row 1 */}
             <div className="grid grid-cols-2 gap-4">
               <DatePicker 
                 label="Due Date" 
@@ -628,56 +628,56 @@ function TaskDetailPanel({
               />
             </div>
             
-            {/* Priority */}
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                Priority
-              </label>
-              <div className="flex items-center gap-2">
-                {PRIORITIES.map(p => (
-                  <button 
-                    key={p.value} 
-                    type="button" 
-                    onClick={() => setFormData(d => ({ 
-                      ...d, 
-                      priority: d.priority === p.value ? undefined : p.value 
-                    }))}
-                    className={clsx(
-                      'px-3 py-1.5 rounded-lg text-sm font-medium transition-all', 
-                      formData.priority === p.value 
-                        ? p.color + ' ring-2 ring-offset-1 ring-blue-500' 
-                        : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-600'
-                    )}
-                  >
-                    {p.label}
-                  </button>
-                ))}
+            {/* Priority & Assigned To - Row 2 */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                  Priority
+                </label>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {PRIORITIES.map(p => (
+                    <button 
+                      key={p.value} 
+                      type="button" 
+                      onClick={() => setFormData(d => ({ 
+                        ...d, 
+                        priority: d.priority === p.value ? undefined : p.value 
+                      }))}
+                      className={clsx(
+                        'px-3 py-1.5 rounded-lg text-sm font-medium transition-all', 
+                        formData.priority === p.value 
+                          ? p.color + ' ring-2 ring-offset-1 ring-blue-500' 
+                          : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-600'
+                      )}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
               </div>
+              <SelectFilter
+                label="Assigned To"
+                value={formData.assignedUserId}
+                onChange={(value) => setFormData(d => ({ ...d, assignedUserId: value }))}
+                options={userOptions}
+                placeholder="Select user..."
+                showAllOption={false}
+                size="md"
+                className="w-full"
+              />
             </div>
             
-            {/* Assigned To */}
-            <SelectFilter
-              label="Assigned To"
-              value={formData.assignedUserId}
-              onChange={(value) => setFormData(d => ({ ...d, assignedUserId: value }))}
-              options={userOptions}
-              placeholder="Select user..."
-              showAllOption={false}
-              size="md"
-              className="w-full"
-            />
-            
-            {/* Link to Contact/Company */}
-            <ContactCompanySearch 
-              value={formData.linkedContact || null} 
-              onChange={v => setFormData(d => ({ ...d, linkedContact: v }))} 
-            />
-            
-            {/* Link to Item */}
-            <ItemSearch 
-              value={formData.linkedItem || null} 
-              onChange={v => setFormData(d => ({ ...d, linkedItem: v }))} 
-            />
+            {/* Link to Contact/Company & Link to Item - Row 3 */}
+            <div className="grid grid-cols-2 gap-4">
+              <ContactCompanySearch 
+                value={formData.linkedContact || null} 
+                onChange={v => setFormData(d => ({ ...d, linkedContact: v }))} 
+              />
+              <ItemSearch 
+                value={formData.linkedItem || null} 
+                onChange={v => setFormData(d => ({ ...d, linkedItem: v }))} 
+              />
+            </div>
             
             {/* Notes */}
             <Textarea
@@ -1116,7 +1116,7 @@ export function TasksPage() {
     ).length;
   }, [tasks]);
 
-  // Table columns definition
+  // Table columns definition - A2 Design styling
   const taskColumns: DataTableColumn<Task>[] = [
     { 
       key: 'title', 
@@ -1125,10 +1125,10 @@ export function TasksPage() {
       render: (task) => {
         const tt = taskTypes.find(t => t.value === task.type);
         return (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             {tt && (
-              <div className="w-6 h-6 rounded flex items-center justify-center bg-slate-100 dark:bg-slate-700 flex-shrink-0">
-                <TaskTypeIcon icon={tt.icon} className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white shadow-sm flex-shrink-0">
+                <TaskTypeIcon icon={tt.icon} className="w-4 h-4" />
               </div>
             )}
             <span className="font-medium text-slate-900 dark:text-white">{task.title}</span>
@@ -1143,7 +1143,7 @@ export function TasksPage() {
       width: 'w-28', 
       render: (task) => {
         const styles: Record<string, string> = { 
-          todo: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300', 
+          todo: 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300', 
           in_progress: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400', 
           review: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400', 
           completed: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400', 
@@ -1157,7 +1157,7 @@ export function TasksPage() {
           cancelled: 'Cancelled' 
         };
         return (
-          <span className={clsx('px-2 py-0.5 text-xs font-medium rounded', styles[task.status])}>
+          <span className={clsx('inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-full', styles[task.status])}>
             {labels[task.status] || task.status}
           </span>
         );
@@ -1171,8 +1171,12 @@ export function TasksPage() {
       render: (task) => {
         if (!task.dueDate) return <span className="text-slate-400">—</span>;
         const isOverdue = parseLocalDate(task.dueDate) < new Date() && task.status !== 'completed';
-        return (
-          <span className={clsx(isOverdue && 'text-red-500 font-medium')}>
+        return isOverdue ? (
+          <span className="text-sm text-red-600 font-semibold bg-red-50 dark:bg-red-900/20 px-2 py-0.5 rounded">
+            {formatDate(task.dueDate)}
+          </span>
+        ) : (
+          <span className="text-sm text-slate-600 dark:text-slate-400">
             {formatDate(task.dueDate)}
           </span>
         );
@@ -1183,7 +1187,11 @@ export function TasksPage() {
       header: 'Assigned To', 
       sortable: true, 
       width: 'w-36', 
-      render: (task) => task.assignedUserName || <span className="text-slate-400">—</span> 
+      render: (task) => task.assignedUserName ? (
+        <span className="text-sm text-slate-700 dark:text-slate-300">{task.assignedUserName}</span>
+      ) : (
+        <span className="text-slate-400">—</span>
+      )
     },
     { 
       key: 'linkedContact', 
@@ -1194,8 +1202,10 @@ export function TasksPage() {
         if (!entity) return <span className="text-slate-400">—</span>;
         const Icon = ENTITY_ICONS[entity.type];
         return (
-          <div className="flex items-center gap-1.5">
-            <Icon className="w-3.5 h-3.5 text-slate-400" />
+          <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+            <div className="w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center flex-shrink-0">
+              <Icon className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
+            </div>
             <span className="truncate">{entity.name}</span>
           </div>
         );
@@ -1257,19 +1267,18 @@ export function TasksPage() {
     } 
   };
 
-  // Button styles
-  const btnBase = "h-7 px-2 text-xs font-medium rounded transition-colors";
-  const btnActive = "bg-blue-600 text-white";
-  const btnInactive = "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700";
-  
+  // Button styles - A2 Design: Bordered with Blue Accents
   const timeBtn = (active: boolean, danger?: boolean) => clsx(
-    "h-7 px-2 text-xs font-medium rounded transition-colors whitespace-nowrap",
-    active 
-      ? (danger 
-          ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" 
-          : "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
-        ) 
-      : "text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700"
+    "px-2.5 py-1.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap",
+    active
+      ? (danger
+          ? "bg-red-100 text-red-700 ring-1 ring-red-200 dark:bg-red-900/30 dark:text-red-400 dark:ring-red-800"
+          : "bg-blue-100 text-blue-700 ring-1 ring-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:ring-blue-800"
+        )
+      : (danger
+          ? "text-red-500 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
+          : "text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-700"
+        )
   );
 
   return (
@@ -1283,59 +1292,72 @@ export function TasksPage() {
         </Button>
       }
     >
-      {/* Filters Bar */}
-      <div className="relative z-20 flex items-center gap-2 flex-wrap pb-3 mb-4 border-b border-slate-200 dark:border-slate-700">
-        {/* View Mode Toggle */}
-        <div className="flex bg-slate-100 dark:bg-slate-700 rounded-md h-7 p-0.5">
-          <button 
-            onClick={() => setViewMode('list')} 
-            className={clsx(btnBase, "flex items-center gap-1", viewMode === 'list' ? btnActive : btnInactive)}
+      {/* Filters Bar - A2 Design: Bordered with Blue Accents */}
+      <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 flex items-center gap-3 shadow-sm mb-4">
+        {/* View Mode Toggle - Blue accent, matches dropdown height */}
+        <div className="flex border border-slate-200 dark:border-slate-600 rounded-lg overflow-hidden h-[34px]">
+          <button
+            onClick={() => setViewMode('list')}
+            className={clsx(
+              "flex items-center gap-1.5 px-3 text-sm font-medium transition-all border-r border-slate-200 dark:border-slate-600",
+              viewMode === 'list'
+                ? "bg-blue-600 text-white"
+                : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700"
+            )}
           >
-            <List className="w-3 h-3" />
+            <List className="w-3.5 h-3.5" />
             List
           </button>
-          <button 
-            onClick={() => setViewMode('calendar')} 
-            className={clsx(btnBase, "flex items-center gap-1", viewMode === 'calendar' ? btnActive : btnInactive)}
+          <button
+            onClick={() => setViewMode('calendar')}
+            className={clsx(
+              "flex items-center gap-1.5 px-3 text-sm font-medium transition-all",
+              viewMode === 'calendar'
+                ? "bg-blue-600 text-white"
+                : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700"
+            )}
           >
-            <CalendarIcon className="w-3 h-3" />
+            <CalendarIcon className="w-3.5 h-3.5" />
             Calendar
           </button>
         </div>
-        
-        {/* Search */}
-        <SearchInput 
-          value={search} 
-          onChange={setSearch} 
-          placeholder="Search tasks..." 
-          className="w-40" 
+
+        {/* Search - matching height */}
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="Search tasks..."
+          className="w-48 [&_input]:h-[34px] [&_input]:text-sm"
         />
-        
+
         {/* Type Filter */}
         {taskTypeOptions.length > 0 && (
-          <SelectFilter 
-            label="Type" 
-            value={selectedType} 
-            onChange={setSelectedType} 
-            options={taskTypeOptions} 
-            showAllOption={true} 
-            size="sm" 
+          <SelectFilter
+            label="Type"
+            value={selectedType}
+            onChange={setSelectedType}
+            options={taskTypeOptions}
+            showAllOption={true}
+            size="sm"
           />
         )}
-        
+
         {/* User Filter */}
         {userFilterOptions.length > 0 && (
-          <SelectFilter 
-            label="Assigned To" 
-            value={selectedUser} 
-            onChange={setSelectedUser} 
-            options={userFilterOptions} 
-            showAllOption={true} 
-            size="sm" 
-            icon={<User className="w-3 h-3" />} 
+          <SelectFilter
+            label="Assigned To"
+            value={selectedUser}
+            onChange={setSelectedUser}
+            options={userFilterOptions}
+            showAllOption={true}
+            size="sm"
+            icon={<User className="w-3.5 h-3.5" />}
           />
         )}
-        
+
+        {/* Vertical Divider */}
+        <div className="w-px h-6 bg-slate-200 dark:bg-slate-600" />
+
         {/* Time Filter Buttons */}
         <div className="flex items-center gap-0.5">
           <button onClick={() => setTimeFilter('all')} className={timeBtn(timeFilter === 'all')}>
@@ -1357,9 +1379,9 @@ export function TasksPage() {
             Next week
           </button>
         </div>
-        
+
         {/* Task Count */}
-        <span className="ml-auto text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
+        <span className="ml-auto text-sm text-slate-400 dark:text-slate-500 whitespace-nowrap">
           {filteredTasks.length} tasks
         </span>
       </div>

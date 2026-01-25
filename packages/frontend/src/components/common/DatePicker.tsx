@@ -35,29 +35,81 @@ function formatDisplayDate(dateStr: string): string {
   return `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`;
 }
 
-// Validate and parse user input (MM/DD/YYYY or YYYY-MM-DD)
+// Validate and parse user input - supports multiple formats:
+// - MMDDYY or MMDDYYYY (no separators): 010125, 01012025
+// - MM/DD/YY or MM/DD/YYYY: 1/1/25, 01/01/2025
+// - YYYY-MM-DD (ISO): 2025-01-01
 function validateDateInput(input: string): string | null {
   const trimmed = input.trim();
   if (!trimmed) return '';
   
-  // Try MM/DD/YYYY format
-  const mdyMatch = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (mdyMatch) {
-    const [, month, day, year] = mdyMatch;
+  // Helper to expand 2-digit year to 4-digit
+  const expandYear = (yy: number): number => {
+    // Assume 00-50 = 2000-2050, 51-99 = 1951-1999
+    if (yy <= 50) return 2000 + yy;
+    if (yy < 100) return 1900 + yy;
+    return yy;
+  };
+
+  // Helper to validate date components
+  const isValidDate = (m: number, d: number, y: number): boolean => {
+    if (m < 1 || m > 12 || d < 1 || d > 31 || y < 1900 || y > 2100) return false;
+    // Check days in month
+    const daysInMonth = new Date(y, m, 0).getDate();
+    return d <= daysInMonth;
+  };
+
+  // Helper to format output
+  const formatOutput = (m: number, d: number, y: number): string => {
+    return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  };
+
+  // Try MMDDYYYY format (8 digits, no separators): 01012025
+  const mmddyyyyMatch = trimmed.match(/^(\d{2})(\d{2})(\d{4})$/);
+  if (mmddyyyyMatch) {
+    const [, month, day, year] = mmddyyyyMatch;
     const m = parseInt(month!, 10), d = parseInt(day!, 10), y = parseInt(year!, 10);
-    if (m >= 1 && m <= 12 && d >= 1 && d <= 31 && y >= 1900 && y <= 2100) {
-      return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-    }
+    if (isValidDate(m, d, y)) return formatOutput(m, d, y);
+  }
+
+  // Try MMDDYY format (6 digits, no separators): 010125
+  const mmddyyMatch = trimmed.match(/^(\d{2})(\d{2})(\d{2})$/);
+  if (mmddyyMatch) {
+    const [, month, day, year] = mmddyyMatch;
+    const m = parseInt(month!, 10), d = parseInt(day!, 10), y = expandYear(parseInt(year!, 10));
+    if (isValidDate(m, d, y)) return formatOutput(m, d, y);
+  }
+
+  // Try MDYY format (4 digits, single digit month/day): 1125 → 01/01/25
+  const mdyyMatch = trimmed.match(/^(\d)(\d)(\d{2})$/);
+  if (mdyyMatch) {
+    const [, month, day, year] = mdyyMatch;
+    const m = parseInt(month!, 10), d = parseInt(day!, 10), y = expandYear(parseInt(year!, 10));
+    if (isValidDate(m, d, y)) return formatOutput(m, d, y);
+  }
+
+  // Try MM/DD/YYYY format with separators: 1/1/2025, 01/01/2025
+  const mdyFullMatch = trimmed.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})$/);
+  if (mdyFullMatch) {
+    const [, month, day, year] = mdyFullMatch;
+    const m = parseInt(month!, 10), d = parseInt(day!, 10), y = parseInt(year!, 10);
+    if (isValidDate(m, d, y)) return formatOutput(m, d, y);
+  }
+
+  // Try MM/DD/YY format with separators: 1/1/25, 01/01/25
+  const mdyShortMatch = trimmed.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2})$/);
+  if (mdyShortMatch) {
+    const [, month, day, year] = mdyShortMatch;
+    const m = parseInt(month!, 10), d = parseInt(day!, 10), y = expandYear(parseInt(year!, 10));
+    if (isValidDate(m, d, y)) return formatOutput(m, d, y);
   }
   
-  // Try YYYY-MM-DD format
+  // Try YYYY-MM-DD format (ISO)
   const isoMatch = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
   if (isoMatch) {
     const [, year, month, day] = isoMatch;
     const m = parseInt(month!, 10), d = parseInt(day!, 10), y = parseInt(year!, 10);
-    if (m >= 1 && m <= 12 && d >= 1 && d <= 31 && y >= 1900 && y <= 2100) {
-      return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-    }
+    if (isValidDate(m, d, y)) return formatOutput(m, d, y);
   }
   
   return null; // Invalid
@@ -70,6 +122,10 @@ export function DatePicker({ label, value, onChange, placeholder = 'Select date'
   const [inputError, setInputError] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const [dropdownPosition, setDropdownPosition] = useState<'bottom' | 'top'>('bottom');
+  
+  // Throttle for keyboard repeat
+  const lastKeyTimeRef = useRef(0);
+  const keyRepeatDelay = 150; // ms between repeats when holding key
 
   // Sync text value with prop value
   useEffect(() => {
@@ -129,6 +185,30 @@ export function DatePicker({ label, value, onChange, placeholder = 'Select date'
     });
   };
 
+  // Add/subtract days from a date string
+  const addDays = (dateStr: string, days: number): string => {
+    let date = parseLocalDate(dateStr);
+    if (!date) {
+      date = new Date();
+    }
+    date.setDate(date.getDate() + days);
+    const y = date.getFullYear();
+    const m = date.getMonth() + 1;
+    const d = date.getDate();
+    return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  };
+
+  // Adjust date by +/- 1 day (called on keyboard +/- or arrow keys)
+  const adjustDate = (direction: number) => {
+    const currentDate = value || new Date().toISOString().split('T')[0];
+    const newValue = addDays(currentDate!, direction);
+    onChange(newValue);
+    
+    // Update view date to show the new month
+    const newDate = parseLocalDate(newValue);
+    if (newDate) setViewDate(newDate);
+  };
+
   const selectDate = (dateStr: string) => {
     onChange(dateStr);
     setIsOpen(false);
@@ -151,12 +231,6 @@ export function DatePicker({ label, value, onChange, placeholder = 'Select date'
     } else {
       setInputError(false);
       onChange(result);
-    }
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleTextBlur();
     }
   };
 
@@ -196,9 +270,41 @@ export function DatePicker({ label, value, onChange, placeholder = 'Select date'
           <input
             type="text"
             value={textValue}
-            onChange={e => { setTextValue(e.target.value); setInputError(false); }}
+            onChange={e => {
+              // Only allow valid date characters: numbers, /, -, .
+              const filtered = e.target.value.replace(/[^0-9\/\-\.]/g, '');
+              setTextValue(filtered);
+              setInputError(false);
+            }}
             onBlur={handleTextBlur}
-            onKeyDown={handleKeyDown}
+            onKeyDown={(e) => {
+              // Handle Enter key
+              if (e.key === 'Enter') {
+                handleTextBlur();
+                return;
+              }
+              // Handle +/- and arrow keys for increment/decrement
+              if (e.key === '+' || e.key === '=' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                // Throttle key repeats
+                const now = Date.now();
+                if (now - lastKeyTimeRef.current >= keyRepeatDelay) {
+                  lastKeyTimeRef.current = now;
+                  adjustDate(1);
+                }
+                return;
+              }
+              if (e.key === '-' || e.key === '_' || e.key === 'ArrowDown') {
+                e.preventDefault();
+                // Throttle key repeats
+                const now = Date.now();
+                if (now - lastKeyTimeRef.current >= keyRepeatDelay) {
+                  lastKeyTimeRef.current = now;
+                  adjustDate(-1);
+                }
+                return;
+              }
+            }}
             placeholder={placeholder}
             className={clsx(
               'w-full h-9 pl-3 pr-16 text-sm text-left rounded-lg border transition-colors',
@@ -221,7 +327,7 @@ export function DatePicker({ label, value, onChange, placeholder = 'Select date'
             </button>
           </div>
         </div>
-        {hasError && <p className="text-xs text-red-500 mt-1">{error || 'Invalid date format (use MM/DD/YYYY)'}</p>}
+        {hasError && <p className="text-xs text-red-500 mt-1">{error || 'Invalid date (try: 010125, 1/1/25, or 01/01/2025)'}</p>}
 
         {/* Dropdown */}
         {isOpen && (

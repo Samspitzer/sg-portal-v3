@@ -1,3 +1,13 @@
+// =============================================================================
+// LandingPage - Main landing/home page with module navigation
+// Location: packages/frontend/src/components/panels/LandingPage.tsx
+//
+// AUDIT COMPLIANCE:
+// - Uses hooks: useDocumentTitle, useSafeNavigate (via Header)
+// - Uses contexts: useAuthStore, useCompanyStore
+// - Uses layout: Header
+// =============================================================================
+
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { clsx } from 'clsx';
@@ -125,7 +135,7 @@ export function LandingPage() {
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 p-6 mb-6"
+            className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 p-6 mb-6 flex-shrink-0"
           >
             <div className="text-center">
               <p className="text-slate-500 dark:text-slate-400 text-sm mb-1">
@@ -151,53 +161,55 @@ export function LandingPage() {
           </motion.div>
 
           {/* Modules Section */}
-          <div className="flex-1 flex flex-col min-h-0">
-            <h2 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">
+          <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+            <h2 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3 flex-shrink-0">
               Modules
             </h2>
             
-            <div className="grid grid-cols-3 gap-4">
-              {modules.map((module, index) => (
-                <motion.button
-                  key={module.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.05 * index }}
-                  whileHover={{ y: -2 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => navigate(module.path)}
-                  className="group bg-white dark:bg-slate-800 rounded-xl p-5 text-left transition-all duration-200 border border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 hover:shadow-md flex flex-col h-full"
-                >
-                  <div className="flex items-start gap-4">
-                    {/* Icon */}
-                    <div className={clsx(
-                      'w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0',
-                      module.iconBg,
-                      module.iconColor
-                    )}>
-                      {module.icon}
-                    </div>
+            <div className="flex-1 overflow-y-auto">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                {modules.map((module, index) => (
+                  <motion.button
+                    key={module.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.05 * index }}
+                    whileHover={{ y: -2 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => navigate(module.path)}
+                    className="group bg-white dark:bg-slate-800 rounded-xl p-5 text-left transition-all duration-200 border border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 hover:shadow-md flex flex-col h-full"
+                  >
+                    <div className="flex items-start gap-4">
+                      {/* Icon */}
+                      <div className={clsx(
+                        'w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0',
+                        module.iconBg,
+                        module.iconColor
+                      )}>
+                        {module.icon}
+                      </div>
 
-                    {/* Content */}
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-slate-900 dark:text-white text-sm mb-1">
-                        {module.title}
-                      </h3>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                        {module.description}
-                      </p>
+                      {/* Content */}
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-semibold text-slate-900 dark:text-white text-sm mb-1">
+                          {module.title}
+                        </h3>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                          {module.description}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                  
-                  {/* Link at bottom */}
-                  <div className="mt-auto pt-4">
-                    <span className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 dark:text-brand-400">
-                      Open module
-                      <ArrowRight className="w-3 h-3 group-hover:translate-x-1 transition-transform" />
-                    </span>
-                  </div>
-                </motion.button>
-              ))}
+                    
+                    {/* Link at bottom */}
+                    <div className="mt-auto pt-4">
+                      <span className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 dark:text-brand-400">
+                        Open module
+                        <ArrowRight className="w-3 h-3 group-hover:translate-x-1 transition-transform" />
+                      </span>
+                    </div>
+                  </motion.button>
+                ))}
+              </div>
             </div>
           </div>
         </div>

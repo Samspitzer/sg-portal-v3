@@ -29,7 +29,8 @@ export function SideRibbon({ panelId, className }: SideRibbonProps) {
   const panel = getPanel(panelId);
   const tiles = panel?.tiles || [];
 
-  if (!panel) return null;
+  // Don't render SideRibbon for panels with no sub-pages
+  if (!panel || tiles.length === 0) return null;
 
   // Create the main panel tile
   const mainTile: SideRibbonTile = {
