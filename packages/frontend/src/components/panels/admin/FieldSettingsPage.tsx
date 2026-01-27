@@ -17,12 +17,9 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { Page } from '@/components/layout';
-import { Button, Input, Modal, Select, Toggle } from '@/components/common';
-import { CollapsibleSection } from '@/components/common/CollapsibleSection';
-import { TaskTypeIcon } from '@/components/common/TaskTypeIcon';
-import { useFieldsStore, useUsersStore, type Department, type Position } from '@/contexts';
+import { Button, Input, Modal, Select, Toggle, TaskTypeIcon, CollapsibleSection } from '@/components/common';
+import { useFieldsStore, useUsersStore, useToast, type Department, type Position } from '@/contexts';
 import { useTaskTypesStore, TASK_TYPE_ICONS, type TaskTypeConfig, type TaskTypeIconName } from '@/contexts/taskTypesStore';
-import { useToast } from '@/contexts';
 import { useDocumentTitle } from '@/hooks';
 
 // Panel Section Header with gradient icon - inside card style

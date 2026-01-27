@@ -13,11 +13,13 @@ import {
   MapPin,
   AlertTriangle,
 } from 'lucide-react';
-import { Page } from '@/components/layout';
-import { CardContent, Button, Input, Modal, SearchInput, Select, Toggle } from '@/components/common';
-import { DataTable, type DataTableColumn } from '@/components/common/DataTable';
-import { SelectFilter } from '@/components/common/SelectFilter';
-import { UserDeactivationModal } from '@/components/common/UserDeactivationModal';
+import { Page } from '@/components/layout'; 
+import { 
+  CardContent, Button, Input, Modal, SearchInput, Select, Toggle,
+  DataTable, type DataTableColumn,
+  SelectFilter,
+  UserDeactivationModal 
+} from '@/components/common';
 import { useToast, useFieldsStore, useUsersStore, useCompanyStore, type User } from '@/contexts';
 import { useFormChanges, useDocumentTitle, getUserUrl, useSafeNavigate } from '@/hooks';
 import { validateEmail, validatePhone } from '@/utils/validation';

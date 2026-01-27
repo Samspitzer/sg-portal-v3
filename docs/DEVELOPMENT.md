@@ -156,7 +156,7 @@ const getChainOfCommand = (userId: string): string[] => {
 
 **Props:**
 - `isOpen`: boolean
-- `duplicateType`: 'exact' | 'simlar' - Exact blocks creation, similar offers options
+- `duplicateType`: 'exact' | 'different-address' | 'different-website' - Exact blocks creation, others offer options
 - `existingCompany`: Company | null - The matching company found
 - `newCompanyInfo`: { name, street, city, state, zip } | null - Data being entered
 - `onClose`: () => void
@@ -166,10 +166,11 @@ const getChainOfCommand = (userId: string): string[] => {
 
 **Duplicate Detection Logic:**
 - **Exact duplicate**: Same name AND same address → Block creation, show "View Existing" only
-- **Similar (same name, different location)**: Offer three options:
+- **Different address**: Same name, different location → Offer three options:
   1. View existing company
   2. Add as new location to existing company
   3. Create as separate company
+- **Different website**: Same name, different website → Similar options
 
 ---
 
@@ -180,7 +181,7 @@ const getChainOfCommand = (userId: string): string[] => {
 
 **Props:**
 - `isOpen`: boolean
-- `duplicateType`: 'exact' | 'simlar'
+- `duplicateType`: 'exact' | 'name-only' - Exact blocks creation, name-only offers options
 - `existingContact`: Contact | null
 - `newContactInfo`: { firstName, lastName, email, phone } | null
 - `onClose`: () => void
@@ -287,6 +288,95 @@ const { reassignItems } = useReassignUserItems();
 // Reassign all items in categories from fromUserId to toUserId
 reassignItems(fromUserId, toUserId, categories);
 ```
+
+---
+
+## Utilities
+
+### dateUtils
+**File:** `utils/dateUtils.ts`
+
+**Purpose:** Centralized date parsing and formatting functions.
+
+**Functions:**
+```tsx
+// Parse ISO date string (YYYY-MM-DD) to Date object
+parseLocalDate(dateStr: string): Date
+
+// Convert Date to ISO string (YYYY-MM-DD)
+toISODateString(date: Date): string
+
+// Get today as ISO string
+getTodayISO(): string
+
+// Format date for display
+// format: 'short' (1/15/2026), 'long' (Monday, January 15), 'display' (01/15/2026)
+formatDate(dateStr: string, format?: 'short' | 'long' | 'display'): string
+
+// Add/subtract days
+addDays(dateStr: string, days: number): string
+
+// Date comparisons
+isToday(dateStr: string): boolean
+isPast(dateStr: string): boolean
+isTomorrow(dateStr: string): boolean
+```
+
+**Usage:**
+```tsx
+import { parseLocalDate, formatDate, getTodayISO, addDays } from '@/utils/dateUtils';
+
+// Parse and format
+const date = parseLocalDate('2026-01-15');
+const display = formatDate('2026-01-15', 'long'); // "Wednesday, January 15"
+
+// Date math
+const tomorrow = addDays(getTodayISO(), 1);
+```
+
+---
+
+## Config
+
+### icons
+**File:** `config/icons.ts`
+
+**Purpose:** Centralized icon mappings for modules and entities.
+
+**Exports:**
+```tsx
+// Icon mapping for modules
+MODULE_ICONS: Record<string, LucideIcon>
+
+// Get icon for a module (case-insensitive)
+getModuleIcon(module: string): LucideIcon
+
+// Entity icons for linked entities (tasks, etc.)
+ENTITY_ICONS: Record<EntityIconType, LucideIcon>
+```
+
+**Usage:**
+```tsx
+import { ENTITY_ICONS, getModuleIcon } from '@/config';
+
+// Use entity icons
+const Icon = ENTITY_ICONS['company']; // Building2
+<Icon className="w-4 h-4" />
+
+// Get module icon dynamically
+const ModuleIcon = getModuleIcon('projects'); // FolderKanban
+```
+
+**Available Icons:**
+- `companies` / `company` → Building2
+- `projects` / `project` → FolderKanban
+- `tasks` / `task` → CheckSquare
+- `estimates` / `estimate` → FileText
+- `invoices` / `invoice` → Receipt
+- `contacts` / `contact` → User
+- `users` / `user` → Users
+- `deals` / `deal` → Briefcase
+- `accounting` → DollarSign
 
 ---
 
@@ -656,8 +746,11 @@ const getChainOfCommand = (userId: string): string[] => {
 ```tsx
 interface Position {
   id: string;
-  name: string;                    // Position title, e.g., "Sales Manager"
-  reportsToPositionId?: string;    // Parent position in hierarchy
+  name: string;                       // Position title, e.g., "Sales Manager"
+  departmentId: string;               // Parent department ID
+  level: 1 | 2 | 3 | 4 | 5;          // Hierarchy level (1 = highest/dept head)
+  reportsToPositionId: string | null; // Parent position in hierarchy
+  order: number;                      // Display order within department
 }
 ```
 
@@ -666,7 +759,11 @@ interface Position {
 interface Department {
   id: string;
   name: string;
+  parentDepartmentId: string | null;  // null = top-level department
   positions: Position[];
+  order: number;                      // Display order
+  createdAt: string;
+  updatedAt: string;
 }
 ```
 
@@ -681,4 +778,4 @@ interface DependencyItem {
 
 ---
 
-*Last Updated: January 15, 2026*
+*Last Updated: January 27, 2026*

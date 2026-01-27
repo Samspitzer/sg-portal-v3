@@ -21,7 +21,7 @@ import {
   Printer,
 } from 'lucide-react';
 import { Page } from '@/components/layout';
-import { Button, ConfirmModal, Modal, Input, AddressInput, UnsavedChangesModal, Select, Textarea, Toggle } from '@/components/common';
+import { Button, ConfirmModal, Modal, Input, AddressInput, UnsavedChangesModal, Select, Textarea, Toggle, SectionHeader } from '@/components/common';
 import { MultiSelectUsers } from '@/components/common/MultiSelectUsers';
 import { CollapsibleSection } from '@/components/common/CollapsibleSection';
 import { EntityTasksSection } from '@/components/common/EntityTasksSection';
@@ -66,27 +66,6 @@ const initialContactFormData: ContactFormData = {
   notes: '',
   additionalContacts: [],
 };
-
-// Non-collapsible Section Header (matches CollapsibleSection style)
-function SectionHeader({
-  title,
-  icon,
-  action,
-}: {
-  title: string;
-  icon?: React.ReactNode;
-  action?: React.ReactNode;
-}) {
-  return (
-    <div className="flex items-center justify-between px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
-      <div className="flex items-center gap-2">
-        {icon}
-        <span className="text-sm font-semibold text-slate-900 dark:text-white">{title}</span>
-      </div>
-      {action}
-    </div>
-  );
-}
 
 // Compact Inline Editable Field Component
 function InlineField({

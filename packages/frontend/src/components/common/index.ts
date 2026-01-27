@@ -23,3 +23,5 @@ export { DatePicker } from './DatePicker';
 export { TimePicker } from './TimePicker';
 export { TaskTypeIcon } from './TaskTypeIcon';
 export { EntityTasksSection } from './EntityTasksSection';
+export { UserDeactivationModal } from './UserDeactivationModal';
+export { SectionHeader } from './SectionHeader';

@@ -29,10 +29,10 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { Page } from '@/components/layout';
-import { Button, ConfirmModal, Input, Toggle, SelectFilter } from '@/components/common';
-import { PositionSelector } from '@/components/common/PositionSelector';
-import { CollapsibleSection } from '@/components/common/CollapsibleSection';
-import { UserDeactivationModal } from '@/components/common/UserDeactivationModal';
+import { 
+  Button, ConfirmModal, Input, Toggle, SelectFilter,
+  PositionSelector, CollapsibleSection, UserDeactivationModal, SectionHeader
+} from '@/components/common';
 import { useUsersStore, useFieldsStore, useCompanyStore, useClientsStore, useToast, useNavigationGuardStore } from '@/contexts';
 import { getUserDependencies, type DependencyCategory } from '@/contexts/userDependencyRegistry';
 import { useDocumentTitle, useUserBySlug, useSafeNavigate } from '@/hooks';
@@ -49,18 +49,6 @@ const categoryIcons: Record<string, React.ElementType> = {
 
 function getCategoryIcon(iconName: string): React.ElementType {
   return categoryIcons[iconName] || FileText;
-}
-
-function SectionHeader({ title, icon, action }: { title: string; icon?: React.ReactNode; action?: React.ReactNode }) {
-  return (
-    <div className="flex items-center justify-between px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
-      <div className="flex items-center gap-2">
-        {icon}
-        <span className="text-sm font-semibold text-slate-900 dark:text-white">{title}</span>
-      </div>
-      {action}
-    </div>
-  );
 }
 
 function InlineField({

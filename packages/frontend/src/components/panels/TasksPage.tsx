@@ -18,21 +18,22 @@ import { useNavigate } from 'react-router-dom';
 import { clsx } from 'clsx';
 import { 
   Plus, Calendar as CalendarIcon, List, ChevronLeft, ChevronRight, 
-  Clock, X, User, Building2, FolderOpen, FileText, Receipt, Check, Trash2, Search
+  Clock, X, User, Building2, FileText, Check, Trash2, Search
 } from 'lucide-react';
 import { Page } from '@/components/layout';
 import { 
   Card, CardContent, Button, SelectFilter, Textarea, SearchInput,
   DataTable, type DataTableColumn, DatePicker, TimePicker, UnsavedChangesModal,
-  Input, Toggle
+  Input, Toggle, TaskTypeIcon
 } from '@/components/common';
-import { TaskTypeIcon } from '@/components/common/TaskTypeIcon';
 import { useUsersStore, useClientsStore, useToast } from '@/contexts';
 import { 
   useTaskStore, type Task, type TaskType, type TaskPriority, 
   type TaskInput, type LinkedEntity, type LinkedEntityType 
 } from '@/contexts/taskStore';
 import { useTaskTypesStore, type TaskTypeConfig } from '@/contexts/taskTypesStore';
+import { parseLocalDate, formatDate, } from '@/utils/dateUtils';
+import { ENTITY_ICONS } from '@/config';
 
 // =============================================================================
 // Constants
@@ -46,43 +47,6 @@ const PRIORITIES: { value: TaskPriority; label: string; color: string }[] = [
 ];
 
 type TimeFilter = 'all' | 'overdue' | 'today' | 'tomorrow' | 'this-week' | 'next-week';
-
-const ENTITY_ICONS: Record<LinkedEntityType, typeof User> = {
-  contact: User, 
-  company: Building2, 
-  project: FolderOpen, 
-  estimate: FileText, 
-  invoice: Receipt, 
-  deal: FileText,
-};
-
-// =============================================================================
-// Utility Functions
-// =============================================================================
-
-function parseLocalDate(dateStr: string): Date {
-  const parts = dateStr.split('-').map(Number);
-  const year = parts[0] || 0;
-  const month = parts[1] || 1;
-  const day = parts[2] || 1;
-  return new Date(year, month - 1, day);
-}
-
-function formatDate(dateStr: string): string {
-  return parseLocalDate(dateStr).toLocaleDateString('en-US', { 
-    month: 'numeric', 
-    day: 'numeric', 
-    year: 'numeric' 
-  });
-}
-
-function formatDateLong(dateStr: string): string {
-  return parseLocalDate(dateStr).toLocaleDateString('en-US', { 
-    weekday: 'long', 
-    month: 'long', 
-    day: 'numeric' 
-  });
-}
 
 // =============================================================================
 // =============================================================================
@@ -850,7 +814,7 @@ export function TaskDetailPanel({
                   </h2>
                   {formData.dueDate && (
                     <p className="text-sm text-slate-500 dark:text-slate-400">
-                      {formatDateLong(formData.dueDate)}
+                      {formatDate(formData.dueDate, 'long')}
                     </p>
                 )}
               </div>
@@ -1111,7 +1075,7 @@ function TaskQuickPreview({
         <div className="flex-1 min-w-0">
           <h4 className="font-medium text-slate-900 dark:text-white truncate">{task.title}</h4>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            {task.dueDate && formatDateLong(task.dueDate)}
+            {task.dueDate && formatDate(task.dueDate, 'long')}
             {task.dueTime && ` at ${task.dueTime}`}
           </p>
         </div>

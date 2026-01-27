@@ -25,7 +25,7 @@ import {
   Info,
 } from 'lucide-react';
 import { Page } from '@/components/layout';
-import { Card, CardContent, Button, ConfirmModal, Modal, Input, UnsavedChangesModal, Select, Textarea, AddressInput } from '@/components/common';
+import { Card, CardContent, Button, ConfirmModal, Modal, Input, UnsavedChangesModal, Select, Textarea, AddressInput, SectionHeader } from '@/components/common';
 import { CollapsibleSection } from '@/components/common/CollapsibleSection';
 import { DuplicateCompanyModal } from '@/components/common/DuplicateCompanyModal';
 import { EntityTasksSection } from '@/components/common/EntityTasksSection';
@@ -34,27 +34,6 @@ import { useClientsStore, useUsersStore, useToast, useNavigationGuardStore, useF
 import { useTaskStore, type Task, type TaskInput } from '@/contexts/taskStore';
 import { useDropdownKeyboard, useDocumentTitle, useContactBySlug, getCompanyUrl } from '@/hooks';
 import { validateEmail, validatePhone, formatPhoneNumber } from '@/utils/validation';
-
-// Non-collapsible Section Header (matches CollapsibleSection style)
-function SectionHeader({
-  title,
-  icon,
-  action,
-}: {
-  title: string;
-  icon?: React.ReactNode;
-  action?: React.ReactNode;
-}) {
-  return (
-    <div className="flex items-center justify-between px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
-      <div className="flex items-center gap-2">
-        {icon}
-        <span className="text-sm font-semibold text-slate-900 dark:text-white">{title}</span>
-      </div>
-      {action}
-    </div>
-  );
-}
 
 // Company Change Warning Modal
 function CompanyChangeWarningModal({
