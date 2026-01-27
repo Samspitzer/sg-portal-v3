@@ -14,7 +14,6 @@ import {
   X,
   Pencil,
   Briefcase,
-  CalendarClock,
   Plus,
   AlertCircle,
   Search,
@@ -23,12 +22,16 @@ import {
   AlertTriangle,
   Printer,
   MapPin,
+  Info,
 } from 'lucide-react';
 import { Page } from '@/components/layout';
 import { Card, CardContent, Button, ConfirmModal, Modal, Input, UnsavedChangesModal, Select, Textarea, AddressInput } from '@/components/common';
 import { CollapsibleSection } from '@/components/common/CollapsibleSection';
 import { DuplicateCompanyModal } from '@/components/common/DuplicateCompanyModal';
+import { EntityTasksSection } from '@/components/common/EntityTasksSection';
+import { TaskDetailPanel } from '@/components/panels/TasksPage';
 import { useClientsStore, useUsersStore, useToast, useNavigationGuardStore, useFieldsStore, type Contact } from '@/contexts';
+import { useTaskStore, type Task, type TaskInput } from '@/contexts/taskStore';
 import { useDropdownKeyboard, useDocumentTitle, useContactBySlug, getCompanyUrl } from '@/hooks';
 import { validateEmail, validatePhone, formatPhoneNumber } from '@/utils/validation';
 
@@ -1514,6 +1517,8 @@ export function ContactDetailPage() {
   const navigate = useNavigate();
   const toast = useToast();
   const { companies, updateContact, deleteContact, addContactMethod, updateContactMethod, deleteContactMethod } = useClientsStore();
+  const { tasks, createTask, updateTask, deleteTask } = useTaskStore();
+  const { users } = useUsersStore();
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [editingFields, setEditingFields] = useState<Map<string, boolean>>(new Map());
@@ -1530,7 +1535,21 @@ export function ContactDetailPage() {
   const [newMethodLabel, setNewMethodLabel] = useState('');
   const [methodValidationError, setMethodValidationError] = useState<string | null>(null);
 
+  // Task panel state
+  const [isTaskPanelOpen, setIsTaskPanelOpen] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+
   useDocumentTitle(contact ? `${contact.firstName} ${contact.lastName}` : 'Contact');
+
+  // Count open tasks linked to this contact
+  const openTasksCount = useMemo(() => {
+    if (!contact) return 0;
+    return tasks.filter(task => {
+      const isLinked = task.linkedContact?.type === 'contact' && task.linkedContact?.id === contact.id;
+      const isOpen = task.status !== 'completed' && task.status !== 'cancelled';
+      return isLinked && isOpen;
+    }).length;
+  }, [tasks, contact]);
 
   // Build list of company addresses for office location selector
   const companyAddressOptions = useMemo(() => {
@@ -2148,31 +2167,85 @@ export function ContactDetailPage() {
           </CollapsibleSection>
         </div>
 
-        {/* Right Column - Tasks only */}
+        {/* Right Column - Quick Info & Tasks */}
         <div className="space-y-4">
-          {/* Upcoming Tasks - matching CollapsibleSection aesthetic */}
+          {/* Quick Info - Non-collapsible, always visible */}
           <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 bg-slate-50 dark:bg-slate-800/50">
-              <div className="flex items-center gap-2">
-                <CalendarClock className="w-4 h-4 text-slate-500" />
-                <span className="text-sm font-semibold text-slate-900 dark:text-white">
-                  Upcoming Tasks
-                </span>
-              </div>
-              <Button variant="secondary" size="sm">
-                <Plus className="w-3 h-3" />
-              </Button>
-            </div>
+            <SectionHeader
+              title="Quick Info"
+              icon={<Info className="w-4 h-4 text-slate-500" />}
+            />
             <div className="p-4 bg-white dark:bg-slate-900">
-              <div className="text-center py-8 text-slate-400">
-                <CalendarClock className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">No upcoming tasks</p>
-                <p className="text-xs mt-1">Tasks will appear here</p>
+              <div className="space-y-3">
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-500">Open Tasks</span>
+                  <span className="font-medium text-slate-900 dark:text-white">{openTasksCount}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-500">Projects</span>
+                  <span className="font-medium text-slate-900 dark:text-white">0</span>
+                </div>
               </div>
             </div>
           </div>
+
+          {/* Tasks Section */}
+          <EntityTasksSection
+            entityType="contact"
+            entityId={contact.id}
+            entityName={fullName}
+            onAddTask={() => {
+              setSelectedTask(null);
+              setIsTaskPanelOpen(true);
+            }}
+            onTaskClick={(task) => {
+              setSelectedTask(task);
+              setIsTaskPanelOpen(true);
+            }}
+          />
         </div>
       </div>
+
+      {/* Task Detail Panel */}
+      <TaskDetailPanel
+        task={selectedTask}
+        isOpen={isTaskPanelOpen}
+        onClose={() => {
+          setIsTaskPanelOpen(false);
+          setSelectedTask(null);
+        }}
+        onSave={async (data, markDone) => {
+          const user = users.find(u => u.id === data.assignedUserId);
+          const taskData = { ...data, assignedUserName: user?.name || '' };
+          
+          if (selectedTask) {
+            if (markDone && selectedTask.status !== 'completed') {
+              await updateTask(selectedTask.id, { ...taskData, status: 'completed' } as TaskInput);
+              toast.success('Task Completed', 'Task has been marked as done');
+            } else if (!markDone && selectedTask.status === 'completed') {
+              await updateTask(selectedTask.id, { ...taskData, status: 'todo' } as TaskInput);
+              toast.success('Task Updated', 'Task has been reopened');
+            } else {
+              await updateTask(selectedTask.id, taskData);
+              toast.success('Task Updated', 'Your changes have been saved');
+            }
+          } else {
+            await createTask(taskData);
+            toast.success('Task Created', 'New task has been added');
+          }
+          setIsTaskPanelOpen(false);
+          setSelectedTask(null);
+        }}
+        onDelete={async (taskId) => {
+          await deleteTask(taskId);
+          toast.success('Task Deleted', 'The task has been removed');
+        }}
+        defaultLinkedContact={{
+          type: 'contact',
+          id: contact.id,
+          name: fullName,
+        }}
+      />
 
       {/* Delete Confirmation Modal */}
       <ConfirmModal

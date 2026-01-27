@@ -2,12 +2,12 @@
 // LandingPage - Main landing/home page with module navigation
 // Location: packages/frontend/src/components/panels/LandingPage.tsx
 //
-// AUDIT COMPLIANCE:
-// - Uses hooks: useDocumentTitle, useSafeNavigate (via Header)
-// - Uses contexts: useAuthStore, useCompanyStore
-// - Uses layout: Header
+// REDESIGNED: Fluid grid layout, no scroll on desktop, responsive
+// - Desktop: 2 rows of cards that fill the screen
+// - Mobile: Allow scroll for smaller screens
 // =============================================================================
 
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { clsx } from 'clsx';
@@ -19,7 +19,6 @@ import {
   Users,
   Settings,
   Code,
-  ArrowRight,
   Handshake,
   CheckSquare,
 } from 'lucide-react';
@@ -33,7 +32,7 @@ interface ModuleCard {
   description: string;
   icon: React.ReactNode;
   path: string;
-  iconBg: string;
+  gradient: string;
   iconColor: string;
 }
 
@@ -41,74 +40,74 @@ const modules: ModuleCard[] = [
   {
     id: 'accounting',
     title: 'Accounting',
-    description: 'Invoice management, email inbox, reports and forecasting',
-    icon: <Receipt className="w-5 h-5" />,
+    description: 'Invoices, reports & forecasting',
+    icon: <Receipt className="w-8 h-8" />,
     path: '/accounting',
-    iconBg: 'bg-emerald-100 dark:bg-emerald-900/30',
-    iconColor: 'text-emerald-600 dark:text-emerald-400',
+    gradient: 'from-emerald-500 to-emerald-600',
+    iconColor: 'text-white',
   },
   {
     id: 'projects',
-    title: 'Project Management',
-    description: 'Track projects, tasks, and team collaboration',
-    icon: <FolderKanban className="w-5 h-5" />,
+    title: 'Projects',
+    description: 'Track projects & collaboration',
+    icon: <FolderKanban className="w-8 h-8" />,
     path: '/projects',
-    iconBg: 'bg-violet-100 dark:bg-violet-900/30',
-    iconColor: 'text-violet-600 dark:text-violet-400',
+    gradient: 'from-violet-500 to-violet-600',
+    iconColor: 'text-white',
   },
   {
     id: 'estimating',
     title: 'Estimating',
-    description: 'Create and manage project estimates',
-    icon: <FileText className="w-5 h-5" />,
+    description: 'Create & manage estimates',
+    icon: <FileText className="w-8 h-8" />,
     path: '/estimates',
-    iconBg: 'bg-amber-100 dark:bg-amber-900/30',
-    iconColor: 'text-amber-600 dark:text-amber-400',
+    gradient: 'from-amber-500 to-amber-600',
+    iconColor: 'text-white',
   },
   {
     id: 'customers',
-    title: 'Customer Database',
-    description: 'Manage companies, contacts, and customer information',
-    icon: <Users className="w-5 h-5" />,
+    title: 'Customers',
+    description: 'Companies & contacts',
+    icon: <Users className="w-8 h-8" />,
     path: '/clients',
-    iconBg: 'bg-orange-100 dark:bg-orange-900/30',
-    iconColor: 'text-orange-600 dark:text-orange-400',
+    gradient: 'from-orange-500 to-orange-600',
+    iconColor: 'text-white',
   },
   {
     id: 'sales',
     title: 'Sales',
-    description: 'CRM, pipeline management, and lead tracking',
-    icon: <Handshake className="w-5 h-5" />,
+    description: 'CRM & pipeline management',
+    icon: <Handshake className="w-8 h-8" />,
     path: '/sales',
-    iconBg: 'bg-teal-100 dark:bg-teal-900/30',
-    iconColor: 'text-teal-600 dark:text-teal-400',
+    gradient: 'from-teal-500 to-teal-600',
+    iconColor: 'text-white',
   },
   {
     id: 'tasks',
     title: 'Tasks',
-    description: 'Task management with calendar and list views',
-    icon: <CheckSquare className="w-5 h-5" />,
+    description: 'Calendar & task management',
+    icon: <CheckSquare className="w-8 h-8" />,
     path: '/tasks',
-    iconBg: 'bg-cyan-100 dark:bg-cyan-900/30',
-    iconColor: 'text-cyan-600 dark:text-cyan-400',
+    gradient: 'from-cyan-500 to-cyan-600',
+    iconColor: 'text-white',
   },
   {
     id: 'admin',
-    title: 'Admin Panel',
-    description: 'User management and system settings',
-    icon: <Settings className="w-5 h-5" />,
+    title: 'Admin',
+    description: 'Users & system settings',
+    icon: <Settings className="w-8 h-8" />,
     path: '/admin',
-    iconBg: 'bg-rose-100 dark:bg-rose-900/30',
-    iconColor: 'text-rose-600 dark:text-rose-400',
+    gradient: 'from-rose-500 to-rose-600',
+    iconColor: 'text-white',
   },
   {
     id: 'developer',
-    title: 'Developer Tools',
-    description: 'Panel testing, system status, and diagnostics',
-    icon: <Code className="w-5 h-5" />,
+    title: 'Developer',
+    description: 'Tools & diagnostics',
+    icon: <Code className="w-8 h-8" />,
     path: '/developer',
-    iconBg: 'bg-indigo-100 dark:bg-indigo-900/30',
-    iconColor: 'text-indigo-600 dark:text-indigo-400',
+    gradient: 'from-indigo-500 to-indigo-600',
+    iconColor: 'text-white',
   },
 ];
 
@@ -120,107 +119,135 @@ export function LandingPage() {
 
   const firstName = user?.firstName || user?.displayName?.split(' ')[0] || 'there';
 
+  // Keyboard shortcuts for modules (1-8)
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if typing in an input
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      
+      const key = parseInt(e.key);
+      if (key >= 1 && key <= modules.length) {
+        const module = modules[key - 1];
+        if (module) {
+          navigate(module.path);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [navigate]);
+
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-slate-100 dark:bg-slate-900">
+    <div className="h-screen flex flex-col bg-slate-50 dark:bg-slate-900">
       {/* Header */}
       <Header />
 
-      {/* Main Content */}
+      {/* Main Content - No scroll on desktop, scroll on mobile */}
       <main 
-        className="flex-1 flex flex-col overflow-hidden"
+        className="flex-1 flex flex-col min-h-0 overflow-hidden md:overflow-hidden overflow-y-auto"
         style={{ paddingTop: 'var(--header-height)' }}
       >
-        <div className="flex-1 flex flex-col max-w-5xl w-full mx-auto px-6 py-6">
-          {/* Welcome Card */}
+        <div className="flex-1 flex flex-col w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 md:py-6">
+          
+          {/* Welcome Banner - Bigger */}
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 p-6 mb-6 flex-shrink-0"
+            className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 px-8 py-6 mb-4 flex-shrink-0"
           >
-            <div className="text-center">
-              <p className="text-slate-500 dark:text-slate-400 text-sm mb-1">
-                Welcome back
-              </p>
-              <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">
-                {firstName}
-              </h1>
-              <p className="text-slate-500 dark:text-slate-400 text-sm mb-4">
-                What would you like to work on today?
-              </p>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <p className="text-slate-500 dark:text-slate-400 text-sm uppercase tracking-wide mb-1">
+                  Welcome back
+                </p>
+                <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white">
+                  {firstName}
+                </h1>
+              </div>
               
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={() => navigate('/dashboard')}
-                className="inline-flex items-center gap-2 px-6 py-2.5 bg-slate-800 dark:bg-brand-600 hover:bg-slate-700 dark:hover:bg-brand-700 text-white font-semibold rounded-xl transition-colors"
+                className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-brand-600 to-brand-700 hover:from-brand-700 hover:to-brand-800 text-white font-semibold rounded-xl shadow-sm transition-all text-base"
               >
-                <LayoutDashboard className="w-4 h-4" />
-                Open My Dashboard
+                <LayoutDashboard className="w-5 h-5" />
+                <span>Open Dashboard</span>
               </motion.button>
             </div>
           </motion.div>
 
-          {/* Modules Section */}
-          <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-            <h2 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3 flex-shrink-0">
-              Modules
-            </h2>
-            
-            <div className="flex-1 overflow-y-auto">
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+          {/* Modules Section - In a container card */}
+          <div className="flex-1 flex flex-col min-h-0">
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="flex-1 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6 flex flex-col"
+            >
+              <h2 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-4 flex-shrink-0">
+                Modules
+              </h2>
+              
+              {/* Grid - 2 rows with reduced gap */}
+              <div 
+                className="flex-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-4 gap-y-0"
+                style={{ gridTemplateRows: '1fr 1fr' }}
+              >
                 {modules.map((module, index) => (
                   <motion.button
                     key={module.id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.05 * index }}
-                    whileHover={{ y: -2 }}
-                    whileTap={{ scale: 0.98 }}
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 0.05 * index, duration: 0.2 }}
+                    whileHover={{ scale: 1.03 }}
+                    whileTap={{ scale: 0.97 }}
                     onClick={() => navigate(module.path)}
-                    className="group bg-white dark:bg-slate-800 rounded-xl p-5 text-left transition-all duration-200 border border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 hover:shadow-md flex flex-col h-full"
+                    className="group flex flex-col items-center justify-center text-center p-3 rounded-xl transition-all duration-200 hover:bg-slate-50 dark:hover:bg-slate-700/50 h-full relative"
                   >
-                    <div className="flex items-start gap-4">
-                      {/* Icon */}
+                    {/* Keyboard shortcut hint */}
+                    <span className="absolute top-2 right-2 w-5 h-5 rounded text-[10px] font-medium text-slate-300 dark:text-slate-600 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                      {index + 1}
+                    </span>
+
+                    {/* Icon with gradient and glow */}
+                    <div className="relative mb-3">
+                      {/* Glow effect on hover */}
                       <div className={clsx(
-                        'w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0',
-                        module.iconBg,
+                        'absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-40 blur-xl transition-opacity duration-300 bg-gradient-to-br',
+                        module.gradient
+                      )} />
+                      <div className={clsx(
+                        'relative w-[72px] h-[72px] rounded-2xl flex items-center justify-center shadow-lg bg-gradient-to-br transition-all duration-200 group-hover:shadow-xl group-hover:scale-105',
+                        module.gradient,
                         module.iconColor
                       )}>
                         {module.icon}
                       </div>
+                    </div>
 
-                      {/* Content */}
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold text-slate-900 dark:text-white text-sm mb-1">
-                          {module.title}
-                        </h3>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                          {module.description}
-                        </p>
-                      </div>
-                    </div>
-                    
-                    {/* Link at bottom */}
-                    <div className="mt-auto pt-4">
-                      <span className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 dark:text-brand-400">
-                        Open module
-                        <ArrowRight className="w-3 h-3 group-hover:translate-x-1 transition-transform" />
-                      </span>
-                    </div>
+                    {/* Content */}
+                    <h3 className="font-semibold text-slate-800 dark:text-white text-sm mb-0.5 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">
+                      {module.title}
+                    </h3>
+                    <p className="text-xs text-slate-400 dark:text-slate-500 leading-snug group-hover:text-slate-500 dark:group-hover:text-slate-400 transition-colors">
+                      {module.description}
+                    </p>
                   </motion.button>
                 ))}
               </div>
-            </div>
+            </motion.div>
           </div>
         </div>
 
-        {/* Footer */}
-        <footer className="flex-shrink-0 py-2 text-center border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+        {/* Footer - Minimal */}
+        <footer className="flex-shrink-0 py-2 text-center border-t border-slate-200 dark:border-slate-800 bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
           <p className="text-xs text-slate-400 dark:text-slate-500">
-            © {new Date().getFullYear()} {company.name || 'S&G Portal'}
+            © {new Date().getFullYear()} {company.name || 'S&G Builders Supply Inc.'}
           </p>
         </footer>
       </main>
     </div>
   );
-}
+}     

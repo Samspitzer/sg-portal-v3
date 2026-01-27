@@ -22,3 +22,4 @@ export { HeaderDropdown, type HeaderDropdownItem, type HeaderDropdownProps } fro
 export { DatePicker } from './DatePicker';
 export { TimePicker } from './TimePicker';
 export { TaskTypeIcon } from './TaskTypeIcon';
+export { EntityTasksSection } from './EntityTasksSection';

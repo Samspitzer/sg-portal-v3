@@ -1,9 +1,8 @@
+import React from 'react';
 import { motion } from 'framer-motion';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { clsx } from 'clsx';
-import { ArrowRight } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { Card, CardContent } from '@/components/common';
 
 export interface PanelDashboardTile {
   id: string;
@@ -22,32 +21,13 @@ interface PanelDashboardProps {
   iconGradient?: string;
 }
 
-const colorClasses: Record<string, { bg: string; icon: string; hover: string }> = {
-  brand: {
-    bg: 'bg-brand-100 dark:bg-brand-900/30',
-    icon: 'text-brand-600 dark:text-brand-400',
-    hover: 'hover:border-brand-300 dark:hover:border-brand-700',
-  },
-  accent: {
-    bg: 'bg-accent-100 dark:bg-accent-900/30',
-    icon: 'text-accent-600 dark:text-accent-400',
-    hover: 'hover:border-accent-300 dark:hover:border-accent-700',
-  },
-  success: {
-    bg: 'bg-success-100 dark:bg-success-900/30',
-    icon: 'text-success-600 dark:text-success-400',
-    hover: 'hover:border-success-300 dark:hover:border-success-700',
-  },
-  warning: {
-    bg: 'bg-warning-100 dark:bg-warning-900/30',
-    icon: 'text-warning-600 dark:text-warning-400',
-    hover: 'hover:border-warning-300 dark:hover:border-warning-700',
-  },
-  danger: {
-    bg: 'bg-danger-100 dark:bg-danger-900/30',
-    icon: 'text-danger-600 dark:text-danger-400',
-    hover: 'hover:border-danger-300 dark:hover:border-danger-700',
-  },
+// Gradient colors for tiles matching landing page style
+const colorGradients: Record<string, { gradient: string }> = {
+  brand: { gradient: 'from-blue-500 to-blue-600' },
+  accent: { gradient: 'from-violet-500 to-violet-600' },
+  success: { gradient: 'from-emerald-500 to-emerald-600' },
+  warning: { gradient: 'from-amber-500 to-amber-600' },
+  danger: { gradient: 'from-rose-500 to-rose-600' },
 };
 
 export function PanelDashboard({ 
@@ -57,15 +37,44 @@ export function PanelDashboard({
   tiles,
   iconGradient = 'from-slate-700 to-slate-900 dark:from-slate-600 dark:to-slate-800'
 }: PanelDashboardProps) {
+  const navigate = useNavigate();
+
+  // Keyboard shortcuts for tiles (1-9)
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if typing in an input
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      
+      const key = parseInt(e.key);
+      if (key >= 1 && key <= tiles.length && key <= 9) {
+        const tile = tiles[key - 1];
+        if (tile) {
+          navigate(tile.path);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [navigate, tiles]);
+
+  // Determine grid layout based on number of tiles
+  const getGridClass = () => {
+    if (tiles.length <= 2) return 'grid-cols-1 sm:grid-cols-2 max-w-2xl';
+    if (tiles.length <= 3) return 'grid-cols-1 sm:grid-cols-3 max-w-4xl';
+    return 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 max-w-6xl';
+  };
+
   return (
     <div className="p-6">
-      {/* Panel Header */}
+      {/* Container card - includes header and tiles */}
       <motion.div
-        initial={{ opacity: 0, y: -10 }}
+        initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="mb-8"
+        className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6"
       >
-        <div className="flex items-center gap-4">
+        {/* Panel Header - inside the card */}
+        <div className="flex items-center gap-4 mb-6">
           <div className={clsx(
             'w-14 h-14 rounded-2xl bg-gradient-to-br flex items-center justify-center shadow-lg',
             iconGradient
@@ -81,62 +90,51 @@ export function PanelDashboard({
             </p>
           </div>
         </div>
-      </motion.div>
 
-      {/* Divider */}
-      <div className="border-b border-slate-200 dark:border-slate-700 mb-8" />
+        {/* Divider */}
+        <div className="border-b border-slate-200 dark:border-slate-700 mb-6" />
 
-      {/* Tiles Grid */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.1 }}
-        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
-      >
-        {tiles.map((tile, index) => {
-  const colorKey = tile.color || 'brand';
-  const colors = colorClasses[colorKey] ?? colorClasses.brand;
-  
-  // Safety check - should never happen but satisfies TypeScript
-  if (!colors) return null;
-          return (
-            <motion.div
-              key={tile.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.15 + index * 0.1 }}
-            >
-              <Link to={tile.path}>
-                <Card
-                  hover
-                  className={clsx(
-                    'h-full transition-all duration-200 border-2 border-transparent',
-                    colors.hover
-                  )}
-                >
-                  <CardContent className="p-6">
-                    <div className="flex items-start justify-between">
-                      <div className={clsx(
-                        'w-14 h-14 rounded-xl flex items-center justify-center',
-                        colors.bg
-                      )}>
-                        <tile.icon className={clsx('w-7 h-7', colors.icon)} />
-                      </div>
-                      <ArrowRight className="w-5 h-5 text-slate-300 dark:text-slate-600" />
-                    </div>
-                    
-                    <h3 className="mt-4 text-lg font-semibold text-slate-900 dark:text-white">
-                      {tile.name}
-                    </h3>
-                    <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-                      {tile.description}
-                    </p>
-                  </CardContent>
-                </Card>
-              </Link>
-            </motion.div>
-          );
-        })}
+        {/* Tiles Grid - centered */}
+        <div className={clsx('grid gap-4 mx-auto', getGridClass())}>
+          {tiles.map((tile, index) => {
+            const colorKey = tile.color && colorGradients[tile.color] ? tile.color : 'brand';
+            const colors = colorGradients[colorKey]!;
+            
+            return (
+              <motion.button
+                key={tile.id}
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 0.05 * index, duration: 0.2 }}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => navigate(tile.path)}
+                className="group flex flex-col items-center justify-center text-center p-6 rounded-xl transition-all duration-200 hover:bg-slate-50 dark:hover:bg-slate-700/50 border border-transparent hover:border-slate-200 dark:hover:border-slate-600 relative min-h-[160px]"
+              >
+                {/* Keyboard shortcut hint */}
+                <span className="absolute top-3 right-3 w-5 h-5 rounded text-[10px] font-medium text-slate-300 dark:text-slate-600 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                  {index + 1}
+                </span>
+
+                {/* Icon with gradient */}
+                <div className={clsx(
+                  'w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg bg-gradient-to-br transition-all duration-200 group-hover:shadow-xl group-hover:scale-110 mb-4',
+                  colors.gradient
+                )}>
+                  <tile.icon className="w-8 h-8 text-white" />
+                </div>
+
+                {/* Content */}
+                <h3 className="font-semibold text-slate-800 dark:text-white text-base mb-1 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">
+                  {tile.name}
+                </h3>
+                <p className="text-sm text-slate-400 dark:text-slate-500 leading-snug group-hover:text-slate-500 dark:group-hover:text-slate-400 transition-colors">
+                  {tile.description}
+                </p>
+              </motion.button>
+            );
+          })}
+        </div>
       </motion.div>
     </div>
   );

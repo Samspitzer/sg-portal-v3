@@ -16,7 +16,6 @@ import {
   Check,
   X,
   Pencil,
-  CalendarClock,
   Users,
   Info,
   Printer,
@@ -25,7 +24,10 @@ import { Page } from '@/components/layout';
 import { Button, ConfirmModal, Modal, Input, AddressInput, UnsavedChangesModal, Select, Textarea, Toggle } from '@/components/common';
 import { MultiSelectUsers } from '@/components/common/MultiSelectUsers';
 import { CollapsibleSection } from '@/components/common/CollapsibleSection';
+import { EntityTasksSection } from '@/components/common/EntityTasksSection';
+import { TaskDetailPanel } from '@/components/panels/TasksPage';
 import { useClientsStore, useUsersStore, useToast, useNavigationGuardStore, useFieldsStore, type Company, type ContactRole, type CompanyAddress, isDuplicateAddress } from '@/contexts';
+import { useTaskStore, type Task, type TaskInput } from '@/contexts/taskStore';
 import {
   formatPhoneNumber,
   validatePhone,
@@ -474,6 +476,8 @@ export function CompanyDetailPage() {
   const toast = useToast();
   const { contactRoles } = useFieldsStore();
   const { contacts, updateCompany, deleteCompany, addContact, addCompanyAddress, updateCompanyAddress, deleteCompanyAddress } = useClientsStore();
+  const { tasks, createTask, updateTask, deleteTask } = useTaskStore();
+  const { users } = useUsersStore();
 
   // Role options for contact form - using dynamic contactRoles from store
   const roleOptions = useMemo(() => 
@@ -518,9 +522,24 @@ export function CompanyDetailPage() {
   const [showModeChangeModal, setShowModeChangeModal] = useState(false);
   const [modeChangeMessage, setModeChangeMessage] = useState('');
 
+  // Task panel state
+  const [isTaskPanelOpen, setIsTaskPanelOpen] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+
   // Get contacts for this company
   const companyContacts = company ? contacts.filter((c) => c.companyId === company.id) : [];
   useDocumentTitle(company?.name || 'Company');
+
+  // Count open tasks linked to this company
+  const openTasksCount = useMemo(() => {
+    if (!company) return 0;
+    return tasks.filter(task => {
+      const isLinkedContact = task.linkedContact?.type === 'company' && task.linkedContact?.id === company.id;
+      const isLinkedItem = task.linkedItem?.type === 'company' && task.linkedItem?.id === company.id;
+      const isOpen = task.status !== 'completed' && task.status !== 'cancelled';
+      return (isLinkedContact || isLinkedItem) && isOpen;
+    }).length;
+  }, [tasks, company]);
 
   const hasUnsavedEdits = Array.from(editingFields.values()).some((hasChanges) => hasChanges);
 
@@ -1265,7 +1284,7 @@ export function CompanyDetailPage() {
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-500">Open Tasks</span>
-                  <span className="font-medium text-slate-900 dark:text-white">0</span>
+                  <span className="font-medium text-slate-900 dark:text-white">{openTasksCount}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-500">Projects</span>
@@ -1275,27 +1294,63 @@ export function CompanyDetailPage() {
             </div>
           </div>
 
-          {/* Upcoming Tasks - Non-collapsible with action button */}
-          <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
-            <SectionHeader
-              title="Upcoming Tasks"
-              icon={<CalendarClock className="w-4 h-4 text-slate-500" />}
-              action={
-                <Button variant="secondary" size="sm">
-                  <Plus className="w-3 h-3" />
-                </Button>
-              }
-            />
-            <div className="p-4 bg-white dark:bg-slate-900">
-              <div className="text-center py-8 text-slate-400">
-                <CalendarClock className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">No upcoming tasks</p>
-                <p className="text-xs mt-1">Tasks will appear here</p>
-              </div>
-            </div>
-          </div>
+          {/* Tasks Section */}
+          <EntityTasksSection
+            entityType="company"
+            entityId={company.id}
+            entityName={company.name}
+            onAddTask={() => {
+              setSelectedTask(null);
+              setIsTaskPanelOpen(true);
+            }}
+            onTaskClick={(task) => {
+              setSelectedTask(task);
+              setIsTaskPanelOpen(true);
+            }}
+          />
         </div>
       </div>
+
+      {/* Task Detail Panel */}
+      <TaskDetailPanel
+        task={selectedTask}
+        isOpen={isTaskPanelOpen}
+        onClose={() => {
+          setIsTaskPanelOpen(false);
+          setSelectedTask(null);
+        }}
+        onSave={async (data, markDone) => {
+          const user = users.find(u => u.id === data.assignedUserId);
+          const taskData = { ...data, assignedUserName: user?.name || '' };
+          
+          if (selectedTask) {
+            if (markDone && selectedTask.status !== 'completed') {
+              await updateTask(selectedTask.id, { ...taskData, status: 'completed' } as TaskInput);
+              toast.success('Task Completed', 'Task has been marked as done');
+            } else if (!markDone && selectedTask.status === 'completed') {
+              await updateTask(selectedTask.id, { ...taskData, status: 'todo' } as TaskInput);
+              toast.success('Task Updated', 'Task has been reopened');
+            } else {
+              await updateTask(selectedTask.id, taskData);
+              toast.success('Task Updated', 'Your changes have been saved');
+            }
+          } else {
+            await createTask(taskData);
+            toast.success('Task Created', 'New task has been added');
+          }
+          setIsTaskPanelOpen(false);
+          setSelectedTask(null);
+        }}
+        onDelete={async (taskId) => {
+          await deleteTask(taskId);
+          toast.success('Task Deleted', 'The task has been removed');
+        }}
+        defaultLinkedContact={{
+          type: 'company',
+          id: company.id,
+          name: company.name,
+        }}
+      />
 
       {/* Delete Company Confirmation Modal */}
       <ConfirmModal

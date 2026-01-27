@@ -12,8 +12,9 @@
 // ===========================================================================
 
 import { useDocumentTitle, useDropdownKeyboard } from '@/hooks';
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { useNavigate } from 'react-router-dom';
 import { clsx } from 'clsx';
 import { 
   Plus, Calendar as CalendarIcon, List, ChevronLeft, ChevronRight, 
@@ -84,60 +85,43 @@ function formatDateLong(dateStr: string): string {
 }
 
 // =============================================================================
-// Contact/Company Search Component
+// =============================================================================
+// Company Search Component
 // =============================================================================
 
-interface SearchItem {
-  type: LinkedEntityType;
-  id: string;
-  name: string;
-  subtitle: string;
-}
-
-function ContactCompanySearch({ 
+function CompanySearch({ 
   value, 
-  onChange 
+  onChange,
+  onCompanySelected 
 }: { 
   value: LinkedEntity | null; 
-  onChange: (v: LinkedEntity | null) => void; 
+  onChange: (v: LinkedEntity | null) => void;
+  onCompanySelected?: (companyId: string | null) => void;
 }) {
-  const { contacts, companies } = useClientsStore();
+  const { companies } = useClientsStore();
   const [search, setSearch] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const allItems = useMemo<SearchItem[]>(() => {
-    const items: SearchItem[] = [];
-    contacts.forEach(c => items.push({ 
-      type: 'contact', 
+  const filteredCompanies = useMemo(() => {
+    const items = companies.map(c => ({ 
+      type: 'company' as const, 
       id: c.id, 
-      name: `${c.firstName} ${c.lastName}`.trim() || 'Unnamed', 
-      subtitle: 'Contact' 
+      name: c.name 
     }));
-    companies.forEach(c => items.push({ 
-      type: 'company', 
-      id: c.id, 
-      name: c.name, 
-      subtitle: 'Company' 
-    }));
-    return items;
-  }, [contacts, companies]);
-
-  const filteredItems = useMemo(() => {
-    if (!search.trim()) return allItems.slice(0, 10);
-    return allItems
+    if (!search.trim()) return items.slice(0, 10);
+    return items
       .filter(item => item.name.toLowerCase().includes(search.toLowerCase()))
       .slice(0, 10);
-  }, [search, allItems]);
+  }, [search, companies]);
 
-  // Keyboard navigation using the hook
   const { highlightedIndex, handleKeyDown, resetHighlight } = useDropdownKeyboard({
-    items: filteredItems,
+    items: filteredCompanies,
     isOpen,
     onSelect: (item) => {
       if (item) {
-        onChange({ type: item.type, id: item.id, name: item.name });
+        onChange({ type: 'company', id: item.id, name: item.name });
+        onCompanySelected?.(item.id);
         setSearch('');
         setIsOpen(false);
         resetHighlight();
@@ -149,7 +133,6 @@ function ContactCompanySearch({
     },
   });
 
-  // Click outside handler
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
@@ -161,28 +144,21 @@ function ContactCompanySearch({
     return () => document.removeEventListener('mousedown', handler);
   }, [resetHighlight]);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearch(e.target.value);
-    setIsOpen(true);
-    resetHighlight();
-  };
-
   return (
     <div className="space-y-1.5">
       <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-        Link to Contact / Company
+        Company
       </label>
       {value ? (
         <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg">
-          {(() => { 
-            const Icon = ENTITY_ICONS[value.type]; 
-            return <Icon className="w-4 h-4 text-slate-400" />; 
-          })()}
-          <span className="flex-1 text-sm text-slate-900 dark:text-white">{value.name}</span>
-          <span className="text-xs text-slate-400 capitalize">{value.type}</span>
+          <Building2 className="w-4 h-4 text-slate-400" />
+          <span className="flex-1 text-sm text-slate-900 dark:text-white truncate">{value.name}</span>
           <button 
             type="button" 
-            onClick={() => onChange(null)} 
+            onClick={() => {
+              onChange(null);
+              onCompanySelected?.(null);
+            }} 
             className="text-slate-400 hover:text-red-500 transition-colors"
           >
             <X className="w-4 h-4" />
@@ -192,46 +168,37 @@ function ContactCompanySearch({
         <div ref={containerRef} className="relative">
           <Input
             value={search}
-            onChange={handleInputChange}
+            onChange={(e) => { setSearch(e.target.value); setIsOpen(true); resetHighlight(); }}
             onFocus={() => setIsOpen(true)}
             onKeyDown={handleKeyDown}
-            placeholder="Search contacts or companies..."
+            placeholder="Search companies..."
             leftIcon={<Search className="w-4 h-4" />}
             disableAutoValidation
           />
-          {isOpen && filteredItems.length > 0 && (
-            <div 
-              ref={dropdownRef} 
-              className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-50 max-h-60 overflow-y-auto"
-            >
-              {filteredItems.map((item, index) => {
-                const Icon = ENTITY_ICONS[item.type];
-                const isHighlighted = index === highlightedIndex;
-                return (
-                  <button 
-                    key={`${item.type}-${item.id}`} 
-                    type="button" 
-                    onClick={() => { 
-                      onChange({ type: item.type, id: item.id, name: item.name }); 
-                      setSearch(''); 
-                      setIsOpen(false);
-                      resetHighlight();
-                    }}
-                    className={clsx(
-                      'w-full flex items-center gap-2 px-3 py-2 text-left transition-colors',
-                      isHighlighted 
-                        ? 'bg-slate-100 dark:bg-slate-700' 
-                        : 'hover:bg-slate-50 dark:hover:bg-slate-700'
-                    )}
-                  >
-                    <Icon className="w-4 h-4 text-slate-400" />
-                    <span className="flex-1 text-sm text-slate-900 dark:text-white truncate">
-                      {item.name}
-                    </span>
-                    <span className="text-xs text-slate-400">{item.subtitle}</span>
-                  </button>
-                );
-              })}
+          {isOpen && filteredCompanies.length > 0 && (
+            <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-50 max-h-48 overflow-y-auto">
+              {filteredCompanies.map((item, index) => (
+                <button 
+                  key={item.id} 
+                  type="button" 
+                  onClick={() => { 
+                    onChange({ type: 'company', id: item.id, name: item.name });
+                    onCompanySelected?.(item.id);
+                    setSearch(''); 
+                    setIsOpen(false);
+                    resetHighlight();
+                  }}
+                  className={clsx(
+                    'w-full flex items-center gap-2 px-3 py-2 text-left transition-colors',
+                    index === highlightedIndex 
+                      ? 'bg-slate-100 dark:bg-slate-700' 
+                      : 'hover:bg-slate-50 dark:hover:bg-slate-700'
+                  )}
+                >
+                  <Building2 className="w-4 h-4 text-slate-400" />
+                  <span className="flex-1 text-sm text-slate-900 dark:text-white truncate">{item.name}</span>
+                </button>
+              ))}
             </div>
           )}
         </div>
@@ -241,8 +208,280 @@ function ContactCompanySearch({
 }
 
 // =============================================================================
+// Contact Search Component (filtered by company)
+// =============================================================================
+
+function ContactSearch({ 
+  value, 
+  onChange,
+  companyId,
+  onContactSelected,
+}: { 
+  value: LinkedEntity | null; 
+  onChange: (v: LinkedEntity | null) => void;
+  companyId: string | null;
+  onContactSelected?: (contact: { id: string; companyId: string; name: string } | null) => void;
+}) {
+  const { contacts, companies } = useClientsStore();
+  const [search, setSearch] = useState('');
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Filter contacts by company if companyId is set
+  const filteredContacts = useMemo(() => {
+    let contactList = contacts;
+    
+    // If company is selected, only show contacts from that company
+    if (companyId) {
+      contactList = contacts.filter(c => c.companyId === companyId);
+    }
+    
+    const items = contactList.map(c => {
+      const company = companies.find(comp => comp.id === c.companyId);
+      return { 
+        type: 'contact' as const, 
+        id: c.id, 
+        name: `${c.firstName} ${c.lastName}`.trim() || 'Unnamed',
+        companyId: c.companyId,
+        companyName: company?.name || '',
+      };
+    });
+    
+    if (!search.trim()) return items.slice(0, 10);
+    return items
+      .filter(item => item.name.toLowerCase().includes(search.toLowerCase()))
+      .slice(0, 10);
+  }, [search, contacts, companies, companyId]);
+
+  const { highlightedIndex, handleKeyDown, resetHighlight } = useDropdownKeyboard({
+    items: filteredContacts,
+    isOpen,
+    onSelect: (item) => {
+      if (item) {
+        onChange({ type: 'contact', id: item.id, name: item.name });
+        onContactSelected?.({ id: item.id, companyId: item.companyId, name: item.name });
+        setSearch('');
+        setIsOpen(false);
+        resetHighlight();
+      }
+    },
+    onClose: () => {
+      setIsOpen(false);
+      resetHighlight();
+    },
+  });
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+        resetHighlight();
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [resetHighlight]);
+
+  return (
+    <div className="space-y-1.5">
+      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+        Contact {companyId && <span className="text-xs text-slate-400">(filtered by company)</span>}
+      </label>
+      {value ? (
+        <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg">
+          <User className="w-4 h-4 text-slate-400" />
+          <span className="flex-1 text-sm text-slate-900 dark:text-white truncate">{value.name}</span>
+          <button 
+            type="button" 
+            onClick={() => {
+              onChange(null);
+              onContactSelected?.(null);
+            }} 
+            className="text-slate-400 hover:text-red-500 transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      ) : (
+        <div ref={containerRef} className="relative">
+          <Input
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setIsOpen(true); resetHighlight(); }}
+            onFocus={() => setIsOpen(true)}
+            onKeyDown={handleKeyDown}
+            placeholder={companyId ? "Search contacts from this company..." : "Search all contacts..."}
+            leftIcon={<Search className="w-4 h-4" />}
+            disableAutoValidation
+          />
+          {isOpen && filteredContacts.length > 0 && (
+            <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-50 max-h-48 overflow-y-auto">
+              {filteredContacts.map((item, index) => (
+                <button 
+                  key={item.id} 
+                  type="button" 
+                  onClick={() => { 
+                    onChange({ type: 'contact', id: item.id, name: item.name });
+                    onContactSelected?.({ id: item.id, companyId: item.companyId, name: item.name });
+                    setSearch(''); 
+                    setIsOpen(false);
+                    resetHighlight();
+                  }}
+                  className={clsx(
+                    'w-full flex items-center gap-2 px-3 py-2 text-left transition-colors',
+                    index === highlightedIndex 
+                      ? 'bg-slate-100 dark:bg-slate-700' 
+                      : 'hover:bg-slate-50 dark:hover:bg-slate-700'
+                  )}
+                >
+                  <User className="w-4 h-4 text-slate-400" />
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm text-slate-900 dark:text-white truncate block">{item.name}</span>
+                    {item.companyName && !companyId && (
+                      <span className="text-xs text-slate-400 truncate block">{item.companyName}</span>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+          {isOpen && filteredContacts.length === 0 && search && (
+            <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-50 p-3 text-center text-sm text-slate-500">
+              No contacts found
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// =============================================================================
+// Day Schedule Sidebar Component
+// =============================================================================
+
+function DayScheduleSidebar({ 
+  date,
+  tasks,
+}: { 
+  date: string;
+  tasks: Task[];
+}) {
+  // Filter tasks for this date
+  const dayTasks = useMemo(() => {
+    if (!date) return [];
+    return tasks
+      .filter(t => t.dueDate === date && t.status !== 'completed' && t.status !== 'cancelled')
+      .sort((a, b) => {
+        if (!a.dueTime && !b.dueTime) return 0;
+        if (!a.dueTime) return 1;
+        if (!b.dueTime) return -1;
+        return a.dueTime.localeCompare(b.dueTime);
+      });
+  }, [date, tasks]);
+
+  // Generate time slots from 6 AM to 9 PM
+  const timeSlots = useMemo(() => {
+    const slots: string[] = [];
+    for (let hour = 6; hour <= 21; hour++) {
+      const ampm = hour >= 12 ? 'PM' : 'AM';
+      const displayHour = hour > 12 ? hour - 12 : hour;
+      slots.push(`${displayHour} ${ampm}`);
+    }
+    return slots;
+  }, []);
+
+  if (!date) {
+    return (
+      <div className="w-64 border-l border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-4 flex flex-col items-center justify-center text-center">
+        <CalendarIcon className="w-8 h-8 text-slate-300 dark:text-slate-600 mb-2" />
+        <p className="text-sm text-slate-500 dark:text-slate-400">Select a due date to see your schedule</p>
+      </div>
+    );
+  }
+
+  const dateObj = parseLocalDate(date);
+  const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'long' });
+  const monthDay = dateObj.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+
+  return (
+    <div className="w-64 border-l border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 flex flex-col">
+      {/* Header */}
+      <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700">
+        <p className="text-sm font-medium text-slate-900 dark:text-white">{dayName}</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400">{monthDay}</p>
+      </div>
+      
+      {/* Schedule */}
+      <div className="flex-1 overflow-y-auto">
+        {/* All-day / no-time tasks */}
+        {dayTasks.filter(t => !t.dueTime).length > 0 && (
+          <div className="border-b border-slate-200 dark:border-slate-700">
+            <div className="px-2 py-1 text-xs font-medium text-slate-500 bg-slate-100 dark:bg-slate-700">
+              All Day
+            </div>
+            {dayTasks.filter(t => !t.dueTime).map(task => (
+              <div 
+                key={task.id}
+                className="mx-2 my-1 px-2 py-1 bg-blue-100 dark:bg-blue-900/30 rounded text-xs text-blue-700 dark:text-blue-300 truncate"
+              >
+                {task.title}
+              </div>
+            ))}
+          </div>
+        )}
+        
+        {/* Time slots */}
+        <div className="relative">
+          {timeSlots.map((slot, index) => {
+            const tasksForHour = dayTasks.filter(t => {
+              if (!t.dueTime) return false;
+              const taskHour = parseInt(t.dueTime.split(':')[0] || '0', 10);
+              return taskHour === index + 6;
+            });
+            
+            return (
+              <div key={slot} className="flex border-b border-slate-100 dark:border-slate-700/50">
+                <div className="w-12 py-2 text-right pr-2 text-xs text-slate-400 flex-shrink-0">
+                  {slot}
+                </div>
+                <div className="flex-1 py-1 min-h-[40px]">
+                  {tasksForHour.map(task => (
+                    <div 
+                      key={task.id}
+                      className="mx-1 px-2 py-1 bg-blue-500 text-white rounded text-xs truncate mb-0.5"
+                      title={task.title}
+                    >
+                      <Clock className="w-3 h-3 inline mr-1" />
+                      {task.title}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      
+      {/* Footer hint */}
+      <div className="px-3 py-2 border-t border-slate-200 dark:border-slate-700 text-xs text-slate-400 text-center">
+        Calendar sync coming soon
+      </div>
+    </div>
+  );
+}
+
+// =============================================================================
+// Contact/Company Search (Legacy - keeping for backward compatibility)
+// =============================================================================
 // Item Search Component (Projects, Deals, Estimates, Invoices)
 // =============================================================================
+
+interface SearchItem { 
+  type: LinkedEntityType; 
+  id: string; 
+  name: string; 
+  subtitle?: string; 
+}
 
 function ItemSearch({ 
   value, 
@@ -424,20 +663,28 @@ function TaskTypeButtonGroup({
 // Task Detail Panel (Slide-out)
 // =============================================================================
 
-function TaskDetailPanel({ 
+export function TaskDetailPanel({ 
   task, 
   isOpen, 
   onClose, 
   onSave, 
-  onDelete 
+  onDelete,
+  defaultLinkedContact,
+  defaultLinkedItem,
 }: { 
   task: Task | null; 
   isOpen: boolean; 
   onClose: () => void; 
   onSave: (data: TaskInput, markDone?: boolean) => void; 
   onDelete?: (taskId: string) => void;
+  /** Pre-fill linked contact when creating new task */
+  defaultLinkedContact?: LinkedEntity | null;
+  /** Pre-fill linked item when creating new task */
+  defaultLinkedItem?: LinkedEntity | null;
 }) {
   const { users } = useUsersStore();
+  const { companies } = useClientsStore();
+  const { tasks: allTasks } = useTaskStore();
   const { getActiveTaskTypes } = useTaskTypesStore();
   const toast = useToast();
   
@@ -456,6 +703,10 @@ function TaskDetailPanel({
   const [initialData, setInitialData] = useState<TaskInput | null>(null);
   const [isMarkingDone, setIsMarkingDone] = useState(false);
   const [showDiscardModal, setShowDiscardModal] = useState(false);
+  
+  // Separate company selection state (linked to contact)
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
+  const [linkedCompany, setLinkedCompany] = useState<LinkedEntity | null>(null);
   
   const taskTypes = useMemo(() => getActiveTaskTypes(), [getActiveTaskTypes]);
 
@@ -477,14 +728,24 @@ function TaskDetailPanel({
       setFormData(data); 
       setInitialData(data); 
       setIsMarkingDone(task.status === 'completed');
+      
+      // Set company state from linkedContact if it's a company, or from contact's company
+      if (task.linkedContact?.type === 'company') {
+        setLinkedCompany(task.linkedContact);
+        setSelectedCompanyId(task.linkedContact.id);
+      } else {
+        setLinkedCompany(null);
+        setSelectedCompanyId(null);
+      }
     } else if (isOpen && !task) {
+      // New task - use defaults if provided
       const emptyData: TaskInput = { 
         title: '', 
         type: undefined, 
         priority: undefined, 
         assignedUserId: '', 
-        linkedContact: null, 
-        linkedItem: null, 
+        linkedContact: defaultLinkedContact?.type === 'contact' ? defaultLinkedContact : null, 
+        linkedItem: defaultLinkedItem || null, 
         description: '', 
         notes: '', 
         dueDate: '', 
@@ -493,8 +754,17 @@ function TaskDetailPanel({
       setFormData(emptyData); 
       setInitialData(emptyData); 
       setIsMarkingDone(false);
+      
+      // Set company from defaults
+      if (defaultLinkedContact?.type === 'company') {
+        setLinkedCompany(defaultLinkedContact);
+        setSelectedCompanyId(defaultLinkedContact.id);
+      } else {
+        setLinkedCompany(null);
+        setSelectedCompanyId(null);
+      }
     }
-  }, [task, isOpen]);
+  }, [task, isOpen, defaultLinkedContact, defaultLinkedItem]);
 
   // Track if there are unsaved changes
   const hasChanges = useMemo(() => {
@@ -562,24 +832,26 @@ function TaskDetailPanel({
           onClick={handleClose} 
         />
         
-        {/* Panel */}
-        <div className="absolute right-0 top-0 bottom-0 w-full max-w-2xl bg-white dark:bg-slate-900 shadow-2xl flex flex-col animate-slide-in-right">
-          {/* Header */}
-          <div className="flex items-center gap-3 px-6 py-4 border-b border-slate-200 dark:border-slate-700">
-            <div className="flex items-center gap-2 flex-1 min-w-0">
-              {currentTaskType && (
-                <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
-                  <TaskTypeIcon icon={currentTaskType.icon} className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                </div>
-              )}
-              <div className="flex-1 min-w-0">
-                <h2 className="text-lg font-semibold text-slate-900 dark:text-white truncate">
-                  {task ? formData.title || 'Untitled Task' : 'New Task'}
-                </h2>
-                {formData.dueDate && (
-                  <p className="text-sm text-slate-500 dark:text-slate-400">
-                    {formatDateLong(formData.dueDate)}
-                  </p>
+        {/* Panel - wider to accommodate sidebar */}
+        <div className="absolute right-0 top-0 bottom-0 w-full max-w-4xl bg-white dark:bg-slate-900 shadow-2xl flex animate-slide-in-right">
+          {/* Main Content Area */}
+          <div className="flex-1 flex flex-col min-w-0">
+            {/* Header */}
+            <div className="flex items-center gap-3 px-6 py-4 border-b border-slate-200 dark:border-slate-700">
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                {currentTaskType && (
+                  <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+                    <TaskTypeIcon icon={currentTaskType.icon} className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-lg font-semibold text-slate-900 dark:text-white truncate">
+                    {task ? formData.title || 'Untitled Task' : 'New Task'}
+                  </h2>
+                  {formData.dueDate && (
+                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                      {formatDateLong(formData.dueDate)}
+                    </p>
                 )}
               </div>
             </div>
@@ -667,17 +939,43 @@ function TaskDetailPanel({
               />
             </div>
             
-            {/* Link to Contact/Company & Link to Item - Row 3 */}
+            {/* Company & Contact - Row 3 (linked) */}
             <div className="grid grid-cols-2 gap-4">
-              <ContactCompanySearch 
-                value={formData.linkedContact || null} 
-                onChange={v => setFormData(d => ({ ...d, linkedContact: v }))} 
+              <CompanySearch 
+                value={linkedCompany} 
+                onChange={(v) => {
+                  setLinkedCompany(v);
+                }}
+                onCompanySelected={(companyId) => {
+                  setSelectedCompanyId(companyId);
+                  // If clearing company, also clear contact
+                  if (!companyId) {
+                    setFormData(d => ({ ...d, linkedContact: null }));
+                  }
+                }}
               />
-              <ItemSearch 
-                value={formData.linkedItem || null} 
-                onChange={v => setFormData(d => ({ ...d, linkedItem: v }))} 
+              <ContactSearch 
+                value={formData.linkedContact?.type === 'contact' ? formData.linkedContact : null} 
+                onChange={v => setFormData(d => ({ ...d, linkedContact: v }))}
+                companyId={selectedCompanyId}
+                onContactSelected={(contact) => {
+                  if (contact) {
+                    // Auto-select company when contact is selected
+                    const company = companies.find(c => c.id === contact.companyId);
+                    if (company) {
+                      setLinkedCompany({ type: 'company', id: company.id, name: company.name });
+                      setSelectedCompanyId(company.id);
+                    }
+                  }
+                }}
               />
             </div>
+            
+            {/* Link to Item - Row 4 */}
+            <ItemSearch 
+              value={formData.linkedItem || null} 
+              onChange={v => setFormData(d => ({ ...d, linkedItem: v }))} 
+            />
             
             {/* Notes */}
             <Textarea
@@ -729,6 +1027,13 @@ function TaskDetailPanel({
               </Button>
             </div>
           </div>
+          </div>
+          
+          {/* Day Schedule Sidebar */}
+          <DayScheduleSidebar 
+            date={formData.dueDate || ''} 
+            tasks={allTasks} 
+          />
         </div>
       </div>
       
@@ -865,14 +1170,18 @@ function TaskCalendar({
   tasks, 
   currentDate, 
   onDateChange, 
-  onTaskClick 
+  onTaskClick,
+  onTaskDrop,
 }: { 
   tasks: Task[]; 
   currentDate: Date; 
   onDateChange: (d: Date) => void; 
   onTaskClick: (task: Task, event: React.MouseEvent) => void;
+  onTaskDrop?: (taskId: string, newDate: string) => void;
 }) {
   const { taskTypes } = useTaskTypesStore();
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+  const [dragOverDate, setDragOverDate] = useState<string | null>(null);
   
   const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
   const firstDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getDay();
@@ -958,14 +1267,30 @@ function TaskCalendar({
           const dateStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
           const dayTasks = tasksByDate[dateStr] || [];
           const isToday = todayStr === dateStr;
+          const isDragOver = dragOverDate === dateStr;
           
           return (
             <div 
               key={day} 
               className={clsx(
-                'h-28 p-1.5 border-t border-l border-slate-200 dark:border-slate-700 overflow-hidden hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors', 
-                isToday && 'bg-blue-50 dark:bg-blue-900/20'
+                'h-28 p-1.5 border-t border-l border-slate-200 dark:border-slate-700 overflow-hidden transition-colors', 
+                isToday && 'bg-blue-50 dark:bg-blue-900/20',
+                isDragOver && 'bg-green-50 dark:bg-green-900/20 ring-2 ring-inset ring-green-400',
+                !isDragOver && 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
               )}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDragOverDate(dateStr);
+              }}
+              onDragLeave={() => setDragOverDate(null)}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (draggedTaskId && onTaskDrop) {
+                  onTaskDrop(draggedTaskId, dateStr);
+                }
+                setDraggedTaskId(null);
+                setDragOverDate(null);
+              }}
             >
               <div className={clsx(
                 'text-xs font-medium mb-1', 
@@ -979,9 +1304,16 @@ function TaskCalendar({
                   return (
                     <div 
                       key={t.id} 
+                      draggable
+                      onDragStart={() => setDraggedTaskId(t.id)}
+                      onDragEnd={() => {
+                        setDraggedTaskId(null);
+                        setDragOverDate(null);
+                      }}
                       onClick={(e) => onTaskClick(t, e)} 
                       className={clsx(
-                        'flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded cursor-pointer truncate transition-colors',
+                        'flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded cursor-grab truncate transition-colors',
+                        draggedTaskId === t.id && 'opacity-50',
                         t.priority === 'urgent' 
                           ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 hover:bg-red-200' 
                           : t.priority === 'high' 
@@ -1014,9 +1346,11 @@ function TaskCalendar({
 
 export function TasksPage() {
   useDocumentTitle('Tasks');
+  const navigate = useNavigate();
   
   const { users } = useUsersStore();
-  const { tasks, createTask, updateTask, deleteTask } = useTaskStore();
+  const { contacts, companies } = useClientsStore();
+  const { tasks, createTask, updateTask, deleteTask, completeTask, reopenTask } = useTaskStore();
   const { getActiveTaskTypes, taskTypes } = useTaskTypesStore();
   const toast = useToast();
   
@@ -1028,6 +1362,10 @@ export function TasksPage() {
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('all');
   const [currentDate, setCurrentDate] = useState(new Date());
   
+  // Sort state
+  const [sortField, setSortField] = useState<string>('dueDate');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  
   // Panel state
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -1035,6 +1373,29 @@ export function TasksPage() {
   // Preview state (for calendar)
   const [previewTask, setPreviewTask] = useState<Task | null>(null);
   const [previewPosition, setPreviewPosition] = useState({ x: 0, y: 0 });
+
+  // Sort handler (same pattern as CompaniesPage)
+  const handleSort = useCallback((field: string) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  }, [sortField, sortDirection]);
+
+  // Navigate to linked entity
+  const navigateToEntity = useCallback((type: LinkedEntityType, id: string) => {
+    const routes: Record<LinkedEntityType, string> = {
+      contact: `/clients/contacts/${id}`,
+      company: `/clients/companies/${id}`,
+      project: `/projects/${id}`,
+      estimate: `/estimates/${id}`,
+      invoice: `/accounting/invoices/${id}`,
+      deal: `/sales/deals/${id}`,
+    };
+    navigate(routes[type] || '/');
+  }, [navigate]);
 
   // Build filter options based on tasks data
   const taskTypeOptions = useMemo(() => {
@@ -1094,15 +1455,88 @@ export function TasksPage() {
     }
   };
 
-  // Filtered tasks
-  const filteredTasks = useMemo(() => tasks.filter(t => {
-    if (search && !t.title.toLowerCase().includes(search.toLowerCase()) && 
-        !t.description?.toLowerCase().includes(search.toLowerCase())) return false;
-    if (selectedUser && t.assignedUserId !== selectedUser) return false;
-    if (selectedType && t.type !== selectedType) return false;
-    if (!matchesTime(t.dueDate)) return false;
-    return true;
-  }), [tasks, search, selectedUser, selectedType, timeFilter]);
+  // Filtered tasks (exclude completed/cancelled by default, but show them when searching)
+  const filteredTasks = useMemo(() => {
+    let result = tasks.filter(t => {
+      // When NOT searching: hide completed and cancelled tasks
+      // When searching: show all tasks including completed ones
+      const isSearching = search && search.trim().length > 0;
+      if (!isSearching && (t.status === 'completed' || t.status === 'cancelled')) return false;
+      
+      if (search && !t.title.toLowerCase().includes(search.toLowerCase()) && 
+          !t.description?.toLowerCase().includes(search.toLowerCase())) return false;
+      if (selectedUser && t.assignedUserId !== selectedUser) return false;
+      if (selectedType && t.type !== selectedType) return false;
+      if (!matchesTime(t.dueDate)) return false;
+      return true;
+    });
+
+    // Sort tasks
+    if (sortField) {
+      result = [...result].sort((a, b) => {
+        let aVal: any;
+        let bVal: any;
+
+        switch (sortField) {
+          case 'title':
+            aVal = a.title?.toLowerCase() || '';
+            bVal = b.title?.toLowerCase() || '';
+            break;
+          case 'dueDate':
+            aVal = a.dueDate || '9999-99-99';
+            bVal = b.dueDate || '9999-99-99';
+            break;
+          case 'dueTime':
+            aVal = a.dueTime || '99:99';
+            bVal = b.dueTime || '99:99';
+            break;
+          case 'priority':
+            const priorityOrder = { urgent: 0, high: 1, medium: 2, low: 3 };
+            aVal = priorityOrder[a.priority as keyof typeof priorityOrder] ?? 4;
+            bVal = priorityOrder[b.priority as keyof typeof priorityOrder] ?? 4;
+            break;
+          case 'assignedUserName':
+            aVal = a.assignedUserName?.toLowerCase() || '';
+            bVal = b.assignedUserName?.toLowerCase() || '';
+            break;
+          case 'contactPerson':
+            aVal = a.linkedContact?.name?.toLowerCase() || '';
+            bVal = b.linkedContact?.name?.toLowerCase() || '';
+            break;
+          case 'company':
+            // Get company name from contact or direct link
+            const getCompanyName = (task: Task) => {
+              if (task.linkedContact?.type === 'company') {
+                return companies.find(c => c.id === task.linkedContact!.id)?.name?.toLowerCase() || '';
+              }
+              if (task.linkedContact?.type === 'contact') {
+                const contact = contacts.find(c => c.id === task.linkedContact!.id);
+                if (contact?.companyId) {
+                  return companies.find(c => c.id === contact.companyId)?.name?.toLowerCase() || '';
+                }
+              }
+              return '';
+            };
+            aVal = getCompanyName(a);
+            bVal = getCompanyName(b);
+            break;
+          case 'linkedItem':
+            aVal = a.linkedItem?.name?.toLowerCase() || '';
+            bVal = b.linkedItem?.name?.toLowerCase() || '';
+            break;
+          default:
+            aVal = '';
+            bVal = '';
+        }
+
+        if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+        if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+
+    return result;
+  }, [tasks, search, selectedUser, selectedType, timeFilter, sortField, sortDirection, contacts, companies]);
 
   // Overdue count for badge
   const overdueCount = useMemo(() => {
@@ -1116,102 +1550,305 @@ export function TasksPage() {
     ).length;
   }, [tasks]);
 
-  // Table columns definition - A2 Design styling
-  const taskColumns: DataTableColumn<Task>[] = [
+  // Table columns definition - Pipedrive style with resizable columns
+  const taskColumns: DataTableColumn<Task>[] = useMemo(() => [
+    // 1. Done (checkbox) - not sortable, not resizable
+    { 
+      key: 'done', 
+      header: 'Done', 
+      width: 60,
+      minWidth: 60,
+      resizable: false,
+      render: (task) => (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            if (task.status === 'completed') {
+              reopenTask(task.id);
+              toast.info('Task Reopened', 'Task has been moved back to To Do');
+            } else {
+              completeTask(task.id);
+              toast.success('Task Completed', 'Task has been marked as done');
+            }
+          }}
+          className={clsx(
+            'w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all',
+            task.status === 'completed'
+              ? 'bg-green-500 border-green-500 text-white'
+              : 'border-slate-300 dark:border-slate-600 hover:border-green-400 dark:hover:border-green-500'
+          )}
+        >
+          {task.status === 'completed' && <Check className="w-3 h-3" />}
+        </button>
+      )
+    },
+    // 2. Subject (Title with type icon)
     { 
       key: 'title', 
-      header: 'Task', 
-      sortable: true, 
+      header: 'Subject', 
+      sortable: true,
+      width: 250,
+      minWidth: 150,
       render: (task) => {
         const tt = taskTypes.find(t => t.value === task.type);
         return (
           <div className="flex items-center gap-3">
             {tt && (
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white shadow-sm flex-shrink-0">
-                <TaskTypeIcon icon={tt.icon} className="w-4 h-4" />
+              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white shadow-sm flex-shrink-0">
+                <TaskTypeIcon icon={tt.icon} className="w-3.5 h-3.5" />
               </div>
             )}
-            <span className="font-medium text-slate-900 dark:text-white">{task.title}</span>
+            <span className={clsx(
+              'font-medium truncate',
+              task.status === 'completed' 
+                ? 'text-slate-400 dark:text-slate-500 line-through' 
+                : 'text-slate-900 dark:text-white'
+            )}>
+              {task.title}
+            </span>
           </div>
         );
       }
     },
+    // 3. Deal/Project (linked item - clickable)
     { 
-      key: 'status', 
-      header: 'Status', 
-      sortable: true, 
-      width: 'w-28', 
+      key: 'linkedItem', 
+      header: 'Deal / Project', 
+      sortable: true,
+      width: 180,
+      minWidth: 120,
       render: (task) => {
-        const styles: Record<string, string> = { 
-          todo: 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300', 
-          in_progress: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400', 
-          review: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400', 
-          completed: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400', 
-          cancelled: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' 
-        };
-        const labels: Record<string, string> = { 
-          todo: 'To Do', 
-          in_progress: 'In Progress', 
-          review: 'Review', 
-          completed: 'Completed', 
-          cancelled: 'Cancelled' 
-        };
+        const entity = task.linkedItem;
+        if (!entity) return <span className="text-slate-400">—</span>;
+        const Icon = ENTITY_ICONS[entity.type] || FileText;
         return (
-          <span className={clsx('inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-full', styles[task.status])}>
-            {labels[task.status] || task.status}
-          </span>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              navigateToEntity(entity.type, entity.id);
+            }}
+            className="flex items-center gap-2 text-sm group"
+          >
+            <Icon className="w-4 h-4 text-slate-400 flex-shrink-0" />
+            <span className="truncate text-blue-600 dark:text-blue-400 group-hover:underline">
+              {entity.name}
+            </span>
+          </button>
         );
       }
     },
+    // 4. Priority
+    { 
+      key: 'priority', 
+      header: 'Priority', 
+      sortable: true, 
+      width: 100,
+      minWidth: 80,
+      render: (task) => {
+        if (!task.priority) return <span className="text-slate-400">—</span>;
+        const priority = PRIORITIES.find(p => p.value === task.priority);
+        return priority ? (
+          <span className={clsx('inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full', priority.color)}>
+            {priority.label}
+          </span>
+        ) : null;
+      }
+    },
+    // 5. Contact Person (clickable)
+    { 
+      key: 'contactPerson', 
+      header: 'Contact Person', 
+      sortable: true,
+      width: 150,
+      minWidth: 100,
+      render: (task) => {
+        const contact = task.linkedContact;
+        if (!contact || contact.type !== 'contact') return <span className="text-slate-400">—</span>;
+        const fullContact = contacts.find(c => c.id === contact.id);
+        const name = fullContact ? `${fullContact.firstName} ${fullContact.lastName}`.trim() : contact.name;
+        return (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              navigateToEntity('contact', contact.id);
+            }}
+            className="flex items-center gap-2 group"
+          >
+            <div className="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+              <User className="w-3 h-3 text-blue-600 dark:text-blue-400" />
+            </div>
+            <span className="text-sm text-slate-700 dark:text-slate-300 truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 group-hover:underline">
+              {name}
+            </span>
+          </button>
+        );
+      }
+    },
+    // 6. Email
+    { 
+      key: 'email', 
+      header: 'Email', 
+      sortable: true,
+      width: 180,
+      minWidth: 120,
+      render: (task) => {
+        const contact = task.linkedContact;
+        if (!contact || contact.type !== 'contact') return <span className="text-slate-400">—</span>;
+        const fullContact = contacts.find(c => c.id === contact.id);
+        const email = fullContact?.email;
+        if (!email) return <span className="text-slate-400">—</span>;
+        return (
+          <a 
+            href={`mailto:${email}`} 
+            onClick={(e) => e.stopPropagation()}
+            className="text-sm text-blue-600 dark:text-blue-400 hover:underline truncate block"
+          >
+            {email}
+          </a>
+        );
+      }
+    },
+    // 7. Phone (use phoneOffice or phoneMobile)
+    { 
+      key: 'phone', 
+      header: 'Phone', 
+      sortable: true,
+      width: 140,
+      minWidth: 100,
+      render: (task) => {
+        const contact = task.linkedContact;
+        if (!contact || contact.type !== 'contact') return <span className="text-slate-400">—</span>;
+        const fullContact = contacts.find(c => c.id === contact.id);
+        // Prefer office phone, fall back to mobile
+        const phone = fullContact?.phoneOffice || fullContact?.phoneMobile;
+        if (!phone) return <span className="text-slate-400">—</span>;
+        return (
+          <a 
+            href={`tel:${phone}`}
+            onClick={(e) => e.stopPropagation()}
+            className="text-sm text-slate-600 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400"
+          >
+            {phone}
+          </a>
+        );
+      }
+    },
+    // 8. Company (clickable)
+    { 
+      key: 'company', 
+      header: 'Company', 
+      sortable: true,
+      width: 160,
+      minWidth: 100,
+      render: (task) => {
+        let companyId: string | undefined;
+        let companyName: string | undefined;
+
+        // Check if there's a direct company link
+        if (task.linkedContact?.type === 'company') {
+          const company = companies.find(c => c.id === task.linkedContact!.id);
+          companyId = company?.id;
+          companyName = company?.name;
+        } else if (task.linkedContact?.type === 'contact') {
+          // Look up company from contact
+          const contact = contacts.find(c => c.id === task.linkedContact!.id);
+          if (contact?.companyId) {
+            const company = companies.find(c => c.id === contact.companyId);
+            companyId = company?.id;
+            companyName = company?.name;
+          }
+        }
+
+        if (!companyId || !companyName) return <span className="text-slate-400">—</span>;
+        
+        return (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              navigateToEntity('company', companyId!);
+            }}
+            className="flex items-center gap-2 group"
+          >
+            <Building2 className="w-4 h-4 text-slate-400 flex-shrink-0" />
+            <span className="text-sm text-slate-700 dark:text-slate-300 truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 group-hover:underline">
+              {companyName}
+            </span>
+          </button>
+        );
+      }
+    },
+    // 9. Due Date
     { 
       key: 'dueDate', 
       header: 'Due Date', 
       sortable: true, 
-      width: 'w-28', 
+      width: 110,
+      minWidth: 90,
       render: (task) => {
         if (!task.dueDate) return <span className="text-slate-400">—</span>;
-        const isOverdue = parseLocalDate(task.dueDate) < new Date() && task.status !== 'completed';
-        return isOverdue ? (
-          <span className="text-sm text-red-600 font-semibold bg-red-50 dark:bg-red-900/20 px-2 py-0.5 rounded">
-            {formatDate(task.dueDate)}
-          </span>
-        ) : (
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const dueDate = parseLocalDate(task.dueDate);
+        const isOverdue = dueDate < today && task.status !== 'completed';
+        const isToday = dueDate.getTime() === today.getTime();
+        
+        if (isOverdue) {
+          return (
+            <span className="text-sm text-red-600 dark:text-red-400 font-medium">
+              {formatDate(task.dueDate)}
+            </span>
+          );
+        }
+        if (isToday) {
+          return (
+            <span className="text-sm text-amber-600 dark:text-amber-400 font-medium">
+              Today
+            </span>
+          );
+        }
+        return (
           <span className="text-sm text-slate-600 dark:text-slate-400">
             {formatDate(task.dueDate)}
           </span>
         );
       }
     },
+    // 10. Time
+    { 
+      key: 'dueTime', 
+      header: 'Time', 
+      sortable: true,
+      width: 80,
+      minWidth: 60,
+      render: (task) => {
+        if (!task.dueTime) return <span className="text-slate-400">—</span>;
+        return (
+          <span className="text-sm text-slate-600 dark:text-slate-400">
+            {task.dueTime}
+          </span>
+        );
+      }
+    },
+    // 11. Assigned User
     { 
       key: 'assignedUserName', 
       header: 'Assigned To', 
       sortable: true, 
-      width: 'w-36', 
-      render: (task) => task.assignedUserName ? (
-        <span className="text-sm text-slate-700 dark:text-slate-300">{task.assignedUserName}</span>
-      ) : (
-        <span className="text-slate-400">—</span>
-      )
-    },
-    { 
-      key: 'linkedContact', 
-      header: 'Contact / Company', 
-      width: 'w-40', 
+      width: 140,
+      minWidth: 100,
       render: (task) => {
-        const entity = task.linkedContact || task.linkedItem;
-        if (!entity) return <span className="text-slate-400">—</span>;
-        const Icon = ENTITY_ICONS[entity.type];
+        if (!task.assignedUserName) return <span className="text-slate-400">—</span>;
         return (
-          <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
-            <div className="w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center flex-shrink-0">
-              <Icon className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center flex-shrink-0 text-xs font-medium text-slate-600 dark:text-slate-300">
+              {task.assignedUserName.charAt(0).toUpperCase()}
             </div>
-            <span className="truncate">{entity.name}</span>
+            <span className="text-sm text-slate-700 dark:text-slate-300 truncate">{task.assignedUserName}</span>
           </div>
         );
       }
     },
-  ];
+  ], [taskTypes, contacts, companies, completeTask, reopenTask, toast, navigateToEntity]);
 
   // Handlers
   const handleSave = async (data: TaskInput, markDone?: boolean) => {
@@ -1284,7 +1921,8 @@ export function TasksPage() {
   return (
     <Page 
       title="Tasks" 
-      description="Manage tasks and activities" 
+      description="Manage tasks and activities"
+      fillHeight
       actions={
         <Button onClick={openNewPanel} size="sm">
           <Plus className="w-4 h-4 mr-1" />
@@ -1292,8 +1930,10 @@ export function TasksPage() {
         </Button>
       }
     >
-      {/* Filters Bar - A2 Design: Bordered with Blue Accents */}
-      <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 flex items-center gap-3 shadow-sm mb-4">
+      {/* Main Content Container - fills available height */}
+      <div className="flex flex-col h-full min-h-0">
+        {/* Filters Bar - A2 Design: Bordered with Blue Accents */}
+        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 flex items-center gap-3 shadow-sm mb-4 flex-shrink-0">
         {/* View Mode Toggle - Blue accent, matches dropdown height */}
         <div className="flex border border-slate-200 dark:border-slate-600 rounded-lg overflow-hidden h-[34px]">
           <button
@@ -1386,33 +2026,43 @@ export function TasksPage() {
         </span>
       </div>
 
-      {/* Content */}
-      {viewMode === 'list' ? (
-        <DataTable<Task> 
-          columns={taskColumns} 
-          data={filteredTasks} 
-          rowKey={(task) => task.id} 
-          onRowClick={(task) => openEditPanel(task)}
-          emptyState={
-            <CardContent className="p-12 text-center">
-              <Clock className="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600" />
-              <h3 className="mt-4 text-lg font-medium text-slate-900 dark:text-white">
-                No tasks yet
-              </h3>
-              <p className="mt-2 text-slate-500 dark:text-slate-400">
-                Get started by creating your first task
-              </p>
-            </CardContent>
-          } 
-        />
-      ) : (
-        <TaskCalendar 
-          tasks={filteredTasks} 
-          currentDate={currentDate} 
-          onDateChange={setCurrentDate} 
-          onTaskClick={handleCalendarTaskClick} 
-        />
-      )}
+      {/* Content - fills remaining height */}
+      <div className="flex-1 min-h-0">
+        {viewMode === 'list' ? (
+          <DataTable<Task> 
+            columns={taskColumns} 
+            data={filteredTasks} 
+            rowKey={(task) => task.id} 
+            onRowClick={(task) => openEditPanel(task)}
+            sortField={sortField}
+            sortDirection={sortDirection}
+            onSort={handleSort}
+            emptyState={
+              <CardContent className="p-12 text-center">
+                <Clock className="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600" />
+                <h3 className="mt-4 text-lg font-medium text-slate-900 dark:text-white">
+                  No tasks yet
+                </h3>
+                <p className="mt-2 text-slate-500 dark:text-slate-400">
+                  Get started by creating your first task
+                </p>
+              </CardContent>
+            } 
+          />
+        ) : (
+          <TaskCalendar 
+            tasks={filteredTasks} 
+            currentDate={currentDate} 
+            onDateChange={setCurrentDate} 
+            onTaskClick={handleCalendarTaskClick}
+            onTaskDrop={(taskId, newDate) => {
+              updateTask(taskId, { dueDate: newDate });
+              toast.success('Task Moved', `Due date changed to ${newDate}`);
+            }}
+          />
+        )}
+      </div>
+      </div>
 
       {/* Task Detail Panel */}
       <TaskDetailPanel 

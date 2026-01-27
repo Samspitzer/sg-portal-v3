@@ -12,7 +12,9 @@ import {
   CornerDownRight,
   AlertTriangle,
   CheckSquare,
-  GripVertical,
+  Handshake,
+  Target,
+  TrendingUp,
 } from 'lucide-react';
 import { Page } from '@/components/layout';
 import { Button, Input, Modal, Select, Toggle } from '@/components/common';
@@ -23,17 +25,41 @@ import { useTaskTypesStore, TASK_TYPE_ICONS, type TaskTypeConfig, type TaskTypeI
 import { useToast } from '@/contexts';
 import { useDocumentTitle } from '@/hooks';
 
-// Panel Section Header
-function PanelSectionHeader({ title, icon, description }: { title: string; icon: React.ReactNode; description?: string }) {
+// Panel Section Header with gradient icon - inside card style
+function PanelSectionHeader({ 
+  title, 
+  icon, 
+  description,
+  gradient = 'from-slate-600 to-slate-700',
+  children
+}: { 
+  title: string; 
+  icon: React.ReactNode; 
+  description?: string;
+  gradient?: string;
+  children?: React.ReactNode;
+}) {
   return (
-    <div className="flex items-center gap-3 py-4 mb-4">
-      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-700 flex items-center justify-center shadow-sm">
-        {icon}
+    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 mb-4">
+      {/* Header */}
+      <div className="flex items-center gap-3 p-4 border-b border-slate-200 dark:border-slate-700">
+        <div className={clsx(
+          'w-10 h-10 rounded-xl bg-gradient-to-br flex items-center justify-center shadow-md',
+          gradient
+        )}>
+          <span className="text-white">{icon}</span>
+        </div>
+        <div>
+          <h2 className="text-base font-semibold text-slate-900 dark:text-white">{title}</h2>
+          {description && <p className="text-xs text-slate-500 dark:text-slate-400">{description}</p>}
+        </div>
       </div>
-      <div>
-        <h2 className="text-base font-semibold text-slate-900 dark:text-white">{title}</h2>
-        {description && <p className="text-xs text-slate-500 dark:text-slate-400">{description}</p>}
-      </div>
+      {/* Content - subsections go here */}
+      {children && (
+        <div className="p-2">
+          {children}
+        </div>
+      )}
     </div>
   );
 }
@@ -85,81 +111,6 @@ function IconPicker({ value, onChange }: { value: TaskTypeIconName; onChange: (i
           </div>
         </>
       )}
-    </div>
-  );
-}
-
-// Task Type Row Component
-function TaskTypeRow({
-  taskType,
-  onEdit,
-  onDelete,
-  onToggleActive,
-}: {
-  taskType: TaskTypeConfig;
-  onEdit: () => void;
-  onDelete: () => void;
-  onToggleActive: () => void;
-}) {
-  return (
-    <div className={clsx(
-      'flex items-center gap-3 p-2.5 rounded-lg border transition-colors group',
-      'bg-white dark:bg-slate-900',
-      taskType.isActive
-        ? 'border-slate-200 dark:border-slate-700'
-        : 'border-slate-200 dark:border-slate-700 opacity-50'
-    )}>
-      {/* Drag handle */}
-      <div className="cursor-grab text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
-        <GripVertical className="w-4 h-4" />
-      </div>
-
-      {/* Icon */}
-      <div className={clsx(
-        'w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0',
-        'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
-      )}>
-        <TaskTypeIcon icon={taskType.icon} className="w-4 h-4" />
-      </div>
-
-      {/* Label & Value */}
-      <div className="flex-1 min-w-0">
-        <div className="font-medium text-sm text-slate-900 dark:text-white truncate">
-          {taskType.label}
-        </div>
-        <div className="text-xs text-slate-500 dark:text-slate-400 truncate">
-          {taskType.value}
-        </div>
-      </div>
-
-      {/* Status */}
-      <button
-        onClick={onToggleActive}
-        className={clsx(
-          'px-2 py-1 text-xs font-medium rounded-full transition-colors flex-shrink-0',
-          taskType.isActive
-            ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-            : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400'
-        )}
-      >
-        {taskType.isActive ? 'Active' : 'Inactive'}
-      </button>
-
-      {/* Actions */}
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-        <button
-          onClick={onEdit}
-          className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:text-slate-300 dark:hover:bg-slate-700 transition-colors"
-        >
-          <Edit2 className="w-3.5 h-3.5" />
-        </button>
-        <button
-          onClick={onDelete}
-          className="p-1.5 rounded-lg text-slate-400 hover:text-danger-600 hover:bg-danger-50 dark:hover:text-danger-400 dark:hover:bg-danger-900/20 transition-colors"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
-      </div>
     </div>
   );
 }
@@ -836,15 +787,14 @@ export function FieldSettingsPage() {
       title="Field Settings"
       description="Manage organizational structure and dropdown options."
     >
-      <div className="space-y-8">
+      <div className="space-y-6">
         {/* ============ ADMIN PANEL SECTION ============ */}
-        <section>
-          <PanelSectionHeader
-            title="Admin Panel"
-            icon={<Users className="w-5 h-5 text-slate-600 dark:text-slate-400" />}
-            description="Organization structure and user management"
-          />
-
+        <PanelSectionHeader
+          title="Admin Panel"
+          icon={<Users className="w-5 h-5" />}
+          description="Organization structure and user management"
+          gradient="from-blue-500 to-blue-600"
+        >
           <CollapsibleSection
             title="Organizational Structure"
             icon={<GitBranch className="w-4 h-4 text-brand-500" />}
@@ -872,16 +822,15 @@ export function FieldSettingsPage() {
               )}
             </div>
           </CollapsibleSection>
-        </section>
+        </PanelSectionHeader>
 
         {/* ============ TASKS PANEL SECTION ============ */}
-        <section>
-          <PanelSectionHeader
-            title="Tasks Panel"
-            icon={<CheckSquare className="w-5 h-5 text-slate-600 dark:text-slate-400" />}
-            description="Task types and categories"
-          />
-
+        <PanelSectionHeader
+          title="Tasks Panel"
+          icon={<CheckSquare className="w-5 h-5" />}
+          description="Task types and categories"
+          gradient="from-cyan-500 to-cyan-600"
+        >
           <CollapsibleSection
             title="Task Types"
             icon={<CheckSquare className="w-4 h-4 text-blue-500" />}
@@ -894,49 +843,77 @@ export function FieldSettingsPage() {
               </Button>
             }
           >
-            <div className="p-4">
+            <div className="p-3">
               {sortedTaskTypes.length === 0 ? (
-                <div className="text-center py-6">
-                  <CheckSquare className="w-10 h-10 mx-auto text-slate-300 dark:text-slate-600" />
+                <div className="text-center py-4">
+                  <CheckSquare className="w-8 h-8 mx-auto text-slate-300 dark:text-slate-600" />
                   <p className="mt-2 text-sm text-slate-500">No task types configured</p>
-                  <Button variant="primary" size="sm" className="mt-3" onClick={openAddTaskTypeModal}>
+                  <Button variant="primary" size="sm" className="mt-2" onClick={openAddTaskTypeModal}>
                     <Plus className="w-4 h-4 mr-1" />
                     Add Task Type
                   </Button>
                 </div>
               ) : (
-                <div className="space-y-2">
+                <div className="flex flex-wrap gap-2">
                   {sortedTaskTypes.map(taskType => (
-                    <TaskTypeRow
+                    <div
                       key={taskType.id}
-                      taskType={taskType}
-                      onEdit={() => openEditTaskTypeModal(taskType)}
-                      onDelete={() => setDeleteTarget({ type: 'taskType', id: taskType.id, name: taskType.label })}
-                      onToggleActive={() => handleToggleTaskTypeActive(taskType)}
-                    />
+                      className={clsx(
+                        'inline-flex items-center gap-2 px-3 py-1.5 rounded-full group transition-colors',
+                        taskType.isActive
+                          ? 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700'
+                          : 'bg-slate-50 dark:bg-slate-800/50 opacity-50'
+                      )}
+                    >
+                      <TaskTypeIcon icon={taskType.icon} className="w-4 h-4 text-blue-500" />
+                      <span className="text-sm text-slate-700 dark:text-slate-300">{taskType.label}</span>
+                      <button
+                        onClick={() => handleToggleTaskTypeActive(taskType)}
+                        className={clsx(
+                          'px-1.5 py-0.5 text-[10px] font-medium rounded-full transition-colors',
+                          taskType.isActive
+                            ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                            : 'bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-400'
+                        )}
+                      >
+                        {taskType.isActive ? 'Active' : 'Inactive'}
+                      </button>
+                      <button
+                        onClick={() => openEditTaskTypeModal(taskType)}
+                        className="p-0.5 opacity-0 group-hover:opacity-100 hover:bg-slate-300 dark:hover:bg-slate-600 rounded transition-all"
+                      >
+                        <Edit2 className="w-3 h-3 text-slate-500" />
+                      </button>
+                      <button
+                        onClick={() => setDeleteTarget({ type: 'taskType', id: taskType.id, name: taskType.label })}
+                        className="p-0.5 opacity-0 group-hover:opacity-100 hover:bg-danger-100 dark:hover:bg-danger-900/30 rounded transition-all"
+                      >
+                        <Trash2 className="w-3 h-3 text-slate-500 hover:text-danger-500" />
+                      </button>
+                    </div>
                   ))}
                 </div>
               )}
               
               {/* Tips */}
-              <div className="mt-4 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  <strong>Tips:</strong> Inactive types won't appear in task forms but existing tasks will keep their type. 
-                  The value field is used internally - avoid changing it after tasks use it.
-                </p>
-              </div>
+              {sortedTaskTypes.length > 0 && (
+                <div className="mt-3 p-2 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    <strong>Tips:</strong> Inactive types won't appear in task forms but existing tasks will keep their type.
+                  </p>
+                </div>
+              )}
             </div>
           </CollapsibleSection>
-        </section>
+        </PanelSectionHeader>
 
         {/* ============ CUSTOMERS PANEL SECTION ============ */}
-        <section>
-          <PanelSectionHeader
-            title="Customers Panel"
-            icon={<Building2 className="w-5 h-5 text-slate-600 dark:text-slate-400" />}
-            description="Contact and company fields"
-          />
-
+        <PanelSectionHeader
+          title="Customers Panel"
+          icon={<Building2 className="w-5 h-5" />}
+          description="Contact and company fields"
+          gradient="from-emerald-500 to-emerald-600"
+        >
           <CollapsibleSection
             title="Contact Roles"
             icon={<User className="w-4 h-4 text-accent-500" />}
@@ -985,7 +962,45 @@ export function FieldSettingsPage() {
               )}
             </div>
           </CollapsibleSection>
-        </section>
+        </PanelSectionHeader>
+
+        {/* ============ SALES PANEL SECTION ============ */}
+        <PanelSectionHeader
+          title="Sales Panel"
+          icon={<Handshake className="w-5 h-5" />}
+          description="Pipeline stages and deal settings"
+          gradient="from-teal-500 to-teal-600"
+        >
+          <CollapsibleSection
+            title="Pipeline Stages"
+            icon={<TrendingUp className="w-4 h-4 text-teal-500" />}
+            badge="Coming Soon"
+            defaultOpen={false}
+          >
+            <div className="p-4">
+              <div className="text-center py-6">
+                <TrendingUp className="w-10 h-10 mx-auto text-slate-300 dark:text-slate-600" />
+                <p className="mt-2 text-sm text-slate-500">Pipeline stages configuration coming soon</p>
+                <p className="text-xs text-slate-400 mt-1">Define stages like Lead, Qualified, Proposal, Negotiation, Closed</p>
+              </div>
+            </div>
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            title="Deal Sources"
+            icon={<Target className="w-4 h-4 text-teal-500" />}
+            badge="Coming Soon"
+            defaultOpen={false}
+          >
+            <div className="p-4">
+              <div className="text-center py-6">
+                <Target className="w-10 h-10 mx-auto text-slate-300 dark:text-slate-600" />
+                <p className="mt-2 text-sm text-slate-500">Deal source options coming soon</p>
+                <p className="text-xs text-slate-400 mt-1">Track where deals come from: Referral, Website, Cold Call, etc.</p>
+              </div>
+            </div>
+          </CollapsibleSection>
+        </PanelSectionHeader>
       </div>
 
       {/* ============ DEPARTMENT MODAL ============ */}
