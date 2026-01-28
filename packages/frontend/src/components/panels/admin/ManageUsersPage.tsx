@@ -17,7 +17,7 @@ import { Page } from '@/components/layout';
 import { 
   CardContent, Button, Input, Modal, SearchInput, Select, Toggle,
   DataTable, type DataTableColumn,
-  SelectFilter,
+  SelectFilter, FilterBar, FilterCount,
   UserDeactivationModal 
 } from '@/components/common';
 import { useToast, useFieldsStore, useUsersStore, useCompanyStore, type User } from '@/contexts';
@@ -723,76 +723,88 @@ export function ManageUsersPage() {
         </Button>
       }
     >
-      <DataTable
-        columns={columns}
-        data={filteredAndSortedUsers}
-        rowKey={(user) => user.id}
-        onRowClick={(user) => openUserDetail(user)}
-        sortField={sortField}
-        sortDirection={sortDirection}
-        onSort={handleSort}
-        filters={
-          <div className="flex flex-wrap items-center gap-3">
-            <SearchInput
-              value={search}
-              onChange={setSearch}
-              placeholder="Search users..."
-              className="w-full sm:w-64"
-            />
+      {/* Main Content Container - fills available height */}
+      <div className="flex flex-col h-full min-h-0">
+        {/* Filter Bar - matches Tasks page style */}
+        <FilterBar rightContent={<FilterCount count={filteredAndSortedUsers.length} singular="user" />}>
+          <SearchInput
+            value={search}
+            onChange={setSearch}
+            placeholder="Search users..."
+            className="w-48 [&_input]:h-[34px] [&_input]:text-sm"
+          />
+          <SelectFilter
+            label="Status"
+            value={statusFilter}
+            options={statusOptions}
+            onChange={setStatusFilter}
+            icon={UserCheck}
+            size="sm"
+            className="w-36"
+          />
+          <SelectFilter
+            label="Department"
+            value={departmentFilter}
+            options={departmentFilterOptions}
+            onChange={setDepartmentFilter}
+            icon={Users}
+            size="sm"
+            className="w-36"
+          />
+          {showOfficeColumn && (
             <SelectFilter
-              label="Status"
-              value={statusFilter}
-              options={statusOptions}
-              onChange={setStatusFilter}
-              icon={<UserCheck className="w-4 h-4" />}
+              label="Office"
+              value={officeFilter}
+              options={officeFilterOptions}
+              onChange={setOfficeFilter}
+              icon={MapPin}
+              size="sm"
+              className="w-36"
             />
-            <SelectFilter
-              label="Department"
-              value={departmentFilter}
-              options={departmentFilterOptions}
-              onChange={setDepartmentFilter}
-              icon={<Users className="w-4 h-4" />}
-            />
-            {showOfficeColumn && (
-              <SelectFilter
-                label="Office"
-                value={officeFilter}
-                options={officeFilterOptions}
-                onChange={setOfficeFilter}
-                icon={<MapPin className="w-4 h-4" />}
-              />
-            )}
-            {hasActiveFilters && (
-              <Button variant="ghost" size="sm" onClick={clearFilters}>
-                Clear filters
-              </Button>
-            )}
-          </div>
-        }
-        emptyState={
-          <CardContent className="p-12 text-center">
-            <Users className="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600" />
-            <h3 className="mt-4 text-lg font-medium text-slate-900 dark:text-white">
-              {hasActiveFilters ? 'No users found' : 'No users yet'}
-            </h3>
-            <p className="mt-2 text-slate-500 dark:text-slate-400">
-              {hasActiveFilters
-                ? 'Try adjusting your filters or search term'
-                : 'Get started by adding your first user'}
-            </p>
-            {!hasActiveFilters && (
-              <Button
-                variant="primary"
-                className="mt-4"
-                onClick={() => setIsModalOpen(true)}
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Add User
-              </Button>
-            )}
-          </CardContent>
-        }
-      />
+          )}
+          {hasActiveFilters && (
+            <Button variant="ghost" size="sm" onClick={clearFilters}>
+              Clear filters
+            </Button>
+          )}
+        </FilterBar>
+
+        {/* Data Table - fills remaining height */}
+        <div className="flex-1 min-h-0">
+          <DataTable
+            columns={columns}
+            data={filteredAndSortedUsers}
+            rowKey={(user) => user.id}
+            onRowClick={(user) => openUserDetail(user)}
+            sortField={sortField}
+            sortDirection={sortDirection}
+            onSort={handleSort}
+            emptyState={
+              <CardContent className="p-12 text-center">
+                <Users className="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600" />
+                <h3 className="mt-4 text-lg font-medium text-slate-900 dark:text-white">
+                  {hasActiveFilters ? 'No users found' : 'No users yet'}
+                </h3>
+                <p className="mt-2 text-slate-500 dark:text-slate-400">
+                  {hasActiveFilters
+                    ? 'Try adjusting your filters or search term'
+                    : 'Get started by adding your first user'}
+                </p>
+                {!hasActiveFilters && (
+                  <Button
+                    variant="primary"
+                    className="mt-4"
+                    onClick={() => setIsModalOpen(true)}
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add User
+                  </Button>
+                )}
+              </CardContent>
+            }
+          />
+        </div>
+      </div>
 
       {/* Add User Modal */}
       <AddUserModal

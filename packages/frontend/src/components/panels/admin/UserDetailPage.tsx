@@ -1,6 +1,6 @@
 // PATH: src/components/panels/admin/UserDetailPage.tsx
 
-import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { clsx } from 'clsx';
 import {
   User,
@@ -19,9 +19,6 @@ import {
   DollarSign,
   ChevronRight,
   AlertCircle,
-  Check,
-  X,
-  Pencil,
   GitBranch,
   Lock,
   Unlock,
@@ -30,14 +27,14 @@ import {
 } from 'lucide-react';
 import { Page } from '@/components/layout';
 import { 
-  Button, ConfirmModal, Input, Toggle, SelectFilter,
-  PositionSelector, CollapsibleSection, UserDeactivationModal, SectionHeader
+  Button, ConfirmModal, Toggle, SelectFilter,
+  PositionSelector, CollapsibleSection, UserDeactivationModal, SectionHeader,
+  InlineEditField
 } from '@/components/common';
 import { useUsersStore, useFieldsStore, useCompanyStore, useClientsStore, useToast, useNavigationGuardStore } from '@/contexts';
 import { getUserDependencies, type DependencyCategory } from '@/contexts/userDependencyRegistry';
 import { useDocumentTitle, useUserBySlug, useSafeNavigate } from '@/hooks';
 import { useNavigate } from 'react-router-dom';
-import { validateEmail, validatePhone, formatPhoneNumber } from '@/utils/validation';
 
 const categoryIcons: Record<string, React.ElementType> = {
   Building2,
@@ -49,76 +46,6 @@ const categoryIcons: Record<string, React.ElementType> = {
 
 function getCategoryIcon(iconName: string): React.ElementType {
   return categoryIcons[iconName] || FileText;
-}
-
-function InlineField({
-  label, value, onSave, type = 'text', placeholder, disabled = false, icon, onEditingChange,
-}: {
-  label: string; value: string; onSave: (value: string) => void; type?: 'text' | 'email' | 'tel';
-  placeholder?: string; disabled?: boolean; icon?: React.ReactNode;
-  onEditingChange?: (isEditing: boolean, hasChanges: boolean) => void;
-}) {
-  const [isEditing, setIsEditing] = useState(false);
-  const [editValue, setEditValue] = useState(value);
-  const [error, setError] = useState<string | null>(null);
-  const toast = useToast();
-  const onEditingChangeRef = useRef(onEditingChange);
-  onEditingChangeRef.current = onEditingChange;
-
-  useEffect(() => { setEditValue(value); }, [value]);
-  const hasChanges = editValue !== value;
-  useEffect(() => { onEditingChangeRef.current?.(isEditing, hasChanges); }, [isEditing, hasChanges]);
-
-  const validate = (val: string): string | null => {
-    if (type === 'email' && val && !validateEmail(val)) return 'Invalid email address';
-    if (type === 'tel' && val && !validatePhone(val)) return 'Invalid phone number';
-    return null;
-  };
-
-  const handleSave = () => {
-    const validationError = validate(editValue);
-    if (validationError) { setError(validationError); toast.error('Validation Error', validationError); return; }
-    const finalValue = type === 'tel' && editValue ? formatPhoneNumber(editValue) : editValue;
-    onSave(finalValue); setIsEditing(false); setError(null);
-  };
-
-  const handleCancel = () => { setEditValue(value); setIsEditing(false); setError(null); };
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') { e.preventDefault(); handleSave(); }
-    else if (e.key === 'Escape') { handleCancel(); }
-  };
-
-  if (isEditing) {
-    return (
-      <div className="space-y-1">
-        <label className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</label>
-        <div className="flex items-center gap-2">
-          <Input type={type} value={editValue} onChange={(e) => { setEditValue(e.target.value); setError(validate(e.target.value)); }}
-            onKeyDown={handleKeyDown} error={error || undefined} placeholder={placeholder} autoFocus className="flex-1" disableAutoValidation />
-          <button onClick={handleSave} className="p-1.5 text-success-600 hover:bg-success-50 dark:hover:bg-success-900/20 rounded transition-colors">
-            <Check className="w-4 h-4" />
-          </button>
-          <button onClick={handleCancel} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className={clsx('group cursor-pointer -mx-2 px-2 py-1.5 rounded-lg transition-colors', !disabled && 'hover:bg-slate-50 dark:hover:bg-slate-800/50')}
-      onClick={() => !disabled && setIsEditing(true)}>
-      <div className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</div>
-      <div className="flex items-center gap-2 mt-0.5">
-        {icon && <span className="text-slate-400">{icon}</span>}
-        <span className={clsx('text-sm', value ? 'text-slate-900 dark:text-white' : 'text-slate-400 italic')}>
-          {value || placeholder || `Add ${label.toLowerCase()}...`}
-        </span>
-        {!disabled && <Pencil className="w-3 h-3 text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity ml-auto" />}
-      </div>
-    </div>
-  );
 }
 
 function FormSelectField({ label, value, options, onChange, placeholder = 'Select...', disabled = false, icon }: {
@@ -584,12 +511,12 @@ export function UserDetailPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 space-y-4">
           <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
-            <SectionHeader title="Basic Information" icon={<User className="w-4 h-4 text-slate-500" />} />
+            <SectionHeader title="Basic Information" icon={User} />
             <div className="p-4 bg-white dark:bg-slate-900">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <InlineField label="Full Name" value={user.name} onSave={(v) => handleFieldSave('name', v)} placeholder="Enter name" icon={<User className="w-3.5 h-3.5" />} onEditingChange={handleEditingChange('name')} />
-                <InlineField label="Email" value={user.email} onSave={(v) => handleFieldSave('email', v)} type="email" placeholder="Enter email" icon={<Mail className="w-3.5 h-3.5" />} onEditingChange={handleEditingChange('email')} />
-                <InlineField label="Phone" value={user.phone || ''} onSave={(v) => handleFieldSave('phone', v)} type="tel" placeholder="Enter phone" icon={<Phone className="w-3.5 h-3.5" />} onEditingChange={handleEditingChange('phone')} />
+                <InlineEditField label="Full Name" value={user.name} onSave={(v) => handleFieldSave('name', v)} placeholder="Enter name" icon={User} onEditingChange={handleEditingChange('name')} />
+                <InlineEditField label="Email" value={user.email} onSave={(v) => handleFieldSave('email', v)} type="email" placeholder="Enter email" icon={Mail} onEditingChange={handleEditingChange('email')} />
+                <InlineEditField label="Phone" value={user.phone || ''} onSave={(v) => handleFieldSave('phone', v)} type="tel" placeholder="Enter phone" icon={Phone} onEditingChange={handleEditingChange('phone')} />
                 <div className="space-y-1">
                   <label className="text-xs font-medium text-slate-500 dark:text-slate-400">Status</label>
                   <div className="flex items-center gap-3">
@@ -604,7 +531,7 @@ export function UserDetailPage() {
             </div>
           </div>
           
-          <CollapsibleSection title="Department & Position" icon={<Briefcase className="w-4 h-4 text-slate-500" />} defaultOpen={true}>
+          <CollapsibleSection title="Department & Position" icon={Briefcase} defaultOpen={true}>
             <div className="p-4 space-y-4">
               <div className={clsx("grid gap-4", showOffice ? "grid-cols-1 sm:grid-cols-3" : "grid-cols-1 sm:grid-cols-2")}>
                 <FormSelectField label="Department" value={user.departmentId || ''} options={departmentOptions} onChange={(v) => handleFieldSave('departmentId', v)} placeholder="Select department" icon={<Building2 className="w-3.5 h-3.5" />} />
@@ -680,7 +607,7 @@ export function UserDetailPage() {
             </div>
           </CollapsibleSection>
           
-          <CollapsibleSection title="Permissions" icon={<Shield className="w-4 h-4 text-slate-500" />} defaultOpen={false} badge={userPosition ? 'From position' : undefined}>
+          <CollapsibleSection title="Permissions" icon={Shield} defaultOpen={false} badge={userPosition ? 'From position' : undefined}>
             <div className="p-4">
               {userPosition ? (
                 <>
@@ -709,7 +636,7 @@ export function UserDetailPage() {
         
         <div className="space-y-4">
           <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
-            <SectionHeader title="Assigned Items" icon={<Briefcase className="w-4 h-4 text-slate-500" />}
+            <SectionHeader title="Assigned Items" icon={Briefcase}
               action={dependencies.totalCount > 0 && <span className="px-2 py-0.5 text-xs font-medium bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 rounded-full">{dependencies.totalCount}</span>} />
             <div className="bg-white dark:bg-slate-900">
               <AssignedItemsSection categories={dependencies.categories} totalCount={dependencies.totalCount} userId={user.id} />

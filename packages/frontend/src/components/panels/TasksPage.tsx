@@ -24,7 +24,8 @@ import { Page } from '@/components/layout';
 import { 
   Card, CardContent, Button, SelectFilter, Textarea, SearchInput,
   DataTable, type DataTableColumn, DatePicker, TimePicker, UnsavedChangesModal,
-  Input, Toggle, TaskTypeIcon
+  Input, Toggle, TaskTypeIcon, EntitySearchDropdown, type EntitySearchItem,
+  FilterBar, FilterCount, FilterToggle, QuickFilters, type QuickFilterOption
 } from '@/components/common';
 import { useUsersStore, useClientsStore, useToast } from '@/contexts';
 import { 
@@ -63,111 +64,33 @@ function CompanySearch({
   onCompanySelected?: (companyId: string | null) => void;
 }) {
   const { companies } = useClientsStore();
-  const [search, setSearch] = useState('');
-  const [isOpen, setIsOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
 
-  const filteredCompanies = useMemo(() => {
-    const items = companies.map(c => ({ 
-      type: 'company' as const, 
-      id: c.id, 
-      name: c.name 
-    }));
-    if (!search.trim()) return items.slice(0, 10);
-    return items
-      .filter(item => item.name.toLowerCase().includes(search.toLowerCase()))
-      .slice(0, 10);
-  }, [search, companies]);
+  const companyItems: EntitySearchItem[] = useMemo(() => 
+    companies.map(c => ({ id: c.id, name: c.name })),
+    [companies]
+  );
 
-  const { highlightedIndex, handleKeyDown, resetHighlight } = useDropdownKeyboard({
-    items: filteredCompanies,
-    isOpen,
-    onSelect: (item) => {
-      if (item) {
-        onChange({ type: 'company', id: item.id, name: item.name });
-        onCompanySelected?.(item.id);
-        setSearch('');
-        setIsOpen(false);
-        resetHighlight();
-      }
-    },
-    onClose: () => {
-      setIsOpen(false);
-      resetHighlight();
-    },
-  });
+  const handleChange = (item: EntitySearchItem | null) => {
+    if (item) {
+      onChange({ type: 'company', id: item.id, name: item.name });
+      onCompanySelected?.(item.id);
+    } else {
+      onChange(null);
+      onCompanySelected?.(null);
+    }
+  };
 
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
-        resetHighlight();
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [resetHighlight]);
+  const selectedItem = value ? { id: value.id, name: value.name } : null;
 
   return (
-    <div className="space-y-1.5">
-      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-        Company
-      </label>
-      {value ? (
-        <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg">
-          <Building2 className="w-4 h-4 text-slate-400" />
-          <span className="flex-1 text-sm text-slate-900 dark:text-white truncate">{value.name}</span>
-          <button 
-            type="button" 
-            onClick={() => {
-              onChange(null);
-              onCompanySelected?.(null);
-            }} 
-            className="text-slate-400 hover:text-red-500 transition-colors"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      ) : (
-        <div ref={containerRef} className="relative">
-          <Input
-            value={search}
-            onChange={(e) => { setSearch(e.target.value); setIsOpen(true); resetHighlight(); }}
-            onFocus={() => setIsOpen(true)}
-            onKeyDown={handleKeyDown}
-            placeholder="Search companies..."
-            leftIcon={<Search className="w-4 h-4" />}
-            disableAutoValidation
-          />
-          {isOpen && filteredCompanies.length > 0 && (
-            <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-50 max-h-48 overflow-y-auto">
-              {filteredCompanies.map((item, index) => (
-                <button 
-                  key={item.id} 
-                  type="button" 
-                  onClick={() => { 
-                    onChange({ type: 'company', id: item.id, name: item.name });
-                    onCompanySelected?.(item.id);
-                    setSearch(''); 
-                    setIsOpen(false);
-                    resetHighlight();
-                  }}
-                  className={clsx(
-                    'w-full flex items-center gap-2 px-3 py-2 text-left transition-colors',
-                    index === highlightedIndex 
-                      ? 'bg-slate-100 dark:bg-slate-700' 
-                      : 'hover:bg-slate-50 dark:hover:bg-slate-700'
-                  )}
-                >
-                  <Building2 className="w-4 h-4 text-slate-400" />
-                  <span className="flex-1 text-sm text-slate-900 dark:text-white truncate">{item.name}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
+    <EntitySearchDropdown
+      label="Company"
+      value={selectedItem}
+      onChange={handleChange}
+      items={companyItems}
+      placeholder="Search companies..."
+      icon={Building2}
+    />
   );
 }
 
@@ -187,135 +110,53 @@ function ContactSearch({
   onContactSelected?: (contact: { id: string; companyId: string; name: string } | null) => void;
 }) {
   const { contacts, companies } = useClientsStore();
-  const [search, setSearch] = useState('');
-  const [isOpen, setIsOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
 
-  // Filter contacts by company if companyId is set
-  const filteredContacts = useMemo(() => {
+  const contactItems: EntitySearchItem[] = useMemo(() => {
     let contactList = contacts;
     
-    // If company is selected, only show contacts from that company
+    // Filter by company if set
     if (companyId) {
       contactList = contacts.filter(c => c.companyId === companyId);
     }
     
-    const items = contactList.map(c => {
+    return contactList.map(c => {
       const company = companies.find(comp => comp.id === c.companyId);
       return { 
-        type: 'contact' as const, 
         id: c.id, 
         name: `${c.firstName} ${c.lastName}`.trim() || 'Unnamed',
-        companyId: c.companyId,
-        companyName: company?.name || '',
+        subtitle: !companyId && company?.name ? company.name : undefined,
+        metadata: { companyId: c.companyId }
       };
     });
-    
-    if (!search.trim()) return items.slice(0, 10);
-    return items
-      .filter(item => item.name.toLowerCase().includes(search.toLowerCase()))
-      .slice(0, 10);
-  }, [search, contacts, companies, companyId]);
+  }, [contacts, companies, companyId]);
 
-  const { highlightedIndex, handleKeyDown, resetHighlight } = useDropdownKeyboard({
-    items: filteredContacts,
-    isOpen,
-    onSelect: (item) => {
-      if (item) {
-        onChange({ type: 'contact', id: item.id, name: item.name });
-        onContactSelected?.({ id: item.id, companyId: item.companyId, name: item.name });
-        setSearch('');
-        setIsOpen(false);
-        resetHighlight();
-      }
-    },
-    onClose: () => {
-      setIsOpen(false);
-      resetHighlight();
-    },
-  });
+  const handleChange = (item: EntitySearchItem | null) => {
+    if (item) {
+      onChange({ type: 'contact', id: item.id, name: item.name });
+      onContactSelected?.({ 
+        id: item.id, 
+        companyId: (item.metadata?.companyId as string) || '', 
+        name: item.name 
+      });
+    } else {
+      onChange(null);
+      onContactSelected?.(null);
+    }
+  };
 
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
-        resetHighlight();
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [resetHighlight]);
+  const selectedItem = value ? { id: value.id, name: value.name } : null;
 
   return (
-    <div className="space-y-1.5">
-      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-        Contact {companyId && <span className="text-xs text-slate-400">(filtered by company)</span>}
-      </label>
-      {value ? (
-        <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg">
-          <User className="w-4 h-4 text-slate-400" />
-          <span className="flex-1 text-sm text-slate-900 dark:text-white truncate">{value.name}</span>
-          <button 
-            type="button" 
-            onClick={() => {
-              onChange(null);
-              onContactSelected?.(null);
-            }} 
-            className="text-slate-400 hover:text-red-500 transition-colors"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      ) : (
-        <div ref={containerRef} className="relative">
-          <Input
-            value={search}
-            onChange={(e) => { setSearch(e.target.value); setIsOpen(true); resetHighlight(); }}
-            onFocus={() => setIsOpen(true)}
-            onKeyDown={handleKeyDown}
-            placeholder={companyId ? "Search contacts from this company..." : "Search all contacts..."}
-            leftIcon={<Search className="w-4 h-4" />}
-            disableAutoValidation
-          />
-          {isOpen && filteredContacts.length > 0 && (
-            <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-50 max-h-48 overflow-y-auto">
-              {filteredContacts.map((item, index) => (
-                <button 
-                  key={item.id} 
-                  type="button" 
-                  onClick={() => { 
-                    onChange({ type: 'contact', id: item.id, name: item.name });
-                    onContactSelected?.({ id: item.id, companyId: item.companyId, name: item.name });
-                    setSearch(''); 
-                    setIsOpen(false);
-                    resetHighlight();
-                  }}
-                  className={clsx(
-                    'w-full flex items-center gap-2 px-3 py-2 text-left transition-colors',
-                    index === highlightedIndex 
-                      ? 'bg-slate-100 dark:bg-slate-700' 
-                      : 'hover:bg-slate-50 dark:hover:bg-slate-700'
-                  )}
-                >
-                  <User className="w-4 h-4 text-slate-400" />
-                  <div className="flex-1 min-w-0">
-                    <span className="text-sm text-slate-900 dark:text-white truncate block">{item.name}</span>
-                    {item.companyName && !companyId && (
-                      <span className="text-xs text-slate-400 truncate block">{item.companyName}</span>
-                    )}
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-          {isOpen && filteredContacts.length === 0 && search && (
-            <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-50 p-3 text-center text-sm text-slate-500">
-              No contacts found
-            </div>
-          )}
-        </div>
-      )}
-    </div>
+    <EntitySearchDropdown
+      label="Contact"
+      value={selectedItem}
+      onChange={handleChange}
+      items={contactItems}
+      placeholder={companyId ? "Search contacts from this company..." : "Search all contacts..."}
+      icon={User}
+      labelSuffix={companyId ? "(filtered by company)" : undefined}
+      emptyMessage="No contacts found"
+    />
   );
 }
 
@@ -326,11 +167,25 @@ function ContactSearch({
 function DayScheduleSidebar({ 
   date,
   tasks,
+  onDateChange,
 }: { 
   date: string;
   tasks: Task[];
+  onDateChange?: (date: string) => void;
 }) {
-  // Filter tasks for this date
+  const [currentMonth, setCurrentMonth] = useState(() => {
+    if (date) return parseLocalDate(date);
+    return new Date();
+  });
+
+  // Update current month when date changes
+  useEffect(() => {
+    if (date) {
+      setCurrentMonth(parseLocalDate(date));
+    }
+  }, [date]);
+
+  // Filter tasks for the selected date
   const dayTasks = useMemo(() => {
     if (!date) return [];
     return tasks
@@ -343,93 +198,163 @@ function DayScheduleSidebar({
       });
   }, [date, tasks]);
 
-  // Generate time slots from 6 AM to 9 PM
-  const timeSlots = useMemo(() => {
-    const slots: string[] = [];
-    for (let hour = 6; hour <= 21; hour++) {
-      const ampm = hour >= 12 ? 'PM' : 'AM';
-      const displayHour = hour > 12 ? hour - 12 : hour;
-      slots.push(`${displayHour} ${ampm}`);
+  // Get tasks for the current month view
+  const tasksByDate = useMemo(() => {
+    const map = new Map<string, number>();
+    tasks.forEach(t => {
+      if (t.dueDate && t.status !== 'completed' && t.status !== 'cancelled') {
+        map.set(t.dueDate, (map.get(t.dueDate) || 0) + 1);
+      }
+    });
+    return map;
+  }, [tasks]);
+
+  // Generate calendar days
+  const calendarDays = useMemo(() => {
+    const year = currentMonth.getFullYear();
+    const month = currentMonth.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const startPadding = firstDay.getDay();
+    const days: { date: Date; isCurrentMonth: boolean }[] = [];
+
+    // Previous month padding
+    for (let i = startPadding - 1; i >= 0; i--) {
+      const d = new Date(year, month, -i);
+      days.push({ date: d, isCurrentMonth: false });
     }
-    return slots;
-  }, []);
 
-  if (!date) {
-    return (
-      <div className="w-64 border-l border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-4 flex flex-col items-center justify-center text-center">
-        <CalendarIcon className="w-8 h-8 text-slate-300 dark:text-slate-600 mb-2" />
-        <p className="text-sm text-slate-500 dark:text-slate-400">Select a due date to see your schedule</p>
-      </div>
-    );
-  }
+    // Current month
+    for (let i = 1; i <= lastDay.getDate(); i++) {
+      days.push({ date: new Date(year, month, i), isCurrentMonth: true });
+    }
 
-  const dateObj = parseLocalDate(date);
-  const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'long' });
-  const monthDay = dateObj.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+    // Next month padding
+    const remaining = 42 - days.length;
+    for (let i = 1; i <= remaining; i++) {
+      days.push({ date: new Date(year, month + 1, i), isCurrentMonth: false });
+    }
+
+    return days;
+  }, [currentMonth]);
+
+  const formatDateStr = (d: Date) => {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
+  const today = new Date();
+  const todayStr = formatDateStr(today);
+
+  const goToPrevMonth = () => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1));
+  const goToNextMonth = () => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
 
   return (
-    <div className="w-64 border-l border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 flex flex-col">
-      {/* Header */}
-      <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700">
-        <p className="text-sm font-medium text-slate-900 dark:text-white">{dayName}</p>
-        <p className="text-xs text-slate-500 dark:text-slate-400">{monthDay}</p>
-      </div>
-      
-      {/* Schedule */}
-      <div className="flex-1 overflow-y-auto">
-        {/* All-day / no-time tasks */}
-        {dayTasks.filter(t => !t.dueTime).length > 0 && (
-          <div className="border-b border-slate-200 dark:border-slate-700">
-            <div className="px-2 py-1 text-xs font-medium text-slate-500 bg-slate-100 dark:bg-slate-700">
-              All Day
+    <div className="w-72 border-l border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 flex flex-col">
+      {/* Mini Calendar */}
+      <div className="p-3 border-b border-slate-200 dark:border-slate-700">
+        {/* Month Navigation */}
+        <div className="flex items-center justify-between mb-3">
+          <button 
+            onClick={goToPrevMonth}
+            className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors"
+          >
+            <ChevronLeft className="w-4 h-4 text-slate-500" />
+          </button>
+          <span className="text-sm font-medium text-slate-900 dark:text-white">
+            {currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+          </span>
+          <button 
+            onClick={goToNextMonth}
+            className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors"
+          >
+            <ChevronRight className="w-4 h-4 text-slate-500" />
+          </button>
+        </div>
+
+        {/* Day Headers */}
+        <div className="grid grid-cols-7 gap-0.5 mb-1">
+          {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, i) => (
+            <div key={i} className="text-center text-xs font-medium text-slate-400 py-1">
+              {day}
             </div>
-            {dayTasks.filter(t => !t.dueTime).map(task => (
-              <div 
-                key={task.id}
-                className="mx-2 my-1 px-2 py-1 bg-blue-100 dark:bg-blue-900/30 rounded text-xs text-blue-700 dark:text-blue-300 truncate"
-              >
-                {task.title}
-              </div>
-            ))}
-          </div>
-        )}
-        
-        {/* Time slots */}
-        <div className="relative">
-          {timeSlots.map((slot, index) => {
-            const tasksForHour = dayTasks.filter(t => {
-              if (!t.dueTime) return false;
-              const taskHour = parseInt(t.dueTime.split(':')[0] || '0', 10);
-              return taskHour === index + 6;
-            });
-            
+          ))}
+        </div>
+
+        {/* Calendar Grid */}
+        <div className="grid grid-cols-7 gap-0.5">
+          {calendarDays.map(({ date: d, isCurrentMonth }, i) => {
+            const dateStr = formatDateStr(d);
+            const isSelected = dateStr === date;
+            const isToday = dateStr === todayStr;
+            const taskCount = tasksByDate.get(dateStr) || 0;
+
             return (
-              <div key={slot} className="flex border-b border-slate-100 dark:border-slate-700/50">
-                <div className="w-12 py-2 text-right pr-2 text-xs text-slate-400 flex-shrink-0">
-                  {slot}
-                </div>
-                <div className="flex-1 py-1 min-h-[40px]">
-                  {tasksForHour.map(task => (
-                    <div 
-                      key={task.id}
-                      className="mx-1 px-2 py-1 bg-blue-500 text-white rounded text-xs truncate mb-0.5"
-                      title={task.title}
-                    >
-                      <Clock className="w-3 h-3 inline mr-1" />
-                      {task.title}
-                    </div>
-                  ))}
-                </div>
-              </div>
+              <button
+                key={i}
+                onClick={() => onDateChange?.(dateStr)}
+                className={clsx(
+                  'relative h-8 text-xs rounded transition-colors',
+                  isCurrentMonth 
+                    ? 'text-slate-700 dark:text-slate-300' 
+                    : 'text-slate-400 dark:text-slate-600',
+                  isSelected 
+                    ? 'bg-blue-600 text-white font-medium' 
+                    : isToday
+                      ? 'bg-blue-100 dark:bg-blue-900/30 font-medium'
+                      : 'hover:bg-slate-200 dark:hover:bg-slate-700'
+                )}
+              >
+                {d.getDate()}
+                {taskCount > 0 && !isSelected && (
+                  <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-blue-500" />
+                )}
+              </button>
             );
           })}
         </div>
       </div>
-      
-      {/* Footer hint */}
-      <div className="px-3 py-2 border-t border-slate-200 dark:border-slate-700 text-xs text-slate-400 text-center">
-        Calendar sync coming soon
-      </div>
+
+      {/* Schedule for Selected Date */}
+      {date ? (
+        <>
+          <div className="px-3 py-2 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+            <p className="text-sm font-medium text-slate-900 dark:text-white">
+              {parseLocalDate(date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+            </p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              {dayTasks.length} task{dayTasks.length !== 1 ? 's' : ''} scheduled
+            </p>
+          </div>
+          
+          <div className="flex-1 overflow-y-auto p-2 space-y-1">
+            {dayTasks.length === 0 ? (
+              <p className="text-xs text-slate-400 text-center py-4">No tasks scheduled</p>
+            ) : (
+              dayTasks.map(task => (
+                <div 
+                  key={task.id}
+                  className="px-2 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg"
+                >
+                  <p className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate">
+                    {task.title}
+                  </p>
+                  {task.dueTime && (
+                    <p className="text-xs text-slate-400 flex items-center gap-1 mt-0.5">
+                      <Clock className="w-3 h-3" />
+                      {task.dueTime}
+                    </p>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </>
+      ) : (
+        <div className="flex-1 flex flex-col items-center justify-center p-4 text-center">
+          <CalendarIcon className="w-8 h-8 text-slate-300 dark:text-slate-600 mb-2" />
+          <p className="text-sm text-slate-500 dark:text-slate-400">Select a due date to see your schedule</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -828,13 +753,13 @@ export function TaskDetailPanel({
           </div>
 
           {/* Content */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-5">
+          <div className="flex-1 overflow-y-auto p-6 space-y-6">
             {/* Task Title */}
             <Input
               value={formData.title}
               onChange={e => setFormData(d => ({ ...d, title: e.target.value }))}
               placeholder="Task title..."
-              className="text-xl font-medium"
+              className="text-lg font-medium [&_input]:py-3"
               disableAutoValidation
             />
             
@@ -849,9 +774,12 @@ export function TaskDetailPanel({
                 taskTypes={taskTypes} 
               />
             </div>
+
+            {/* Divider */}
+            <div className="border-t border-slate-200 dark:border-slate-700" />
             
-            {/* Due Date & Time - Row 1 */}
-            <div className="grid grid-cols-2 gap-4">
+            {/* Due Date, Time & Assigned To - Single Row */}
+            <div className="grid grid-cols-3 gap-4">
               <DatePicker 
                 label="Due Date" 
                 value={formData.dueDate || ''} 
@@ -862,35 +790,6 @@ export function TaskDetailPanel({
                 value={formData.dueTime || ''} 
                 onChange={v => setFormData(d => ({ ...d, dueTime: v }))} 
               />
-            </div>
-            
-            {/* Priority & Assigned To - Row 2 */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                  Priority
-                </label>
-                <div className="flex items-center gap-2 flex-wrap">
-                  {PRIORITIES.map(p => (
-                    <button 
-                      key={p.value} 
-                      type="button" 
-                      onClick={() => setFormData(d => ({ 
-                        ...d, 
-                        priority: d.priority === p.value ? undefined : p.value 
-                      }))}
-                      className={clsx(
-                        'px-3 py-1.5 rounded-lg text-sm font-medium transition-all', 
-                        formData.priority === p.value 
-                          ? p.color + ' ring-2 ring-offset-1 ring-blue-500' 
-                          : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-600'
-                      )}
-                    >
-                      {p.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
               <SelectFilter
                 label="Assigned To"
                 value={formData.assignedUserId}
@@ -903,7 +802,37 @@ export function TaskDetailPanel({
               />
             </div>
             
-            {/* Company & Contact - Row 3 (linked) */}
+            {/* Priority */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                Priority
+              </label>
+              <div className="flex items-center gap-2">
+                {PRIORITIES.map(p => (
+                  <button 
+                    key={p.value} 
+                    type="button" 
+                    onClick={() => setFormData(d => ({ 
+                      ...d, 
+                      priority: d.priority === p.value ? undefined : p.value 
+                    }))}
+                    className={clsx(
+                      'px-4 py-2 rounded-lg text-sm font-medium transition-all', 
+                      formData.priority === p.value 
+                        ? p.color + ' ring-2 ring-offset-1 ring-blue-500' 
+                        : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-600'
+                    )}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Divider */}
+            <div className="border-t border-slate-200 dark:border-slate-700" />
+            
+            {/* Company & Contact - Row */}
             <div className="grid grid-cols-2 gap-4">
               <CompanySearch 
                 value={linkedCompany} 
@@ -935,18 +864,21 @@ export function TaskDetailPanel({
               />
             </div>
             
-            {/* Link to Item - Row 4 */}
+            {/* Link to Item */}
             <ItemSearch 
               value={formData.linkedItem || null} 
               onChange={v => setFormData(d => ({ ...d, linkedItem: v }))} 
             />
+
+            {/* Divider */}
+            <div className="border-t border-slate-200 dark:border-slate-700" />
             
             {/* Notes */}
             <Textarea
               label="Notes"
               value={formData.notes || ''}
               onChange={e => setFormData(d => ({ ...d, notes: e.target.value }))}
-              rows={3}
+              rows={4}
               placeholder="Add notes..."
             />
             
@@ -993,10 +925,11 @@ export function TaskDetailPanel({
           </div>
           </div>
           
-          {/* Day Schedule Sidebar */}
+          {/* Day Schedule Sidebar with Mini Calendar */}
           <DayScheduleSidebar 
             date={formData.dueDate || ''} 
-            tasks={allTasks} 
+            tasks={allTasks}
+            onDateChange={(newDate) => setFormData(d => ({ ...d, dueDate: newDate }))}
           />
         </div>
       </div>
@@ -1361,38 +1294,8 @@ export function TasksPage() {
     navigate(routes[type] || '/');
   }, [navigate]);
 
-  // Build filter options based on tasks data
-  const taskTypeOptions = useMemo(() => {
-    const typeCounts = new Map<string, number>();
-    tasks.forEach(t => { 
-      if (t.type) typeCounts.set(t.type, (typeCounts.get(t.type) || 0) + 1); 
-    });
-    return getActiveTaskTypes()
-      .filter(tt => typeCounts.has(tt.value))
-      .map(tt => ({
-        value: tt.value, 
-        label: tt.label, 
-        icon: <TaskTypeIcon icon={tt.icon} className="w-4 h-4" />, 
-        count: typeCounts.get(tt.value) || 0,
-      }));
-  }, [getActiveTaskTypes, tasks]);
-
-  const userFilterOptions = useMemo(() => {
-    const userCounts = new Map<string, number>();
-    tasks.forEach(t => { 
-      if (t.assignedUserId) userCounts.set(t.assignedUserId, (userCounts.get(t.assignedUserId) || 0) + 1); 
-    });
-    return users
-      .filter(u => userCounts.has(u.id))
-      .map(u => ({ 
-        value: u.id, 
-        label: u.name, 
-        count: userCounts.get(u.id) || 0 
-      }));
-  }, [users, tasks]);
-
-  // Time filter logic
-  const matchesTime = (dueDate?: string): boolean => {
+  // Time filter logic - defined early so it can be used in cascading filter options
+  const matchesTime = useCallback((dueDate?: string): boolean => {
     if (!dueDate || timeFilter === 'all') return true;
     
     const today = new Date(); 
@@ -1417,7 +1320,115 @@ export function TasksPage() {
       case 'next-week': return taskDate >= startNextWeek && taskDate <= endNextWeek;
       default: return true;
     }
-  };
+  }, [timeFilter]);
+
+  // Build filter options based on tasks data - CASCADING FILTERS
+  // Type filter options - cascading with user and time filters
+  const taskTypeOptions = useMemo(() => {
+    const allTypeCounts = new Map<string, number>();
+    const filteredTypeCounts = new Map<string, number>();
+    
+    tasks.forEach(t => { 
+      if (!t.type) return;
+      
+      // Skip completed/cancelled unless searching
+      const isSearching = search && search.trim().length > 0;
+      if (!isSearching && (t.status === 'completed' || t.status === 'cancelled')) return;
+      
+      // Count all tasks by type
+      allTypeCounts.set(t.type, (allTypeCounts.get(t.type) || 0) + 1);
+      
+      // Check if task matches other active filters
+      let matchesFilters = true;
+      
+      if (selectedUser && matchesFilters) {
+        matchesFilters = t.assignedUserId === selectedUser;
+      }
+      
+      if (timeFilter !== 'all' && matchesFilters) {
+        matchesFilters = matchesTime(t.dueDate);
+      }
+      
+      if (matchesFilters) {
+        filteredTypeCounts.set(t.type, (filteredTypeCounts.get(t.type) || 0) + 1);
+      }
+    });
+    
+    const hasActiveFilter = selectedUser || timeFilter !== 'all';
+    
+    return getActiveTaskTypes()
+      .map(tt => {
+        const totalCount = allTypeCounts.get(tt.value) || 0;
+        const matchCount = hasActiveFilter 
+          ? (filteredTypeCounts.get(tt.value) || 0) 
+          : totalCount;
+        return {
+          value: tt.value, 
+          label: tt.label, 
+          icon: <TaskTypeIcon icon={tt.icon} className="w-4 h-4" />, 
+          count: matchCount,
+          disabled: matchCount === 0,
+        };
+      })
+      .filter(tt => (allTypeCounts.get(tt.value) || 0) > 0) // Only show types that have tasks
+      .sort((a, b) => {
+        if (a.disabled !== b.disabled) return a.disabled ? 1 : -1;
+        return a.label.localeCompare(b.label);
+      });
+  }, [getActiveTaskTypes, tasks, selectedUser, timeFilter, search, matchesTime]);
+
+  // User filter options - cascading with type and time filters
+  const userFilterOptions = useMemo(() => {
+    const allUserCounts = new Map<string, number>();
+    const filteredUserCounts = new Map<string, number>();
+    
+    tasks.forEach(t => { 
+      if (!t.assignedUserId) return;
+      
+      // Skip completed/cancelled unless searching
+      const isSearching = search && search.trim().length > 0;
+      if (!isSearching && (t.status === 'completed' || t.status === 'cancelled')) return;
+      
+      // Count all tasks by user
+      allUserCounts.set(t.assignedUserId, (allUserCounts.get(t.assignedUserId) || 0) + 1);
+      
+      // Check if task matches other active filters
+      let matchesFilters = true;
+      
+      if (selectedType && matchesFilters) {
+        matchesFilters = t.type === selectedType;
+      }
+      
+      if (timeFilter !== 'all' && matchesFilters) {
+        matchesFilters = matchesTime(t.dueDate);
+      }
+      
+      if (matchesFilters) {
+        filteredUserCounts.set(t.assignedUserId, (filteredUserCounts.get(t.assignedUserId) || 0) + 1);
+      }
+    });
+    
+    const hasActiveFilter = selectedType || timeFilter !== 'all';
+    
+    return users
+      .filter(u => allUserCounts.has(u.id)) // Only show users that have tasks
+      .map(u => {
+        const totalCount = allUserCounts.get(u.id) || 0;
+        const matchCount = hasActiveFilter 
+          ? (filteredUserCounts.get(u.id) || 0) 
+          : totalCount;
+        return { 
+          value: u.id, 
+          label: u.name, 
+          count: matchCount,
+          disabled: matchCount === 0,
+        };
+      })
+      .sort((a, b) => {
+        if (a.disabled !== b.disabled) return a.disabled ? 1 : -1;
+        return a.label.localeCompare(b.label);
+      });
+  }, [users, tasks, selectedType, timeFilter, search, matchesTime]);
 
   // Filtered tasks (exclude completed/cancelled by default, but show them when searching)
   const filteredTasks = useMemo(() => {
@@ -1513,6 +1524,16 @@ export function TasksPage() {
       t.status !== 'cancelled'
     ).length;
   }, [tasks]);
+
+  // Time filter options for QuickFilters component
+  const timeFilterOptions: QuickFilterOption<TimeFilter>[] = useMemo(() => [
+    { value: 'all', label: 'All' },
+    { value: 'overdue', label: 'Overdue', count: overdueCount, isWarning: true },
+    { value: 'today', label: 'Today' },
+    { value: 'tomorrow', label: 'Tomorrow' },
+    { value: 'this-week', label: 'This week' },
+    { value: 'next-week', label: 'Next week' },
+  ], [overdueCount]);
 
   // Table columns definition - Pipedrive style with resizable columns
   const taskColumns: DataTableColumn<Task>[] = useMemo(() => [
@@ -1868,20 +1889,6 @@ export function TasksPage() {
     } 
   };
 
-  // Button styles - A2 Design: Bordered with Blue Accents
-  const timeBtn = (active: boolean, danger?: boolean) => clsx(
-    "px-2.5 py-1.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap",
-    active
-      ? (danger
-          ? "bg-red-100 text-red-700 ring-1 ring-red-200 dark:bg-red-900/30 dark:text-red-400 dark:ring-red-800"
-          : "bg-blue-100 text-blue-700 ring-1 ring-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:ring-blue-800"
-        )
-      : (danger
-          ? "text-red-500 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
-          : "text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-700"
-        )
-  );
-
   return (
     <Page 
       title="Tasks" 
@@ -1896,99 +1903,63 @@ export function TasksPage() {
     >
       {/* Main Content Container - fills available height */}
       <div className="flex flex-col h-full min-h-0">
-        {/* Filters Bar - A2 Design: Bordered with Blue Accents */}
-        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 flex items-center gap-3 shadow-sm mb-4 flex-shrink-0">
-        {/* View Mode Toggle - Blue accent, matches dropdown height */}
-        <div className="flex border border-slate-200 dark:border-slate-600 rounded-lg overflow-hidden h-[34px]">
-          <button
-            onClick={() => setViewMode('list')}
-            className={clsx(
-              "flex items-center gap-1.5 px-3 text-sm font-medium transition-all border-r border-slate-200 dark:border-slate-600",
-              viewMode === 'list'
-                ? "bg-blue-600 text-white"
-                : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700"
-            )}
-          >
-            <List className="w-3.5 h-3.5" />
-            List
-          </button>
-          <button
-            onClick={() => setViewMode('calendar')}
-            className={clsx(
-              "flex items-center gap-1.5 px-3 text-sm font-medium transition-all",
-              viewMode === 'calendar'
-                ? "bg-blue-600 text-white"
-                : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700"
-            )}
-          >
-            <CalendarIcon className="w-3.5 h-3.5" />
-            Calendar
-          </button>
-        </div>
-
-        {/* Search - matching height */}
-        <SearchInput
-          value={search}
-          onChange={setSearch}
-          placeholder="Search tasks..."
-          className="w-48 [&_input]:h-[34px] [&_input]:text-sm"
-        />
-
-        {/* Type Filter */}
-        {taskTypeOptions.length > 0 && (
-          <SelectFilter
-            label="Type"
-            value={selectedType}
-            onChange={setSelectedType}
-            options={taskTypeOptions}
-            showAllOption={true}
-            size="sm"
+        {/* Filter Bar - single row */}
+        <FilterBar rightContent={<FilterCount count={filteredTasks.length} singular="task" />}>
+          {/* View Mode Toggle */}
+          <FilterToggle
+            options={[
+              { value: 'list', label: 'List', icon: <List className="w-3.5 h-3.5" /> },
+              { value: 'calendar', label: 'Calendar', icon: <CalendarIcon className="w-3.5 h-3.5" /> },
+            ]}
+            value={viewMode}
+            onChange={setViewMode}
           />
-        )}
 
-        {/* User Filter */}
-        {userFilterOptions.length > 0 && (
-          <SelectFilter
-            label="Assigned To"
-            value={selectedUser}
-            onChange={setSelectedUser}
-            options={userFilterOptions}
-            showAllOption={true}
-            size="sm"
-            icon={<User className="w-3.5 h-3.5" />}
+          {/* Search */}
+          <SearchInput
+            value={search}
+            onChange={setSearch}
+            placeholder="Search tasks..."
+            className="w-48 [&_input]:h-[34px] [&_input]:text-sm"
           />
-        )}
 
-        {/* Vertical Divider */}
-        <div className="w-px h-6 bg-slate-200 dark:bg-slate-600" />
+          {/* Type Filter */}
+          {taskTypeOptions.length > 0 && (
+            <SelectFilter
+              label="Type"
+              value={selectedType}
+              onChange={setSelectedType}
+              options={taskTypeOptions}
+              showAllOption={true}
+              size="sm"
+              className="w-36"
+            />
+          )}
 
-        {/* Time Filter Buttons */}
-        <div className="flex items-center gap-0.5">
-          <button onClick={() => setTimeFilter('all')} className={timeBtn(timeFilter === 'all')}>
-            All
-          </button>
-          <button onClick={() => setTimeFilter('overdue')} className={timeBtn(timeFilter === 'overdue', true)}>
-            {overdueCount > 0 ? `Overdue (${overdueCount})` : 'Overdue'}
-          </button>
-          <button onClick={() => setTimeFilter('today')} className={timeBtn(timeFilter === 'today')}>
-            Today
-          </button>
-          <button onClick={() => setTimeFilter('tomorrow')} className={timeBtn(timeFilter === 'tomorrow')}>
-            Tomorrow
-          </button>
-          <button onClick={() => setTimeFilter('this-week')} className={timeBtn(timeFilter === 'this-week')}>
-            This week
-          </button>
-          <button onClick={() => setTimeFilter('next-week')} className={timeBtn(timeFilter === 'next-week')}>
-            Next week
-          </button>
-        </div>
+          {/* User Filter */}
+          {userFilterOptions.length > 0 && (
+            <SelectFilter
+              label="Assigned To"
+              value={selectedUser}
+              onChange={setSelectedUser}
+              options={userFilterOptions}
+              showAllOption={true}
+              size="sm"
+              icon={User}
+              className="w-36"
+            />
+          )}
 
-        {/* Task Count */}
-        <span className="ml-auto text-sm text-slate-400 dark:text-slate-500 whitespace-nowrap">
-          {filteredTasks.length} tasks
-        </span>
-      </div>
+          {/* Vertical Divider */}
+          <div className="w-px h-6 bg-slate-200 dark:bg-slate-600" />
+
+          {/* Time Filter Buttons */}
+          <QuickFilters
+            options={timeFilterOptions}
+            value={timeFilter}
+            onChange={setTimeFilter}
+          />
+        </FilterBar>
 
       {/* Content - fills remaining height */}
       <div className="flex-1 min-h-0">

@@ -25,3 +25,20 @@ export { TaskTypeIcon } from './TaskTypeIcon';
 export { EntityTasksSection } from './EntityTasksSection';
 export { UserDeactivationModal } from './UserDeactivationModal';
 export { SectionHeader } from './SectionHeader';
+export { InlineEditField, type InlineEditFieldProps } from './InlineEditField';
+export { InlineSelectField, type InlineSelectFieldProps, type InlineSelectOption } from './InlineSelectField';
+export { CompanySearchField, type CompanySearchFieldProps } from './CompanySearchField';
+export { EntitySearchDropdown, type EntitySearchDropdownProps, type EntitySearchItem } from './EntitySearchDropdown';
+export { IconPicker, type IconPickerProps } from './IconPicker';
+export { 
+  FilterBar, 
+  FilterDivider, 
+  FilterCount, 
+  FilterToggle, 
+  QuickFilters, 
+  type FilterBarProps,
+  type ToggleOption,
+  type FilterToggleProps,
+  type QuickFilterOption,
+  type QuickFiltersProps,
+} from './Filterbar';

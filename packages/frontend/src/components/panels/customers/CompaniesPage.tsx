@@ -10,11 +10,10 @@ import {
 } from 'lucide-react';
 import { Page } from '@/components/layout';
 import { useClientsStore, useUsersStore, useToast, type Company, getCompanySalesRepIds } from '@/contexts';
-import { CardContent, Button, Input, Modal, SearchInput, Textarea, AddressInput } from '@/components/common';
+import { CardContent, Button, Input, Modal, SearchInput, Textarea, AddressInput, FilterBar, FilterCount, SelectFilter } from '@/components/common';
 import { MultiSelectUsers } from '@/components/common/MultiSelectUsers';
 import { AlphabetFilter } from '@/components/common/AlphabetFilter';
 import { DataTable, type DataTableColumn } from '@/components/common/DataTable';
-import { SelectFilter } from '@/components/common/SelectFilter';
 import { DuplicateCompanyModal } from '@/components/common/DuplicateCompanyModal';
 import { validatePhone, validateWebsite, formatPhoneNumber } from '@/utils/validation';
 import { useDocumentTitle, getCompanyUrl } from '@/hooks';
@@ -764,7 +763,7 @@ export function CompaniesPage() {
     <Page
       title="Companies"
       description="Manage your client companies."
-      fillHeight  // ← This makes the DataTable fill available space and scroll
+      fillHeight
       actions={
         <Button variant="primary" onClick={openAddModal}>
           <Plus className="w-4 h-4 mr-2" />
@@ -772,73 +771,82 @@ export function CompaniesPage() {
         </Button>
       }
     >
-      <DataTable
-        columns={columns}
-        data={filteredAndSortedCompanies}
-        rowKey={(company) => company.id}
-        onRowClick={(company) => navigate(getCompanyUrl(company))}
-        sortField={sortField}
-        sortDirection={sortDirection}
-        onSort={handleSort}
-        filters={
-          <div className="space-y-4">
-            {/* Search and Filter Row */}
-            <div className="flex flex-wrap items-center gap-3">
-              <SearchInput
-                value={search}
-                onChange={setSearch}
-                placeholder="Search companies..."
-                className="w-full sm:w-64"
-              />
-              <SelectFilter
-                label="Location"
-                value={locationFilter}
-                options={locationOptions}
-                onChange={setLocationFilter}
-                icon={<MapPin className="w-4 h-4" />}
-              />
-              <SelectFilter
-                label="Sales Rep"
-                value={salesRepFilter}
-                options={salesRepOptions}
-                onChange={setSalesRepFilter}
-                icon={<User className="w-4 h-4" />}
-              />
-              {hasActiveFilters && (
-                <Button variant="ghost" size="sm" onClick={clearFilters}>
-                  Clear filters
-                </Button>
-              )}
-            </div>
-
-            {/* Alphabet Filter */}
+      {/* Main Content Container - fills available height */}
+      <div className="flex flex-col h-full min-h-0">
+        {/* Filter Bar - two rows: filters on top, alphabet on bottom */}
+        <FilterBar 
+          rightContent={<FilterCount count={filteredAndSortedCompanies.length} singular="company" plural="companies" />}
+          secondaryRow={
             <AlphabetFilter
               selected={letterFilter}
               onSelect={setLetterFilter}
               items={companyNames}
             />
-          </div>
-        }
-        emptyState={
-          <CardContent className="p-12 text-center">
-            <Building2 className="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600" />
-            <h3 className="mt-4 text-lg font-medium text-slate-900 dark:text-white">
-              {hasActiveFilters ? 'No companies found' : 'No companies yet'}
-            </h3>
-            <p className="mt-2 text-slate-500 dark:text-slate-400">
-              {hasActiveFilters
-                ? 'Try adjusting your filters or search term'
-                : 'Get started by adding your first company'}
-            </p>
-            {!hasActiveFilters && (
-              <Button variant="primary" className="mt-4" onClick={openAddModal}>
-                <Plus className="w-4 h-4 mr-2" />
-                Add Company
-              </Button>
-            )}
-          </CardContent>
-        }
-      />
+          }
+        >
+          <SearchInput
+            value={search}
+            onChange={setSearch}
+            placeholder="Search companies..."
+            className="w-48 [&_input]:h-[34px] [&_input]:text-sm"
+          />
+          <SelectFilter
+            label="Location"
+            value={locationFilter}
+            options={locationOptions}
+            onChange={setLocationFilter}
+            icon={MapPin}
+            size="sm"
+            className="w-36"
+          />
+          <SelectFilter
+            label="Sales Rep"
+            value={salesRepFilter}
+            options={salesRepOptions}
+            onChange={setSalesRepFilter}
+            icon={User}
+            size="sm"
+            className="w-36"
+          />
+          {hasActiveFilters && (
+            <Button variant="ghost" size="sm" onClick={clearFilters}>
+              Clear filters
+            </Button>
+          )}
+        </FilterBar>
+
+        {/* Data Table - fills remaining height */}
+        <div className="flex-1 min-h-0">
+          <DataTable
+            columns={columns}
+            data={filteredAndSortedCompanies}
+            rowKey={(company) => company.id}
+            onRowClick={(company) => navigate(getCompanyUrl(company))}
+            sortField={sortField}
+            sortDirection={sortDirection}
+            onSort={handleSort}
+            emptyState={
+              <CardContent className="p-12 text-center">
+                <Building2 className="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600" />
+                <h3 className="mt-4 text-lg font-medium text-slate-900 dark:text-white">
+                  {hasActiveFilters ? 'No companies found' : 'No companies yet'}
+                </h3>
+                <p className="mt-2 text-slate-500 dark:text-slate-400">
+                  {hasActiveFilters
+                    ? 'Try adjusting your filters or search term'
+                    : 'Get started by adding your first company'}
+                </p>
+                {!hasActiveFilters && (
+                  <Button variant="primary" className="mt-4" onClick={openAddModal}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Company
+                  </Button>
+                )}
+              </CardContent>
+            }
+          />
+        </div>
+      </div>
 
       {/* Add Company Modal */}
       <Modal

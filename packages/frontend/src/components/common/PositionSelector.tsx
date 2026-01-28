@@ -1,31 +1,58 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
-import clsx from 'clsx';
-import { ChevronDown, ChevronRight, ArrowLeft, Search, X, Briefcase, Building2 } from 'lucide-react';
+// ============================================================================
+// Position Selector Component
+// Location: src/components/common/PositionSelector.tsx
+// 
+// Hierarchical dropdown for selecting positions by department.
+// Supports drill-down navigation, search, and keyboard controls.
+// Updated to accept icon as component type OR ReactNode.
+// ============================================================================
+
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { clsx } from 'clsx';
+import { ChevronDown, ChevronRight, ChevronLeft, Search, X } from 'lucide-react';
+
+interface Position {
+  id: string;
+  name: string;
+  reportsToPositionId?: string;
+}
+
+interface Department {
+  id: string;
+  name: string;
+  positions: Position[];
+}
 
 export interface PositionSelectorProps {
   /** Currently selected position ID */
   value: string;
   /** Departments with their positions */
-  departments: Array<{
-    id: string;
-    name: string;
-    positions: Array<{
-      id: string;
-      name: string;
-    }>;
-  }>;
-  /** Change handler - receives position ID */
+  departments: Department[];
+  /** Callback when selection changes */
   onChange: (positionId: string) => void;
-  /** Optional icon */
-  icon?: React.ReactNode;
-  /** Additional className */
+  /** Optional icon - can be a Lucide component (e.g., Briefcase) or ReactNode */
+  icon?: React.ElementType | React.ReactNode;
+  /** Additional class names */
   className?: string;
-  /** Placeholder when nothing selected */
+  /** Placeholder text */
   placeholder?: string;
-  /** If true, selection is pending/invalid - trap focus until cleared */
+  /** If true, traps focus and shows warning when trying to leave */
   pending?: boolean;
-  /** Message to show when trying to leave while pending */
+  /** Message for pending toast */
   pendingMessage?: string;
+}
+
+// Helper to check if icon is a component type vs ReactNode
+function isComponentType(icon: React.ElementType | React.ReactNode): icon is React.ElementType {
+  // Check if it's a function (functional component)
+  if (typeof icon === 'function') return true;
+  // Check if it's a forwardRef or memo component (object with $$typeof but no 'type' property)
+  if (typeof icon === 'object' && icon !== null && '$$typeof' in icon) {
+    // If it has 'type' property, it's already a rendered element, not a component
+    if ('type' in icon) return false;
+    return true;
+  }
+  return false;
 }
 
 export function PositionSelector({
@@ -36,21 +63,31 @@ export function PositionSelector({
   className,
   placeholder = 'Select position...',
   pending = false,
-  pendingMessage = 'Please clear selection first (ESC or X)',
+  pendingMessage = 'Selection required',
 }: PositionSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [search, setSearch] = useState('');
   const [selectedDeptId, setSelectedDeptId] = useState<string | null>(null);
   const [highlightedIndex, setHighlightedIndex] = useState(0);
   const [dropdownPosition, setDropdownPosition] = useState<'bottom' | 'top'>('bottom');
-  const containerRef = useRef<HTMLDivElement>(null);
+  
   const buttonRef = useRef<HTMLButtonElement>(null);
-  const searchInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  // Get selected position info for display
+  // Render icon - handles both component type and ReactNode
+  const renderIcon = () => {
+    if (!icon) return null;
+    if (isComponentType(icon)) {
+      const IconComponent = icon;
+      return <IconComponent className="w-4 h-4" />;
+    }
+    return icon;
+  };
+
+  // Get selected position info
   const selectedPosition = useMemo(() => {
-    if (!value) return null;
     for (const dept of departments) {
       const pos = dept.positions.find(p => p.id === value);
       if (pos) {
@@ -60,52 +97,90 @@ export function PositionSelector({
     return null;
   }, [value, departments]);
 
-  // Get current department when drilling down
-  const currentDepartment = selectedDeptId 
-    ? departments.find(d => d.id === selectedDeptId) 
-    : null;
-
-  // Item types for the list
-  type PositionItem = { id: string; name: string; type: 'position'; deptName?: string };
-  type DepartmentItem = { id: string; name: string; type: 'department'; count: number };
-  type ListItem = PositionItem | DepartmentItem;
-
-  // Build current list based on view
-  const currentItems = useMemo((): ListItem[] => {
-    if (searchQuery.trim()) {
-      // Flat list of all matching positions
-      const query = searchQuery.toLowerCase();
-      return departments.flatMap(dept => 
-        dept.positions
-          .filter(p => p.name.toLowerCase().includes(query) || dept.name.toLowerCase().includes(query))
-          .map(p => ({ id: p.id, name: p.name, type: 'position' as const, deptName: dept.name }))
+  // Get current view items
+  const currentItems = useMemo(() => {
+    if (selectedDeptId) {
+      // Show positions in selected department
+      const dept = departments.find(d => d.id === selectedDeptId);
+      return dept?.positions.map(p => ({ 
+        id: p.id, 
+        name: p.name, 
+        type: 'position' as const 
+      })) || [];
+    }
+    
+    // Show departments, filtered by search
+    let filteredDepts = departments;
+    if (search.trim()) {
+      const searchLower = search.toLowerCase();
+      filteredDepts = departments.filter(d => 
+        d.name.toLowerCase().includes(searchLower) ||
+        d.positions.some(p => p.name.toLowerCase().includes(searchLower))
       );
     }
-    if (currentDepartment) {
-      // Positions in selected department
-      return currentDepartment.positions.map(p => ({ id: p.id, name: p.name, type: 'position' as const }));
-    }
-    // Departments list
-    return departments.map(d => ({ id: d.id, name: d.name, type: 'department' as const, count: d.positions.length }));
-  }, [departments, currentDepartment, searchQuery]);
+    
+    return filteredDepts.map(d => ({ 
+      id: d.id, 
+      name: d.name, 
+      type: 'department' as const,
+      positionCount: d.positions.length 
+    }));
+  }, [departments, selectedDeptId, search]);
 
-  // Reset highlight when view changes
+  // Handle dropdown positioning
+  useEffect(() => {
+    if (isOpen && buttonRef.current && dropdownRef.current) {
+      const buttonRect = buttonRef.current.getBoundingClientRect();
+      const dropdownHeight = dropdownRef.current.offsetHeight;
+      const viewportHeight = window.innerHeight;
+      const spaceBelow = viewportHeight - buttonRect.bottom;
+      const spaceAbove = buttonRect.top;
+
+      if (spaceBelow < dropdownHeight && spaceAbove > dropdownHeight) {
+        setDropdownPosition('top');
+      } else {
+        setDropdownPosition('bottom');
+        if (buttonRect.bottom + dropdownHeight > viewportHeight) {
+          window.scrollBy({ 
+            top: buttonRect.bottom + dropdownHeight - viewportHeight + 20, 
+            behavior: 'smooth' 
+          });
+        }
+      }
+    }
+  }, [isOpen, currentItems]);
+
+  // Focus search when dropdown opens
+  useEffect(() => {
+    if (isOpen && searchInputRef.current) {
+      searchInputRef.current.focus();
+    }
+  }, [isOpen]);
+
+  // Reset highlight when items change
   useEffect(() => {
     setHighlightedIndex(0);
-  }, [selectedDeptId, searchQuery]);
+  }, [currentItems]);
 
-  // Focus trap when pending - keep focus on button, show toast if trying to leave
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+        setSelectedDeptId(null);
+        setSearch('');
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Handle pending state - trap focus
   useEffect(() => {
     if (pending && !isOpen) {
-      // Focus the button when entering pending state
-      buttonRef.current?.focus();
-      
-      // When focus leaves, clear selection and show toast
       const handleFocusOut = () => {
-        // Small delay to check if focus moved within container
         setTimeout(() => {
           if (containerRef.current && !containerRef.current.contains(document.activeElement)) {
-            // Focus left the component - clear and notify
             onChange('');
             window.dispatchEvent(new CustomEvent('position-selector-pending', { 
               detail: { message: pendingMessage } 
@@ -115,83 +190,21 @@ export function PositionSelector({
       };
       
       containerRef.current?.addEventListener('focusout', handleFocusOut);
-      
-      return () => {
-        containerRef.current?.removeEventListener('focusout', handleFocusOut);
-      };
+      return () => containerRef.current?.removeEventListener('focusout', handleFocusOut);
     }
-  }, [pending, isOpen, pendingMessage, onChange]);
+  }, [pending, isOpen, onChange, pendingMessage]);
 
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        if (pending) {
-          // Clear selection and show toast
-          onChange('');
-          window.dispatchEvent(new CustomEvent('position-selector-pending', { 
-            detail: { message: pendingMessage } 
-          }));
-        }
-        setIsOpen(false);
-        setSearchQuery('');
-        setSelectedDeptId(null);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  // Focus search and position dropdown when opened
-  useEffect(() => {
-    if (isOpen) {
-      setTimeout(() => {
-        searchInputRef.current?.focus();
-        
-        // Calculate dropdown position
-        if (buttonRef.current && dropdownRef.current) {
-          const buttonRect = buttonRef.current.getBoundingClientRect();
-          const dropdownHeight = dropdownRef.current.offsetHeight;
-          const viewportHeight = window.innerHeight;
-          const spaceBelow = viewportHeight - buttonRect.bottom;
-          const spaceAbove = buttonRect.top;
-          
-          if (spaceBelow < dropdownHeight && spaceAbove > dropdownHeight) {
-            setDropdownPosition('top');
-          } else {
-            setDropdownPosition('bottom');
-            if (buttonRect.bottom + dropdownHeight > viewportHeight) {
-              const scrollAmount = buttonRect.bottom + dropdownHeight - viewportHeight + 20;
-              window.scrollBy({ top: scrollAmount, behavior: 'smooth' });
-            }
-          }
-        }
-      }, 10);
-    } else {
-      setDropdownPosition('bottom');
-    }
-  }, [isOpen]);
-
-  // Re-check position when content changes
-  useEffect(() => {
-    if (isOpen && dropdownRef.current && buttonRef.current) {
-      const buttonRect = buttonRef.current.getBoundingClientRect();
-      const dropdownHeight = dropdownRef.current.offsetHeight;
-      const viewportHeight = window.innerHeight;
-      const spaceBelow = viewportHeight - buttonRect.bottom;
-      const spaceAbove = buttonRect.top;
-      
-      if (spaceBelow < dropdownHeight && spaceAbove > dropdownHeight) {
-        setDropdownPosition('top');
-      }
-    }
-  }, [selectedDeptId, searchQuery, isOpen]);
-
-  const handleSelect = (positionId: string) => {
-    onChange(positionId);
-    setIsOpen(false);
-    setSearchQuery('');
+  const handleOpen = () => {
+    setIsOpen(true);
     setSelectedDeptId(null);
+    setSearch('');
+    setHighlightedIndex(0);
+  };
+
+  const handleClose = () => {
+    setIsOpen(false);
+    setSelectedDeptId(null);
+    setSearch('');
   };
 
   const handleClear = (e: React.MouseEvent) => {
@@ -199,23 +212,27 @@ export function PositionSelector({
     onChange('');
   };
 
+  const handleSelectDepartment = (deptId: string) => {
+    setSelectedDeptId(deptId);
+    setHighlightedIndex(0);
+  };
+
+  const handleSelectPosition = (positionId: string) => {
+    onChange(positionId);
+    handleClose();
+  };
+
   const handleBack = () => {
     setSelectedDeptId(null);
     setHighlightedIndex(0);
   };
 
-  const handleDeptSelect = (deptId: string) => {
-    setSelectedDeptId(deptId);
-    setHighlightedIndex(0);
-  };
-
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    // Handle ESC to clear selection when dropdown is closed
     if (!isOpen) {
-      if (e.key === 'Enter' || e.key === 'ArrowDown') {
+      if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') {
         e.preventDefault();
-        setIsOpen(true);
-      } else if (e.key === 'Escape' && hasSelection) {
+        handleOpen();
+      } else if (e.key === 'Escape' && value) {
         e.preventDefault();
         onChange('');
       }
@@ -226,84 +243,60 @@ export function PositionSelector({
       case 'ArrowDown':
         e.preventDefault();
         setHighlightedIndex(prev => 
-          prev < currentItems.length - 1 ? prev + 1 : prev
+          prev < currentItems.length - 1 ? prev + 1 : 0
         );
         break;
-        
       case 'ArrowUp':
         e.preventDefault();
-        setHighlightedIndex(prev => prev > 0 ? prev - 1 : 0);
+        setHighlightedIndex(prev => 
+          prev > 0 ? prev - 1 : currentItems.length - 1
+        );
         break;
-        
       case 'ArrowRight':
         e.preventDefault();
-        // Enter department if highlighted item is a department
-        if (currentItems[highlightedIndex]?.type === 'department') {
-          handleDeptSelect(currentItems[highlightedIndex].id);
+        if (!selectedDeptId && currentItems[highlightedIndex]?.type === 'department') {
+          handleSelectDepartment(currentItems[highlightedIndex].id);
         }
         break;
-        
       case 'ArrowLeft':
         e.preventDefault();
-        // Go back to department list
         if (selectedDeptId) {
           handleBack();
         }
         break;
-        
       case 'Enter':
         e.preventDefault();
         const item = currentItems[highlightedIndex];
         if (item) {
           if (item.type === 'department') {
-            handleDeptSelect(item.id);
+            handleSelectDepartment(item.id);
           } else {
-            handleSelect(item.id);
+            handleSelectPosition(item.id);
           }
         }
         break;
-        
       case 'Escape':
         e.preventDefault();
-        if (searchQuery) {
-          // First ESC clears search
-          setSearchQuery('');
+        if (search) {
+          setSearch('');
         } else if (selectedDeptId) {
-          // Go back to departments
           handleBack();
-        } else {
-          // Close dropdown
-          setIsOpen(false);
-          buttonRef.current?.focus();
+        } else if (isOpen) {
+          handleClose();
+        } else if (value) {
+          // Already closed, clear the selection
+          onChange('');
         }
         break;
-        
-      case 'Backspace':
-        if (!searchQuery && selectedDeptId) {
-          e.preventDefault();
-          handleBack();
-        }
-        break;
-        
       case 'Tab':
-        // Select current item and close
-        const tabItem = currentItems[highlightedIndex];
-        if (tabItem?.type === 'position') {
-          handleSelect(tabItem.id);
-        }
-        setIsOpen(false);
-        setSearchQuery('');
-        setSelectedDeptId(null);
+        handleClose();
         break;
     }
-    // Don't handle space - let it type in search
   };
 
-  const displayLabel = selectedPosition 
+  const displayText = selectedPosition 
     ? `${selectedPosition.position.name} (${selectedPosition.department.name})`
-    : null;
-
-  const hasSelection = !!value;
+    : placeholder;
 
   return (
     <div ref={containerRef} className={clsx('relative', className)}>
@@ -311,23 +304,23 @@ export function PositionSelector({
       <button
         ref={buttonRef}
         type="button"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => isOpen ? handleClose() : handleOpen()}
         onKeyDown={handleKeyDown}
         className={clsx(
-          'flex items-center gap-2 px-3 py-2 text-sm rounded-lg border transition-colors w-full',
-          'focus:outline-none focus:ring-2 focus:ring-brand-500',
-          hasSelection
+          'flex items-center gap-2 w-full px-3 py-2 rounded-lg border text-sm',
+          'focus:outline-none focus:ring-2 focus:ring-brand-500 transition-colors',
+          value
             ? 'bg-brand-50 dark:bg-brand-900/20 border-brand-300 dark:border-brand-700 text-brand-700 dark:text-brand-300'
             : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
         )}
       >
-        {icon && <span className="text-slate-500 dark:text-slate-400">{icon}</span>}
-        <span className={clsx('flex-1 text-left truncate', !hasSelection && 'text-slate-500 dark:text-slate-400')}>
-          {hasSelection ? displayLabel : placeholder}
+        {icon && <span className="text-slate-500 dark:text-slate-400 flex-shrink-0">{renderIcon()}</span>}
+        <span className={clsx('flex-1 text-left truncate', !value && 'text-slate-500 dark:text-slate-400')}>
+          {displayText}
         </span>
-        {hasSelection ? (
+        {value ? (
           <X
-            className="w-4 h-4 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 flex-shrink-0"
+            className="w-4 h-4 flex-shrink-0 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
             onClick={handleClear}
           />
         ) : (
@@ -337,136 +330,84 @@ export function PositionSelector({
 
       {/* Dropdown */}
       {isOpen && (
-        <div 
+        <div
           ref={dropdownRef}
           className={clsx(
-            'absolute z-50 w-full min-w-[250px] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg overflow-hidden',
+            'absolute z-50 w-full min-w-[250px] bg-white dark:bg-slate-800',
+            'border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg overflow-hidden',
             dropdownPosition === 'top' ? 'bottom-full mb-1' : 'top-full mt-1'
           )}
         >
-          {/* Search Input */}
-          <div className="p-2 border-b border-slate-200 dark:border-slate-700">
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input
-                ref={searchInputRef}
-                type="text"
-                value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  setSelectedDeptId(null);
-                }}
-                onKeyDown={handleKeyDown}
-                placeholder="Search..."
-                className="w-full pl-8 pr-3 py-1.5 text-sm bg-slate-100 dark:bg-slate-700 border-0 rounded-md text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
+          {/* Header with back button when in department */}
+          {selectedDeptId && (
+            <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
+              <button
+                type="button"
+                onClick={handleBack}
+                className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                {departments.find(d => d.id === selectedDeptId)?.name}
+              </span>
             </div>
-          </div>
+          )}
 
-          {/* Content */}
-          <div className="max-h-64 overflow-y-auto">
-            {/* Search Results - flat list */}
-            {searchQuery.trim() ? (
-              currentItems.length === 0 ? (
-                <div className="px-4 py-3 text-sm text-slate-500 dark:text-slate-400">
-                  No matches found
-                </div>
-              ) : (
-                currentItems.map((item, index) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => handleSelect(item.id)}
-                    className={clsx(
-                      'w-full px-4 py-2 text-left text-sm transition-colors flex items-center gap-2',
-                      index === highlightedIndex
-                        ? 'bg-brand-50 dark:bg-brand-900/20 text-brand-700 dark:text-brand-300'
-                        : item.id === value
-                        ? 'bg-slate-100 dark:bg-slate-700 font-medium'
-                        : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
-                    )}
-                  >
-                    <Briefcase className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-                    <span className="truncate">{item.name}</span>
-                    {item.type === 'position' && item.deptName && (
-                      <span className="text-xs text-slate-400 ml-auto flex-shrink-0">{item.deptName}</span>
-                    )}
-                  </button>
-                ))
-              )
-            ) : selectedDeptId && currentDepartment ? (
-              /* Positions in selected department */
-              <>
-                <button
-                  type="button"
-                  onClick={handleBack}
-                  className="w-full px-3 py-2 text-left text-sm font-medium text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700 flex items-center gap-2 hover:bg-slate-100 dark:hover:bg-slate-700"
-                >
-                  <ArrowLeft className="w-4 h-4" />
-                  {currentDepartment.name}
-                </button>
-                {currentDepartment.positions.length === 0 ? (
-                  <div className="px-4 py-3 text-sm text-slate-500 dark:text-slate-400">
-                    No positions in this department
-                  </div>
-                ) : (
-                  currentDepartment.positions.map((pos, index) => (
-                    <button
-                      key={pos.id}
-                      type="button"
-                      onClick={() => handleSelect(pos.id)}
-                      className={clsx(
-                        'w-full px-4 py-2 text-left text-sm transition-colors flex items-center gap-2',
-                        index === highlightedIndex
-                          ? 'bg-brand-50 dark:bg-brand-900/20 text-brand-700 dark:text-brand-300'
-                          : pos.id === value
-                          ? 'bg-slate-100 dark:bg-slate-700 font-medium'
-                          : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
-                      )}
-                    >
-                      <Briefcase className="w-3.5 h-3.5 text-slate-400" />
-                      {pos.name}
-                    </button>
-                  ))
-                )}
-              </>
+          {/* Search (only at department level) */}
+          {!selectedDeptId && departments.length > 3 && (
+            <div className="p-2 border-b border-slate-200 dark:border-slate-700">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Search departments..."
+                  className="w-full pl-8 pr-3 py-1.5 text-sm bg-slate-100 dark:bg-slate-700 border-0 rounded-md text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Items List */}
+          <div className="max-h-56 overflow-y-auto">
+            {currentItems.length === 0 ? (
+              <div className="px-4 py-3 text-sm text-slate-500 dark:text-slate-400 text-center">
+                {selectedDeptId ? 'No positions in this department' : 'No departments found'}
+              </div>
             ) : (
-              /* Departments list */
-              departments.length === 0 ? (
-                <div className="px-4 py-3 text-sm text-slate-500 dark:text-slate-400">
-                  No departments available
-                </div>
-              ) : (
-                departments.map((dept, index) => (
-                  <button
-                    key={dept.id}
-                    type="button"
-                    onClick={() => handleDeptSelect(dept.id)}
-                    className={clsx(
-                      'w-full px-4 py-2 text-left text-sm transition-colors flex items-center justify-between',
-                      index === highlightedIndex
-                        ? 'bg-brand-50 dark:bg-brand-900/20 text-brand-700 dark:text-brand-300'
-                        : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
-                    )}
-                  >
-                    <div className="flex items-center gap-2">
-                      <Building2 className="w-3.5 h-3.5 text-slate-400" />
-                      <span>{dept.name}</span>
-                      <span className="text-xs text-slate-400">({dept.positions.length})</span>
+              currentItems.map((item, index) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => {
+                    if (item.type === 'department') {
+                      handleSelectDepartment(item.id);
+                    } else {
+                      handleSelectPosition(item.id);
+                    }
+                  }}
+                  className={clsx(
+                    'w-full flex items-center justify-between px-4 py-2 text-sm text-left transition-colors',
+                    index === highlightedIndex
+                      ? 'bg-brand-50 dark:bg-brand-900/20 text-brand-700 dark:text-brand-300'
+                      : item.id === value
+                      ? 'bg-slate-100 dark:bg-slate-700 font-medium'
+                      : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                  )}
+                >
+                  <span className="truncate">{item.name}</span>
+                  {item.type === 'department' && (
+                    <div className="flex items-center gap-1 text-slate-400">
+                      <span className="text-xs">{(item as any).positionCount}</span>
+                      <ChevronRight className="w-4 h-4" />
                     </div>
-                    <ChevronRight className="w-4 h-4 text-slate-400" />
-                  </button>
-                ))
-              )
+                  )}
+                </button>
+              ))
             )}
           </div>
         </div>
@@ -474,3 +415,5 @@ export function PositionSelector({
     </div>
   );
 }
+
+export default PositionSelector;

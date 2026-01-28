@@ -15,10 +15,9 @@ import {
   Trash2,
 } from 'lucide-react';
 import { Page } from '@/components/layout';
-import { CardContent, Button, Input, Modal, SearchInput, Select, Textarea, AddressInput } from '@/components/common';
+import { CardContent, Button, Input, Modal, SearchInput, Select, Textarea, AddressInput, FilterBar, FilterCount, SelectFilter } from '@/components/common';
 import { AlphabetFilter } from '@/components/common/AlphabetFilter';
 import { DataTable, type DataTableColumn } from '@/components/common/DataTable';
-import { SelectFilter } from '@/components/common/SelectFilter';
 import { DuplicateContactModal } from '@/components/common/DuplicateContactModal';
 import { DuplicateCompanyModal } from '@/components/common/DuplicateCompanyModal';
 import { useClientsStore, useUsersStore, useFieldsStore, useToast, type ContactRole, type Contact, type Company, getCompanySalesRepIds } from '@/contexts';
@@ -1322,102 +1321,109 @@ export function ContactsPage() {
         </Button>
       }
     >
-      <DataTable
-        columns={columns}
-        data={filteredAndSortedContacts}
-        rowKey={(contact) => contact.id}
-        onRowClick={(contact) => navigate(getContactUrl(contact))}
-        sortField={sortField}
-        sortDirection={sortDirection}
-        onSort={handleSort}
-        filters={
-          <div className="space-y-4">
-            {/* Needs Attention Filter - only show if there are contacts needing attention */}
-            {contactsNeedingAttentionCount > 0 && (
-              <div className="flex items-center">
-                <button
-                  onClick={() => setAttentionFilter(attentionFilter === 'all' ? 'needs-attention' : 'all')}
-                  className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg border transition-colors ${
-                    attentionFilter === 'needs-attention'
-                      ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700'
-                      : 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/30'
-                  }`}
-                >
-                  <AlertTriangle className="w-4 h-4" />
-                  <span>
-                    {attentionFilter === 'needs-attention' 
-                      ? `Showing ${contactsNeedingAttentionCount} contact${contactsNeedingAttentionCount !== 1 ? 's' : ''} needing attention`
-                      : `${contactsNeedingAttentionCount} contact${contactsNeedingAttentionCount !== 1 ? 's' : ''} need${contactsNeedingAttentionCount === 1 ? 's' : ''} attention`
-                    }
-                  </span>
-                </button>
-              </div>
-            )}
-
-            {/* Search and Filter Row */}
-            <div className="flex flex-wrap items-center gap-3">
-              <SearchInput
-                value={search}
-                onChange={setSearch}
-                placeholder="Search contacts..."
-                className="w-full sm:w-64"
-              />
-              <SelectFilter
-                label="Company"
-                value={companyFilter}
-                options={companyFilterOptions}
-                onChange={setCompanyFilter}
-                icon={<Building2 className="w-4 h-4" />}
-              />
-              <SelectFilter
-                label="Location"
-                value={locationFilter}
-                options={locationFilterOptions}
-                onChange={setLocationFilter}
-                icon={<MapPin className="w-4 h-4" />}
-              />
-              <SelectFilter
-                label="Sales Rep"
-                value={salesRepFilter}
-                options={salesRepFilterOptions}
-                onChange={setSalesRepFilter}
-                icon={<User className="w-4 h-4" />}
-              />
-              {hasActiveFilters && (
-                <Button variant="ghost" size="sm" onClick={clearFilters}>
-                  Clear filters
-                </Button>
-              )}
-            </div>
-
-            {/* Alphabet Filter */}
+      {/* Main Content Container - fills available height */}
+      <div className="flex flex-col h-full min-h-0">
+        {/* Filter Bar - two rows: filters on top, alphabet on bottom */}
+        <FilterBar 
+          rightContent={<FilterCount count={filteredAndSortedContacts.length} singular="contact" />}
+          secondaryRow={
             <AlphabetFilter
               selected={letterFilter}
               onSelect={setLetterFilter}
               items={contactNames}
             />
-          </div>
-        }
-        emptyState={
-          <CardContent className="p-12 text-center">
-            <User className="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600" />
-            <h3 className="mt-4 text-lg font-medium text-slate-900 dark:text-white">
-              {hasActiveFilters ? 'No contacts found' : 'No contacts yet'}
-            </h3>
-            <p className="mt-2 text-slate-500 dark:text-slate-400">
-              {hasActiveFilters
-                ? 'Try adjusting your filters or search term'
-                : 'Get started by adding your first contact'}
-            </p>
-            {!hasActiveFilters && (
-              <Button variant="primary" className="mt-4" onClick={openAddModal}>
-                <Plus className="w-4 h-4 mr-2" />
-                Add Contact
-              </Button>
-            )}
-          </CardContent>
-        }
-      />
+          }
+        >
+          <SearchInput
+            value={search}
+            onChange={setSearch}
+            placeholder="Search contacts..."
+            className="w-48 [&_input]:h-[34px] [&_input]:text-sm"
+          />
+          <SelectFilter
+            label="Company"
+            value={companyFilter}
+            options={companyFilterOptions}
+            onChange={setCompanyFilter}
+            icon={Building2}
+            size="sm"
+            className="w-36"
+          />
+          <SelectFilter
+            label="Location"
+            value={locationFilter}
+            options={locationFilterOptions}
+            onChange={setLocationFilter}
+            icon={MapPin}
+            size="sm"
+            className="w-36"
+          />
+          <SelectFilter
+            label="Sales Rep"
+            value={salesRepFilter}
+            options={salesRepFilterOptions}
+            onChange={setSalesRepFilter}
+            icon={User}
+            size="sm"
+            className="w-36"
+          />
+          {/* Needs Attention Filter */}
+          {contactsNeedingAttentionCount > 0 && (
+            <button
+              onClick={() => setAttentionFilter(attentionFilter === 'all' ? 'needs-attention' : 'all')}
+              className={clsx(
+                'flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors',
+                attentionFilter === 'needs-attention'
+                  ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300'
+                  : 'text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20'
+              )}
+            >
+              <AlertTriangle className="w-3.5 h-3.5" />
+              {attentionFilter === 'needs-attention' 
+                ? 'Needs attention'
+                : `${contactsNeedingAttentionCount} need attention`
+              }
+            </button>
+          )}
+          {hasActiveFilters && (
+            <Button variant="ghost" size="sm" onClick={clearFilters}>
+              Clear filters
+            </Button>
+          )}
+        </FilterBar>
+
+        {/* Data Table - fills remaining height */}
+        <div className="flex-1 min-h-0">
+          <DataTable
+            columns={columns}
+            data={filteredAndSortedContacts}
+            rowKey={(contact) => contact.id}
+            onRowClick={(contact) => navigate(getContactUrl(contact))}
+            sortField={sortField}
+            sortDirection={sortDirection}
+            onSort={handleSort}
+            emptyState={
+              <CardContent className="p-12 text-center">
+                <User className="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600" />
+                <h3 className="mt-4 text-lg font-medium text-slate-900 dark:text-white">
+                  {hasActiveFilters ? 'No contacts found' : 'No contacts yet'}
+                </h3>
+                <p className="mt-2 text-slate-500 dark:text-slate-400">
+                  {hasActiveFilters
+                    ? 'Try adjusting your filters or search term'
+                    : 'Get started by adding your first contact'}
+                </p>
+                {!hasActiveFilters && (
+                  <Button variant="primary" className="mt-4" onClick={openAddModal}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Contact
+                  </Button>
+                )}
+              </CardContent>
+            }
+          />
+        </div>
+      </div>
 
       {/* Add Contact Modal */}
       <Modal

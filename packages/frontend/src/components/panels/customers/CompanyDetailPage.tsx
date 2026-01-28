@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { clsx } from 'clsx';
 import {
@@ -13,18 +13,15 @@ import {
   Mail,
   Smartphone,
   FileText,
-  Check,
-  X,
-  Pencil,
   Users,
   Info,
   Printer,
 } from 'lucide-react';
 import { Page } from '@/components/layout';
-import { Button, ConfirmModal, Modal, Input, AddressInput, UnsavedChangesModal, Select, Textarea, Toggle, SectionHeader } from '@/components/common';
-import { MultiSelectUsers } from '@/components/common/MultiSelectUsers';
-import { CollapsibleSection } from '@/components/common/CollapsibleSection';
-import { EntityTasksSection } from '@/components/common/EntityTasksSection';
+import { 
+  Button, ConfirmModal, Modal, Input, AddressInput, Select, Textarea, Toggle, 
+  SectionHeader, InlineEditField, CollapsibleSection, MultiSelectUsers, EntityTasksSection
+} from '@/components/common';
 import { TaskDetailPanel } from '@/components/panels/TasksPage';
 import { useClientsStore, useUsersStore, useToast, useNavigationGuardStore, useFieldsStore, type Company, type ContactRole, type CompanyAddress, isDuplicateAddress } from '@/contexts';
 import { useTaskStore, type Task, type TaskInput } from '@/contexts/taskStore';
@@ -32,7 +29,6 @@ import {
   formatPhoneNumber,
   validatePhone,
   validateEmail,
-  validateWebsite,
 } from '@/utils/validation';
 import { useDocumentTitle, useCompanyBySlug, getContactUrl } from '@/hooks';
 
@@ -66,273 +62,6 @@ const initialContactFormData: ContactFormData = {
   notes: '',
   additionalContacts: [],
 };
-
-// Compact Inline Editable Field Component
-function InlineField({
-  label,
-  value,
-  onSave,
-  type = 'text',
-  placeholder,
-  icon: Icon,
-  onEditingChange,
-}: {
-  label: string;
-  value: string;
-  onSave: (value: string) => void;
-  type?: 'text' | 'tel' | 'url' | 'email' | 'textarea';
-  placeholder?: string;
-  icon?: React.ElementType;
-  onEditingChange?: (isEditing: boolean, hasChanges: boolean) => void;
-}) {
-  const toast = useToast();
-  const [isEditing, setIsEditing] = useState(false);
-  const [editValue, setEditValue] = useState(value);
-  const [showModal, setShowModal] = useState(false);
-  const [pendingTab, setPendingTab] = useState(false);
-  const [validationError, setValidationError] = useState<string | null>(null);
-  const fieldRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
-
-  useEffect(() => {
-    setEditValue(value);
-  }, [value]);
-
-  const hasChanges = editValue !== value;
-
-  const onEditingChangeRef = useRef(onEditingChange);
-  onEditingChangeRef.current = onEditingChange;
-
-  useEffect(() => {
-    onEditingChangeRef.current?.(isEditing, hasChanges);
-  }, [isEditing, hasChanges]);
-
-  const getValidationError = (val: string): string | null => {
-    if (!val) return null;
-    
-    if (type === 'tel') {
-      return validatePhone(val) ? null : 'Invalid phone number';
-    }
-    if (type === 'email') {
-      return validateEmail(val) ? null : 'Invalid email address';
-    }
-    if (type === 'url') {
-      return validateWebsite(val) ? null : 'Invalid website URL';
-    }
-    return null;
-  };
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    let newValue = e.target.value;
-    
-    if (type === 'tel') {
-      const currentDigits = editValue.replace(/\D/g, '').length;
-      const newDigits = newValue.replace(/\D/g, '').length;
-      
-      if (newDigits > currentDigits) {
-        newValue = formatPhoneNumber(newValue);
-      }
-    }
-    
-    setEditValue(newValue);
-    setValidationError(getValidationError(newValue));
-  };
-
-  const moveToNextField = () => {
-    const focusableElements = document.querySelectorAll('[data-inline-field="true"]');
-    const currentIndex = Array.from(focusableElements).findIndex(
-      (el) => el === fieldRef.current || el.contains(fieldRef.current)
-    );
-    const nextElement = focusableElements[currentIndex + 1] as HTMLElement;
-    if (nextElement) {
-      nextElement.focus();
-      nextElement.click();
-    }
-  };
-
-  const handleSave = () => {
-    const error = getValidationError(editValue);
-    if (error) {
-      setValidationError(error);
-      return;
-    }
-    
-    onSave(editValue);
-    setIsEditing(false);
-    setShowModal(false);
-    setValidationError(null);
-    if (pendingTab) {
-      setPendingTab(false);
-      setTimeout(moveToNextField, 0);
-    }
-  };
-
-  const handleDiscard = (showDiscardToast = false) => {
-    if (showDiscardToast && validationError) {
-      toast.error('Not Saved', 'Changes discarded due to invalid value');
-    }
-    setEditValue(value);
-    setIsEditing(false);
-    setShowModal(false);
-    setValidationError(null);
-    if (pendingTab) {
-      setPendingTab(false);
-      setTimeout(moveToNextField, 0);
-    }
-  };
-
-  const handleKeepEditing = () => {
-    setShowModal(false);
-    setPendingTab(false);
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (showModal) {
-      e.preventDefault();
-      e.stopPropagation();
-      return;
-    }
-
-    if (e.key === 'Enter' && type !== 'textarea') {
-      e.preventDefault();
-      handleSave();
-    } else if (e.key === 'Escape') {
-      e.preventDefault();
-      e.stopPropagation();
-      setPendingTab(false);
-      if (validationError) {
-        handleDiscard(true);
-      } else if (hasChanges) {
-        setShowModal(true);
-      } else {
-        setIsEditing(false);
-      }
-    } else if (e.key === 'Tab' && !e.shiftKey) {
-      e.preventDefault();
-      e.stopPropagation();
-      if (validationError) {
-        toast.error('Invalid Value', validationError);
-        setTimeout(() => {
-          inputRef.current?.focus();
-        }, 0);
-        return;
-      }
-      if (hasChanges) {
-        setPendingTab(true);
-        setShowModal(true);
-      } else {
-        setIsEditing(false);
-        moveToNextField();
-      }
-    }
-  };
-
-  const handleViewKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      setIsEditing(true);
-    }
-  };
-
-  if (isEditing) {
-    return (
-      <>
-        <div className="space-y-1" data-inline-field="true" ref={fieldRef}>
-          <label className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</label>
-          <div className="flex items-center gap-2">
-            {type === 'textarea' ? (
-              <textarea
-                ref={inputRef as React.RefObject<HTMLTextAreaElement>}
-                value={editValue}
-                onChange={handleInputChange}
-                onKeyDown={handleKeyDown}
-                placeholder={placeholder}
-                rows={3}
-                autoFocus
-                className={clsx(
-                  "flex-1 px-3 py-1.5 text-sm border rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2",
-                  validationError 
-                    ? "border-danger-500 focus:ring-danger-500" 
-                    : "border-brand-500 focus:ring-brand-500"
-                )}
-              />
-            ) : (
-              <input
-                ref={inputRef as React.RefObject<HTMLInputElement>}
-                type={type === 'tel' ? 'text' : type}
-                value={editValue}
-                onChange={handleInputChange}
-                onKeyDown={handleKeyDown}
-                placeholder={placeholder}
-                autoFocus
-                className={clsx(
-                  "flex-1 px-3 py-1.5 text-sm border rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2",
-                  validationError 
-                    ? "border-danger-500 focus:ring-danger-500" 
-                    : "border-brand-500 focus:ring-brand-500"
-                )}
-              />
-            )}
-            <button
-              onClick={handleSave}
-              tabIndex={-1}
-              className="p-1.5 text-success-600 hover:bg-success-50 dark:hover:bg-success-900/20 rounded-lg"
-              title="Save (Enter)"
-            >
-              <Check className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => {
-                if (validationError) {
-                  handleDiscard(true);
-                } else if (hasChanges) {
-                  setShowModal(true);
-                } else {
-                  setIsEditing(false);
-                }
-              }}
-              tabIndex={-1}
-              className="p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"
-              title="Cancel (Esc)"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-          {validationError && (
-            <p className="text-xs text-danger-600 dark:text-danger-400 mt-1">{validationError}</p>
-          )}
-        </div>
-
-        <UnsavedChangesModal
-          isOpen={showModal}
-          onSave={handleSave}
-          onDiscard={() => handleDiscard(false)}
-          onCancel={handleKeepEditing}
-        />
-      </>
-    );
-  }
-
-  return (
-    <div
-      data-inline-field="true"
-      ref={fieldRef}
-      tabIndex={0}
-      className="group cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 focus:bg-slate-50 dark:focus:bg-slate-800/50 focus:outline-none focus:ring-2 focus:ring-brand-500 -mx-2 px-2 py-1 rounded-lg transition-colors"
-      onClick={() => setIsEditing(true)}
-      onKeyDown={handleViewKeyDown}
-    >
-      <div className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</div>
-      <div className="flex items-center gap-2 mt-0.5">
-        {Icon && <Icon className="w-3.5 h-3.5 text-slate-400" />}
-        <span className={clsx('text-sm', value ? 'text-slate-900 dark:text-white' : 'text-slate-400 italic')}>
-          {value || placeholder || 'Click to add...'}
-        </span>
-        <Pencil className="w-3 h-3 text-slate-300 opacity-0 group-hover:opacity-100 group-focus:opacity-100 transition-opacity ml-auto" />
-      </div>
-    </div>
-  );
-}
 
 // Multi-Select Sales Rep Field for Company Level with "Set by location" toggle
 function MultiSalesRepField({
@@ -985,11 +714,11 @@ export function CompanyDetailPage() {
           <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-visible">
             <SectionHeader
               title="Company Details"
-              icon={<Building2 className="w-4 h-4 text-slate-500" />}
+              icon={Building2}
             />
             <div className="p-4 bg-white dark:bg-slate-900 rounded-b-lg overflow-visible">
               <div className="space-y-3 overflow-visible">
-                <InlineField
+                <InlineEditField
                   label="Company Name"
                   value={company.name}
                   onSave={(v) => handleFieldSave('name', v)}
@@ -997,7 +726,7 @@ export function CompanyDetailPage() {
                   onEditingChange={handleEditingChange('name')}
                 />
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 overflow-visible">
-                  <InlineField
+                  <InlineEditField
                     label="Phone"
                     value={company.phone || ''}
                     onSave={(v) => handleFieldSave('phone', v)}
@@ -1006,7 +735,7 @@ export function CompanyDetailPage() {
                     icon={Phone}
                     onEditingChange={handleEditingChange('phone')}
                   />
-                  <InlineField
+                  <InlineEditField
                     label="Website"
                     value={company.website || ''}
                     onSave={(v) => handleFieldSave('website', v)}
@@ -1032,7 +761,7 @@ export function CompanyDetailPage() {
           {/* Addresses Section - Collapsible with add button */}
           <CollapsibleSection
             title="Addresses"
-            icon={<MapPin className="w-4 h-4 text-slate-500" />}
+            icon={MapPin}
             badge={addressCount > 0 ? addressCount : undefined}
             defaultOpen={true}
             action={
@@ -1170,7 +899,7 @@ export function CompanyDetailPage() {
           {/* Contacts Section - Collapsible */}
           <CollapsibleSection
             title="Contacts"
-            icon={<Users className="w-4 h-4 text-slate-500" />}
+            icon={Users}
             badge={companyContacts.length}
             defaultOpen={false}
             action={
@@ -1233,10 +962,10 @@ export function CompanyDetailPage() {
           {/* Notes Section - Collapsible, Collapsed by Default */}
           <CollapsibleSection
             title="Notes"
-            icon={<FileText className="w-4 h-4 text-slate-500" />}
+            icon={FileText}
             defaultOpen={false}
           >
-            <InlineField
+            <InlineEditField
               label="Notes"
               value={company.notes || ''}
               onSave={(v) => handleFieldSave('notes', v)}
@@ -1253,7 +982,7 @@ export function CompanyDetailPage() {
           <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
             <SectionHeader
               title="Quick Info"
-              icon={<Info className="w-4 h-4 text-slate-500" />}
+              icon={Info}
             />
             <div className="p-4 bg-white dark:bg-slate-900">
               <div className="space-y-3">

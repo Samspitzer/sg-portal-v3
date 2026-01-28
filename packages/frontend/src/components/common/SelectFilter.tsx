@@ -20,8 +20,8 @@ export interface SelectFilterProps {
   options: SelectFilterOption[];
   /** Change handler */
   onChange: (value: string) => void;
-  /** Optional icon */
-  icon?: React.ReactNode;
+  /** Optional icon - can be a Lucide component (e.g., Users) or ReactNode */
+  icon?: React.ElementType | React.ReactNode;
   /** Show "All" option */
   showAllOption?: boolean;
   /** Placeholder for "All" option */
@@ -37,6 +37,19 @@ export interface SelectFilterProps {
   renderValue?: (option: SelectFilterOption) => React.ReactNode;
   /** Size variant */
   size?: 'sm' | 'md';
+}
+
+// Helper to check if icon is a component type vs ReactNode
+function isComponentType(icon: React.ElementType | React.ReactNode): icon is React.ElementType {
+  // Check if it's a function (functional component)
+  if (typeof icon === 'function') return true;
+  // Check if it's a forwardRef or memo component (object with $$typeof but no 'type' property)
+  if (typeof icon === 'object' && icon !== null && '$$typeof' in icon) {
+    // If it has 'type' property, it's already a rendered element, not a component
+    if ('type' in icon) return false;
+    return true;
+  }
+  return false;
 }
 
 export function SelectFilter({
@@ -67,6 +80,16 @@ export function SelectFilter({
     ? 'h-7 px-2 py-0 text-xs gap-1.5' 
     : 'px-3 py-2 text-sm gap-2';
   const iconSize = size === 'sm' ? 'w-3 h-3' : 'w-4 h-4';
+
+  // Render icon - handles both component type and ReactNode
+  const renderIcon = () => {
+    if (!icon) return null;
+    if (isComponentType(icon)) {
+      const IconComponent = icon;
+      return <IconComponent className={iconSize} />;
+    }
+    return icon;
+  };
 
   // Determine if search should be shown
   const showSearch = options.length > searchThreshold;
@@ -315,7 +338,7 @@ export function SelectFilter({
             : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
         )}
       >
-        {icon && <span className="text-slate-500 dark:text-slate-400 flex-shrink-0">{icon}</span>}
+        {icon && <span className="text-slate-500 dark:text-slate-400 flex-shrink-0">{renderIcon()}</span>}
         <span className={clsx('flex-1 text-left', !hasSelection && 'text-slate-500 dark:text-slate-400')}>
           {renderSelectedValue()}
         </span>

@@ -156,7 +156,7 @@ const getChainOfCommand = (userId: string): string[] => {
 
 **Props:**
 - `isOpen`: boolean
-- `duplicateType`: 'exact' | 'different-address' | 'different-website' - Exact blocks creation, others offer options
+- `duplicateType`: 'exact' | 'simlar' - Exact blocks creation, similar offers options
 - `existingCompany`: Company | null - The matching company found
 - `newCompanyInfo`: { name, street, city, state, zip } | null - Data being entered
 - `onClose`: () => void
@@ -166,11 +166,10 @@ const getChainOfCommand = (userId: string): string[] => {
 
 **Duplicate Detection Logic:**
 - **Exact duplicate**: Same name AND same address → Block creation, show "View Existing" only
-- **Different address**: Same name, different location → Offer three options:
+- **Similar (same name, different location)**: Offer three options:
   1. View existing company
   2. Add as new location to existing company
   3. Create as separate company
-- **Different website**: Same name, different website → Similar options
 
 ---
 
@@ -181,12 +180,196 @@ const getChainOfCommand = (userId: string): string[] => {
 
 **Props:**
 - `isOpen`: boolean
-- `duplicateType`: 'exact' | 'name-only' - Exact blocks creation, name-only offers options
+- `duplicateType`: 'exact' | 'simlar'
 - `existingContact`: Contact | null
 - `newContactInfo`: { firstName, lastName, email, phone } | null
 - `onClose`: () => void
 - `onTransferAndUpdate`: () => void - Transfer to new company and update info
 - `onCreateNew`: () => void - Create as new contact anyway
+
+---
+
+## Phase 6: Extracted Inline Editing Components (January 27, 2026)
+
+### InlineEditField
+**File:** `InlineEditField.tsx`
+
+**Purpose:** Reusable inline text editing component with validation, keyboard navigation, and unsaved changes handling. Extracted from CompanyDetailPage, ContactDetailPage, and UserDetailPage.
+
+**Props:**
+```tsx
+interface InlineEditFieldProps {
+  label: string;
+  value: string;
+  onSave: (value: string) => void;
+  type?: 'text' | 'tel' | 'email' | 'url' | 'textarea';
+  placeholder?: string;
+  icon?: React.ElementType;  // Lucide icon component (e.g., Mail, Phone)
+  onEditingChange?: (isEditing: boolean, hasChanges: boolean) => void;
+  needsReview?: boolean;     // Shows amber indicator for fields needing review
+  onConfirm?: () => void;    // Called when user confirms a field needing review
+  disabled?: boolean;
+  rows?: number;             // For textarea type
+  className?: string;
+}
+```
+
+**Features:**
+- Auto-formatting for phone numbers
+- Real-time validation for phone, email, URL
+- Tab navigation between inline fields (`data-inline-field="true"`)
+- UnsavedChangesModal integration
+- Review state indicator (amber dot + checkmark)
+- Keyboard: Enter to save, Escape to cancel, Tab to next field
+
+**Usage:**
+```tsx
+import { InlineEditField } from '@/components/common';
+
+<InlineEditField
+  label="Email"
+  value={contact.email || ''}
+  onSave={(v) => handleFieldSave('email', v)}
+  type="email"
+  placeholder="email@example.com"
+  icon={Mail}
+  onEditingChange={handleEditingChange('email')}
+  needsReview={fieldsNeedingReview.has('email')}
+  onConfirm={() => handleFieldConfirm('email')}
+/>
+```
+
+---
+
+### InlineSelectField
+**File:** `InlineSelectField.tsx`
+
+**Purpose:** Reusable inline dropdown selection with keyboard navigation. Extracted from ContactDetailPage's RoleField pattern.
+
+**Props:**
+```tsx
+interface InlineSelectOption {
+  value: string;
+  label: string;
+}
+
+interface InlineSelectFieldProps {
+  label: string;
+  value: string;
+  options: InlineSelectOption[] | string[];  // Can pass simple string array
+  onSave: (value: string) => void;
+  placeholder?: string;
+  icon?: React.ElementType;
+  onEditingChange?: (isEditing: boolean, hasChanges: boolean) => void;
+  needsReview?: boolean;
+  onConfirm?: () => void;
+  disabled?: boolean;
+  allowEmpty?: boolean;      // Allow selecting empty/no value
+  emptyLabel?: string;       // Label for empty option (default: "None")
+  className?: string;
+}
+```
+
+**Features:**
+- Keyboard navigation (Arrow keys, Enter, Escape)
+- Uses `useDropdownKeyboard` hook
+- Tab navigation between inline fields
+- UnsavedChangesModal integration
+- Review state indicator
+
+**Usage:**
+```tsx
+import { InlineSelectField } from '@/components/common';
+
+<InlineSelectField
+  label="Role"
+  value={contact.role || ''}
+  options={contactRoles}  // string[] or {value, label}[]
+  onSave={(v) => handleFieldSave('role', v)}
+  onEditingChange={handleEditingChange('role')}
+  needsReview={fieldsNeedingReview.has('role')}
+  onConfirm={() => handleFieldConfirm('role')}
+  icon={Briefcase}
+  placeholder="Click to assign role..."
+  emptyLabel="No role assigned"
+/>
+```
+
+---
+
+### CompanySearchField
+**File:** `CompanySearchField.tsx`
+
+**Purpose:** Company selector with search, keyboard navigation, and "Add New Company" modal with duplicate detection. Extracted from ContactDetailPage's CompanyField.
+
+**Props:**
+```tsx
+interface CompanySearchFieldProps {
+  label: string;
+  value: string;                    // Company ID
+  onSave: (value: string) => void;
+  onEditingChange?: (isEditing: boolean, hasChanges: boolean) => void;
+  onCompanyChange?: (oldCompanyId: string, newCompanyId: string) => void;
+  placeholder?: string;
+  className?: string;
+}
+```
+
+**Features:**
+- Searchable dropdown of all companies
+- "Add [name] as new company" option when no exact match
+- Full Add Company modal with:
+  - Company name, phone, website
+  - Main office address
+  - Additional offices (secondary addresses)
+  - Sales rep assignment
+  - Notes
+- Duplicate company detection:
+  - Exact match: blocks creation
+  - Same name, different address: offers to add as location
+- Keyboard navigation via `useDropdownKeyboard`
+- UnsavedChangesModal for unsaved changes
+
+**Usage:**
+```tsx
+import { CompanySearchField } from '@/components/common';
+
+<CompanySearchField
+  label="Select Company"
+  value={contact.companyId}
+  onSave={(v) => {
+    handleFieldSave('companyId', v);
+    setShowCompanyEditor(false);
+  }}
+  onEditingChange={handleEditingChange('company')}
+  onCompanyChange={handleCompanyChange}
+/>
+```
+
+**Note:** This component uses `DuplicateCompanyModal` internally for duplicate detection.
+
+---
+
+## Updated index.ts Exports
+
+Add to `src/components/common/index.ts`:
+
+```tsx
+export { InlineEditField, type InlineEditFieldProps } from './InlineEditField';
+export { InlineSelectField, type InlineSelectFieldProps, type InlineSelectOption } from './InlineSelectField';
+export { CompanySearchField, type CompanySearchFieldProps } from './CompanySearchField';
+```
+
+---
+
+## Files Refactored in Phase 6
+
+| File | Lines Before | Lines After | Reduction |
+|------|-------------|-------------|-----------|
+| `CompanyDetailPage.tsx` | 1,797 | 1,529 | 268 (15%) |
+| `ContactDetailPage.tsx` | 2,355 | 942 | 1,413 (60%) |
+| `UserDetailPage.tsx` | 747 | 672 | 75 (10%) |
+| **Total** | **4,899** | **3,143** | **1,756 (36%)** |
 
 ---
 
@@ -263,249 +446,40 @@ interface UserDependencies {
 interface DependencyCategory {
   module: string;      // e.g., 'companies'
   label: string;       // e.g., 'Companies (Sales Rep)'
-  icon: string;
-  field: string;       // e.g., 'salesRepId'
+  icon: string;        // Icon component name
   items: DependencyItem[];
-  canReassign: boolean;
-}
-
-// Get summary text
-const summary = getDependencySummary(dependencies);
-// "This user is assigned to 3 companies (sales rep)."
-```
-
----
-
-### useReassignUserItems
-**File:** `useUserDependencies.ts`
-
-**Purpose:** Reassign items from one user to another.
-
-**Usage:**
-```tsx
-const { reassignItems } = useReassignUserItems();
-
-// Reassign all items in categories from fromUserId to toUserId
-reassignItems(fromUserId, toUserId, categories);
-```
-
----
-
-## Utilities
-
-### dateUtils
-**File:** `utils/dateUtils.ts`
-
-**Purpose:** Centralized date parsing and formatting functions.
-
-**Functions:**
-```tsx
-// Parse ISO date string (YYYY-MM-DD) to Date object
-parseLocalDate(dateStr: string): Date
-
-// Convert Date to ISO string (YYYY-MM-DD)
-toISODateString(date: Date): string
-
-// Get today as ISO string
-getTodayISO(): string
-
-// Format date for display
-// format: 'short' (1/15/2026), 'long' (Monday, January 15), 'display' (01/15/2026)
-formatDate(dateStr: string, format?: 'short' | 'long' | 'display'): string
-
-// Add/subtract days
-addDays(dateStr: string, days: number): string
-
-// Date comparisons
-isToday(dateStr: string): boolean
-isPast(dateStr: string): boolean
-isTomorrow(dateStr: string): boolean
-```
-
-**Usage:**
-```tsx
-import { parseLocalDate, formatDate, getTodayISO, addDays } from '@/utils/dateUtils';
-
-// Parse and format
-const date = parseLocalDate('2026-01-15');
-const display = formatDate('2026-01-15', 'long'); // "Wednesday, January 15"
-
-// Date math
-const tomorrow = addDays(getTodayISO(), 1);
-```
-
----
-
-## Config
-
-### icons
-**File:** `config/icons.ts`
-
-**Purpose:** Centralized icon mappings for modules and entities.
-
-**Exports:**
-```tsx
-// Icon mapping for modules
-MODULE_ICONS: Record<string, LucideIcon>
-
-// Get icon for a module (case-insensitive)
-getModuleIcon(module: string): LucideIcon
-
-// Entity icons for linked entities (tasks, etc.)
-ENTITY_ICONS: Record<EntityIconType, LucideIcon>
-```
-
-**Usage:**
-```tsx
-import { ENTITY_ICONS, getModuleIcon } from '@/config';
-
-// Use entity icons
-const Icon = ENTITY_ICONS['company']; // Building2
-<Icon className="w-4 h-4" />
-
-// Get module icon dynamically
-const ModuleIcon = getModuleIcon('projects'); // FolderKanban
-```
-
-**Available Icons:**
-- `companies` / `company` → Building2
-- `projects` / `project` → FolderKanban
-- `tasks` / `task` → CheckSquare
-- `estimates` / `estimate` → FileText
-- `invoices` / `invoice` → Receipt
-- `contacts` / `contact` → User
-- `users` / `user` → Users
-- `deals` / `deal` → Briefcase
-- `accounting` → DollarSign
-
----
-
-## Updated Patterns
-
-### Multiple Additional Supervisors
-
-Users can now have multiple additional supervisors stored as an array.
-
-**Data Model:**
-```tsx
-interface User {
-  // ... other fields
-  supervisorIds?: string[];           // Array of additional supervisor user IDs
-  defaultSupervisorDisabled?: boolean; // If true, ignore position's reportsToPositionId
 }
 ```
 
-**Key Rules:**
-1. Cannot disable default supervisor unless at least one additional supervisor exists
-2. Removing the last additional supervisor auto-re-enables the default supervisor
-3. Additional supervisors are displayed with position name + user name (same format as default)
-
-**UI Pattern (UserDetailPage):**
-```
-┌─────────────────────────────────────────────────────────────────┐
-│ Reporting Structure                                              │
-├─────────────────────────────┬───────────────────────────────────┤
-│ Reports to                  │ Add Additional Supervisor          │
-│ VP of Sales (John)  [Disable]│ [By User] [By Position]           │
-│ ─────────────────────────── │ [Select user...        ▼]          │
-│ Additional                  │                                    │
-│ Sales Manager (Jane) [Remove]│                                    │
-│ Additional                  │                                    │
-│ Director (Bob)       [Remove]│                                    │
-└─────────────────────────────┴───────────────────────────────────┘
-```
-
-**Handlers:**
-```tsx
-// Add supervisor
-const handleAddAdditionalSupervisor = (supervisorId: string) => {
-  if (additionalSupervisorIds.includes(supervisorId)) {
-    toast.error('Already Added', 'This supervisor is already in the list');
-    return;
-  }
-  const newIds = [...additionalSupervisorIds, supervisorId];
-  updateUser(user.id, { supervisorIds: newIds });
-};
-
-// Remove supervisor (auto-enables default if removing last one)
-const handleRemoveAdditionalSupervisor = (supervisorId: string) => {
-  const newIds = additionalSupervisorIds.filter(id => id !== supervisorId);
-  
-  if (newIds.length === 0 && user.defaultSupervisorDisabled) {
-    updateUser(user.id, { 
-      supervisorIds: undefined, 
-      defaultSupervisorDisabled: false 
-    });
-    toast.success('Updated', 'Additional supervisor removed - default supervisor re-enabled');
-  } else {
-    updateUser(user.id, { supervisorIds: newIds.length > 0 ? newIds : undefined });
-  }
-};
-
-// Disable default (only if additional supervisors exist)
-const handleToggleDefaultSupervisor = () => {
-  if (!user.defaultSupervisorDisabled && !hasAdditionalSupervisors) {
-    toast.warning('Cannot Disable', 'Add an additional supervisor first');
-    return;
-  }
-  updateUser(user.id, { defaultSupervisorDisabled: !user.defaultSupervisorDisabled });
-};
-```
-
 ---
 
-### Dropdown with Portal Pattern
+## UI Patterns
 
-For dropdowns that need to escape overflow:hidden containers (like modals):
+### Portal-based Dropdowns
+For dropdowns inside scrollable containers or modals, use React portals:
 
-**Implementation:**
 ```tsx
 import { createPortal } from 'react-dom';
 
-function PortalDropdown({ isOpen, triggerRef, children }) {
-  const [position, setPosition] = useState({ top: 0, left: 0, width: 0 });
-  const dropdownRef = useRef<HTMLDivElement>(null);
-
+function MyDropdown({ isOpen, children, triggerRef }) {
+  const [position, setPosition] = useState({ top: 0, left: 0 });
+  
   useEffect(() => {
     if (isOpen && triggerRef.current) {
       const rect = triggerRef.current.getBoundingClientRect();
-      const dropdownWidth = Math.max(rect.width, 220);
-      
-      // Align to right edge of trigger to prevent cutoff
-      let left = rect.right - dropdownWidth;
-      
-      // Bounds checking
-      if (left < 8) left = 8;
-      if (left + dropdownWidth > window.innerWidth - 8) {
-        left = window.innerWidth - dropdownWidth - 8;
-      }
-      
-      // Vertical positioning
-      const dropdownHeight = 280;
-      const spaceBelow = window.innerHeight - rect.bottom;
-      const showAbove = spaceBelow < dropdownHeight && rect.top > spaceBelow;
-      
       setPosition({
-        top: showAbove ? rect.top - dropdownHeight : rect.bottom + 4,
-        left,
-        width: dropdownWidth,
+        top: rect.bottom + window.scrollY,
+        left: rect.left + window.scrollX,
       });
     }
   }, [isOpen]);
-
+  
   if (!isOpen) return null;
-
+  
   return createPortal(
-    <div
-      ref={dropdownRef}
-      style={{
-        position: 'fixed',
-        top: position.top,
-        left: position.left,
-        width: position.width,
-        zIndex: 99999,
-      }}
-      className="bg-white dark:bg-slate-800 border rounded-lg shadow-xl"
+    <div 
+      style={{ position: 'absolute', top: position.top, left: position.left }}
+      className="z-50 bg-white shadow-lg rounded-lg"
     >
       {children}
     </div>,
@@ -746,11 +720,8 @@ const getChainOfCommand = (userId: string): string[] => {
 ```tsx
 interface Position {
   id: string;
-  name: string;                       // Position title, e.g., "Sales Manager"
-  departmentId: string;               // Parent department ID
-  level: 1 | 2 | 3 | 4 | 5;          // Hierarchy level (1 = highest/dept head)
-  reportsToPositionId: string | null; // Parent position in hierarchy
-  order: number;                      // Display order within department
+  name: string;                    // Position title, e.g., "Sales Manager"
+  reportsToPositionId?: string;    // Parent position in hierarchy
 }
 ```
 
@@ -759,11 +730,7 @@ interface Position {
 interface Department {
   id: string;
   name: string;
-  parentDepartmentId: string | null;  // null = top-level department
   positions: Position[];
-  order: number;                      // Display order
-  createdAt: string;
-  updatedAt: string;
 }
 ```
 
