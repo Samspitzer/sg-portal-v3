@@ -1,748 +1,325 @@
-# New Common Components (January 14-15, 2026)
+# Development Updates (January 27-28, 2026)
 
-Add these sections to DEVELOPMENT.md after SelectFilter (line 462) and before DataTable (line 466):
+Add these sections to DEVELOPMENT.md:
 
 ---
 
-### PositionSelector
-**File:** `PositionSelector.tsx`
+## FilterBar Component System
 
-**Purpose:** Hierarchical dropdown for selecting positions by department. Supports drill-down navigation, search, and keyboard controls.
+### FilterBar
+**File:** `Filterbar.tsx`
+
+**Purpose:** Unified filter bar component for consistent styling across all list pages. Provides a bordered container with optional two-row layout for alphabet filters.
 
 **Props:**
-- `value`: string - Currently selected position ID
-- `departments`: Array<{ id, name, positions: Array<{ id, name }> }> - Departments with positions
-- `onChange`: (positionId: string) => void - Called with position ID or empty string when cleared
-- `icon`: ReactNode (optional)
-- `className`: string (optional)
-- `placeholder`: string (default: "Select position...")
-- `pending`: boolean (optional) - If true, traps focus and shows warning when trying to leave
-- `pendingMessage`: string (optional) - Message for pending toast
-
-**Features:**
-- Two-level navigation: Departments list → Positions within department
-- Arrow Right/Left to drill in/out of departments
-- Search across all departments and positions
-- Dropdown flips to top when near bottom of viewport
-- ESC clears selection (when dropdown closed), goes back (when in department), closes (otherwise)
-- Focus trap when `pending=true` - dispatches 'position-selector-pending' event
+- `children`: ReactNode - Primary row content (search, dropdowns, etc.)
+- `secondaryRow?`: ReactNode - Optional second row (alphabet filter)
+- `rightContent?`: ReactNode - Right side content (counts, actions)
+- `className?`: string - Additional CSS classes
 
 **Usage:**
 ```tsx
-import { PositionSelector } from '@/components/common';
-
-// Basic usage
-<PositionSelector
-  value={selectedPositionId}
-  departments={departments}
-  onChange={setSelectedPositionId}
-  icon={<Briefcase className="w-3.5 h-3.5" />}
-  placeholder="Select position..."
-/>
-
-// With pending state (e.g., position selected but no users assigned)
-<PositionSelector
-  value={selectedPositionId}
-  departments={departments}
-  onChange={handlePositionSelect}
-  pending={isPending}
-  pendingMessage={`No one is assigned to "${positionName}"`}
-/>
-
-// Listen for pending events
-useEffect(() => {
-  const handlePending = (e: CustomEvent) => {
-    toast.warning('Cannot Proceed', e.detail.message);
-  };
-  window.addEventListener('position-selector-pending', handlePending);
-  return () => window.removeEventListener('position-selector-pending', handlePending);
-}, []);
-```
-
-**Keyboard Navigation:**
-| Key | Action |
-|-----|--------|
-| Arrow Down | Move to next item |
-| Arrow Up | Move to previous item |
-| Arrow Right | Enter department (when on department) |
-| Arrow Left | Go back to department list |
-| Enter | Select position or enter department |
-| Escape | Clear search → Go back → Close dropdown → Clear selection |
-| Tab | Select current and close |
-
----
-
-### SelectFilter Updates
-**File:** `SelectFilter.tsx`
-
-**New Features (January 14, 2026):**
-
-1. **Dropdown positioning** - Automatically flips to top when near bottom of viewport
-2. **Space bar in search** - Now types a space instead of selecting (use Enter to select)
-3. **Smooth scroll** - Scrolls page if dropdown extends below viewport
-
-**Updated Behavior:**
-- `dropdownPosition` state tracks 'bottom' | 'top'
-- Dropdown uses `bottom-full mb-1` when flipped to top
-- ESC behavior: clear search → clear selection → close
-
----
-
-### UserDeactivationModal (Updated January 15, 2026)
-**File:** `UserDeactivationModal.tsx`
-
-**Purpose:** Modal for deactivating/deleting users with comprehensive reassignment of all assigned items following chain of command.
-
-**Props:**
-- `isOpen`: boolean - Modal visibility
-- `onClose`: () => void - Close handler
-- `onConfirm`: (reassignToUserId: string | null) => void - Confirmation handler
-- `user`: { id: string; name: string; positionId?: string } | null - User being deactivated
-- `mode`: 'deactivate' | 'delete' - Action mode
-
-**Features:**
-1. **Shows all assignment types** where user appears (Companies Sales Rep, Companies Overrider, etc.)
-2. **Chain of Command auto-assignment** - Finds user's manager via position hierarchy, defaults all items to direct manager
-3. **Per-section bulk reassign** - "Reassign all to:" dropdown for each category
-4. **Per-item manual override** - Expand section to change individual item assignments
-5. **No "Leave unassigned" option** - All items must be reassigned (follows chain of command up to CEO)
-6. **Portal-based dropdowns** - Uses `createPortal` to prevent overflow clipping
-
-**ESC Key Behavior (hierarchical):**
-1. If dropdown is open → Close dropdown only
-2. If section is expanded → Collapse that section (one at a time, most recent first)
-3. If all sections collapsed → Close modal
-
-**Internal Components:**
-- `UserSelectDropdown` - Custom dropdown with:
-  - Portal rendering for proper z-index
-  - Grouped options ("Chain of Command" / "Other Users")
-  - Search functionality (when >5 users)
-  - "Manager" badge on direct manager
-  - Keyboard navigation via `useDropdownKeyboard`
-  - `onOpenChange` callback for tracking open state
-
-**Usage:**
-```tsx
-import { UserDeactivationModal } from '@/components/common';
-
-<UserDeactivationModal
-  isOpen={showDeactivateModal}
-  onClose={() => setShowDeactivateModal(false)}
-  onConfirm={handleDeactivateConfirm}
-  user={selectedUser}
-  mode="deactivate"
-/>
-```
-
-**Chain of Command Logic:**
-```tsx
-// Walks up position hierarchy to find managers
-const getChainOfCommand = (userId: string): string[] => {
-  // 1. Get user's positionId
-  // 2. Find position's reportsToPositionId
-  // 3. Find active users in that position
-  // 4. Repeat up the chain until no more reportsToPositionId
-  // Returns array of userIds from direct manager up to CEO
-};
-```
-
----
-
-### DuplicateCompanyModal
-**File:** `DuplicateCompanyModal.tsx`
-
-**Purpose:** Modal shown when creating a company that matches an existing one. Handles exact duplicates vs same-name-different-location scenarios.
-
-**Props:**
-- `isOpen`: boolean
-- `duplicateType`: 'exact' | 'simlar' - Exact blocks creation, similar offers options
-- `existingCompany`: Company | null - The matching company found
-- `newCompanyInfo`: { name, street, city, state, zip } | null - Data being entered
-- `onClose`: () => void
-- `onViewExisting`: () => void - Navigate to existing company
-- `onAddAsNewLocation`: () => void - Add as additional address to existing company
-- `onCreateSeparate`: () => void - Create as separate company anyway
-
-**Duplicate Detection Logic:**
-- **Exact duplicate**: Same name AND same address → Block creation, show "View Existing" only
-- **Similar (same name, different location)**: Offer three options:
-  1. View existing company
-  2. Add as new location to existing company
-  3. Create as separate company
-
----
-
-### DuplicateContactModal
-**File:** `DuplicateContactModal.tsx`
-
-**Purpose:** Modal shown when creating a contact that matches an existing one.
-
-**Props:**
-- `isOpen`: boolean
-- `duplicateType`: 'exact' | 'simlar'
-- `existingContact`: Contact | null
-- `newContactInfo`: { firstName, lastName, email, phone } | null
-- `onClose`: () => void
-- `onTransferAndUpdate`: () => void - Transfer to new company and update info
-- `onCreateNew`: () => void - Create as new contact anyway
-
----
-
-## Phase 6: Extracted Inline Editing Components (January 27, 2026)
-
-### InlineEditField
-**File:** `InlineEditField.tsx`
-
-**Purpose:** Reusable inline text editing component with validation, keyboard navigation, and unsaved changes handling. Extracted from CompanyDetailPage, ContactDetailPage, and UserDetailPage.
-
-**Props:**
-```tsx
-interface InlineEditFieldProps {
-  label: string;
-  value: string;
-  onSave: (value: string) => void;
-  type?: 'text' | 'tel' | 'email' | 'url' | 'textarea';
-  placeholder?: string;
-  icon?: React.ElementType;  // Lucide icon component (e.g., Mail, Phone)
-  onEditingChange?: (isEditing: boolean, hasChanges: boolean) => void;
-  needsReview?: boolean;     // Shows amber indicator for fields needing review
-  onConfirm?: () => void;    // Called when user confirms a field needing review
-  disabled?: boolean;
-  rows?: number;             // For textarea type
-  className?: string;
-}
-```
-
-**Features:**
-- Auto-formatting for phone numbers
-- Real-time validation for phone, email, URL
-- Tab navigation between inline fields (`data-inline-field="true"`)
-- UnsavedChangesModal integration
-- Review state indicator (amber dot + checkmark)
-- Keyboard: Enter to save, Escape to cancel, Tab to next field
-
-**Usage:**
-```tsx
-import { InlineEditField } from '@/components/common';
-
-<InlineEditField
-  label="Email"
-  value={contact.email || ''}
-  onSave={(v) => handleFieldSave('email', v)}
-  type="email"
-  placeholder="email@example.com"
-  icon={Mail}
-  onEditingChange={handleEditingChange('email')}
-  needsReview={fieldsNeedingReview.has('email')}
-  onConfirm={() => handleFieldConfirm('email')}
-/>
-```
-
----
-
-### InlineSelectField
-**File:** `InlineSelectField.tsx`
-
-**Purpose:** Reusable inline dropdown selection with keyboard navigation. Extracted from ContactDetailPage's RoleField pattern.
-
-**Props:**
-```tsx
-interface InlineSelectOption {
-  value: string;
-  label: string;
-}
-
-interface InlineSelectFieldProps {
-  label: string;
-  value: string;
-  options: InlineSelectOption[] | string[];  // Can pass simple string array
-  onSave: (value: string) => void;
-  placeholder?: string;
-  icon?: React.ElementType;
-  onEditingChange?: (isEditing: boolean, hasChanges: boolean) => void;
-  needsReview?: boolean;
-  onConfirm?: () => void;
-  disabled?: boolean;
-  allowEmpty?: boolean;      // Allow selecting empty/no value
-  emptyLabel?: string;       // Label for empty option (default: "None")
-  className?: string;
-}
-```
-
-**Features:**
-- Keyboard navigation (Arrow keys, Enter, Escape)
-- Uses `useDropdownKeyboard` hook
-- Tab navigation between inline fields
-- UnsavedChangesModal integration
-- Review state indicator
-
-**Usage:**
-```tsx
-import { InlineSelectField } from '@/components/common';
-
-<InlineSelectField
-  label="Role"
-  value={contact.role || ''}
-  options={contactRoles}  // string[] or {value, label}[]
-  onSave={(v) => handleFieldSave('role', v)}
-  onEditingChange={handleEditingChange('role')}
-  needsReview={fieldsNeedingReview.has('role')}
-  onConfirm={() => handleFieldConfirm('role')}
-  icon={Briefcase}
-  placeholder="Click to assign role..."
-  emptyLabel="No role assigned"
-/>
-```
-
----
-
-### CompanySearchField
-**File:** `CompanySearchField.tsx`
-
-**Purpose:** Company selector with search, keyboard navigation, and "Add New Company" modal with duplicate detection. Extracted from ContactDetailPage's CompanyField.
-
-**Props:**
-```tsx
-interface CompanySearchFieldProps {
-  label: string;
-  value: string;                    // Company ID
-  onSave: (value: string) => void;
-  onEditingChange?: (isEditing: boolean, hasChanges: boolean) => void;
-  onCompanyChange?: (oldCompanyId: string, newCompanyId: string) => void;
-  placeholder?: string;
-  className?: string;
-}
-```
-
-**Features:**
-- Searchable dropdown of all companies
-- "Add [name] as new company" option when no exact match
-- Full Add Company modal with:
-  - Company name, phone, website
-  - Main office address
-  - Additional offices (secondary addresses)
-  - Sales rep assignment
-  - Notes
-- Duplicate company detection:
-  - Exact match: blocks creation
-  - Same name, different address: offers to add as location
-- Keyboard navigation via `useDropdownKeyboard`
-- UnsavedChangesModal for unsaved changes
-
-**Usage:**
-```tsx
-import { CompanySearchField } from '@/components/common';
-
-<CompanySearchField
-  label="Select Company"
-  value={contact.companyId}
-  onSave={(v) => {
-    handleFieldSave('companyId', v);
-    setShowCompanyEditor(false);
-  }}
-  onEditingChange={handleEditingChange('company')}
-  onCompanyChange={handleCompanyChange}
-/>
-```
-
-**Note:** This component uses `DuplicateCompanyModal` internally for duplicate detection.
-
----
-
-## Updated index.ts Exports
-
-Add to `src/components/common/index.ts`:
-
-```tsx
-export { InlineEditField, type InlineEditFieldProps } from './InlineEditField';
-export { InlineSelectField, type InlineSelectFieldProps, type InlineSelectOption } from './InlineSelectField';
-export { CompanySearchField, type CompanySearchFieldProps } from './CompanySearchField';
-```
-
----
-
-## Files Refactored in Phase 6
-
-| File | Lines Before | Lines After | Reduction |
-|------|-------------|-------------|-----------|
-| `CompanyDetailPage.tsx` | 1,797 | 1,529 | 268 (15%) |
-| `ContactDetailPage.tsx` | 2,355 | 942 | 1,413 (60%) |
-| `UserDetailPage.tsx` | 747 | 672 | 75 (10%) |
-| **Total** | **4,899** | **3,143** | **1,756 (36%)** |
-
----
-
-## Hooks
-
-### useDropdownKeyboard
-**File:** `useDropdownKeyboard.ts`
-
-**Purpose:** Standard keyboard navigation for custom dropdowns.
-
-**Parameters:**
-```tsx
-interface UseDropdownKeyboardOptions<T> {
-  items: T[];
-  isOpen: boolean;
-  onSelect: (item: T, index: number) => void;
-  onClose?: () => void;
-  loop?: boolean; // Wrap around from last to first (default: true)
-  hasAddOption?: boolean; // If true, index 0 is "add new" option
-  skipDisabled?: boolean; // Skip items with disabled property
-}
-```
-
-**Returns:**
-```tsx
-interface UseDropdownKeyboardReturn {
-  highlightedIndex: number;
-  setHighlightedIndex: (index: number) => void;
-  handleKeyDown: (e: React.KeyboardEvent) => void;
-  resetHighlight: () => void;
-}
-```
-
-**Usage:**
-```tsx
-const dropdownKeyboard = useDropdownKeyboard({
-  items: filteredItems,
-  isOpen: showDropdown,
-  onSelect: (item) => selectItem(item),
-  onClose: () => setShowDropdown(false),
-});
-
-// In your input:
-<input onKeyDown={dropdownKeyboard.handleKeyDown} />
-
-// In your dropdown items:
-{items.map((item, index) => (
-  <div className={index === dropdownKeyboard.highlightedIndex ? 'bg-slate-100' : ''}>
-    {item.name}
-  </div>
-))}
-```
-
----
-
-### useUserDependencies
-**File:** `useUserDependencies.ts`
-
-**Purpose:** Get all items assigned to a user across all registered modules.
-
-**Usage:**
-```tsx
-import { useUserDependencies, getDependencySummary } from '@/hooks';
-
-const dependencies = useUserDependencies(userId, userName);
-
-// Returns:
-interface UserDependencies {
-  hasItems: boolean;
-  totalCount: number;
-  categories: DependencyCategory[];
-}
-
-interface DependencyCategory {
-  module: string;      // e.g., 'companies'
-  label: string;       // e.g., 'Companies (Sales Rep)'
-  icon: string;        // Icon component name
-  items: DependencyItem[];
-}
-```
-
----
-
-## UI Patterns
-
-### Portal-based Dropdowns
-For dropdowns inside scrollable containers or modals, use React portals:
-
-```tsx
-import { createPortal } from 'react-dom';
-
-function MyDropdown({ isOpen, children, triggerRef }) {
-  const [position, setPosition] = useState({ top: 0, left: 0 });
-  
-  useEffect(() => {
-    if (isOpen && triggerRef.current) {
-      const rect = triggerRef.current.getBoundingClientRect();
-      setPosition({
-        top: rect.bottom + window.scrollY,
-        left: rect.left + window.scrollX,
-      });
-    }
-  }, [isOpen]);
-  
-  if (!isOpen) return null;
-  
-  return createPortal(
-    <div 
-      style={{ position: 'absolute', top: position.top, left: position.left }}
-      className="z-50 bg-white shadow-lg rounded-lg"
-    >
-      {children}
-    </div>,
-    document.body
-  );
-}
-```
-
----
-
-### Dropdown Flip-to-Top Pattern
-
-When dropdowns are near the bottom of the viewport, they should flip to open above the trigger.
-
-**Implementation:**
-```tsx
-const [dropdownPosition, setDropdownPosition] = useState<'bottom' | 'top'>('bottom');
-const buttonRef = useRef<HTMLButtonElement>(null);
-const dropdownRef = useRef<HTMLDivElement>(null);
-
-useEffect(() => {
-  if (isOpen && buttonRef.current && dropdownRef.current) {
-    const buttonRect = buttonRef.current.getBoundingClientRect();
-    const dropdownHeight = dropdownRef.current.offsetHeight;
-    const viewportHeight = window.innerHeight;
-    const spaceBelow = viewportHeight - buttonRect.bottom;
-    const spaceAbove = buttonRect.top;
-    
-    if (spaceBelow < dropdownHeight && spaceAbove > dropdownHeight) {
-      setDropdownPosition('top');
-    } else {
-      setDropdownPosition('bottom');
-      // Scroll if still extends below
-      if (buttonRect.bottom + dropdownHeight > viewportHeight) {
-        window.scrollBy({ top: buttonRect.bottom + dropdownHeight - viewportHeight + 20, behavior: 'smooth' });
-      }
-    }
-  }
-}, [isOpen]);
-
-// In JSX:
-<div 
-  ref={dropdownRef}
-  className={clsx(
-    'absolute z-50 ...',
-    dropdownPosition === 'top' ? 'bottom-full mb-1' : 'top-full mt-1'
-  )}
+import { FilterBar, FilterCount, SelectFilter } from '@/components/common';
+
+// Single row (ManageUsersPage, TasksPage)
+<FilterBar rightContent={<FilterCount count={items.length} singular="user" />}>
+  <SearchInput ... />
+  <SelectFilter label="Status" ... className="w-36" />
+  <SelectFilter label="Department" ... className="w-36" />
+</FilterBar>
+
+// Two rows with alphabet filter (CompaniesPage, ContactsPage)
+<FilterBar 
+  rightContent={<FilterCount count={items.length} singular="company" plural="companies" />}
+  secondaryRow={<AlphabetFilter ... />}
 >
+  <SearchInput ... />
+  <SelectFilter label="Location" ... className="w-36" />
+</FilterBar>
+```
+
+**Styling:**
+- White background with rounded corners (`rounded-xl`)
+- Border and subtle shadow
+- Horizontal divider between rows when `secondaryRow` is provided
+- Consistent padding (`px-3 py-2`)
+
+---
+
+### FilterCount
+**Purpose:** Displays item count on the right side of FilterBar.
+
+**Props:**
+- `count`: number - The count to display
+- `singular?`: string - Singular form (default: "item")
+- `plural?`: string - Plural form (default: adds "s" to singular)
+
+**Usage:**
+```tsx
+<FilterCount count={12} singular="task" />        // "12 tasks"
+<FilterCount count={1} singular="user" />         // "1 user"
+<FilterCount count={5} singular="company" plural="companies" />  // "5 companies"
 ```
 
 ---
 
-### ESC Key Hierarchy Pattern
+### FilterToggle
+**Purpose:** Toggle button group for view modes (e.g., List/Calendar).
 
-For modals with nested interactive elements, implement hierarchical ESC handling:
+**Props:**
+- `options`: ToggleOption<T>[] - Array of { value, label, icon? }
+- `value`: T - Currently selected value
+- `onChange`: (value: T) => void
 
-**Implementation:**
+**Usage:**
 ```tsx
-// Track open dropdowns
-const [openDropdownCount, setOpenDropdownCount] = useState(0);
-const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
+<FilterToggle
+  options={[
+    { value: 'list', label: 'List', icon: <List className="w-3.5 h-3.5" /> },
+    { value: 'calendar', label: 'Calendar', icon: <Calendar className="w-3.5 h-3.5" /> },
+  ]}
+  value={viewMode}
+  onChange={setViewMode}
+/>
+```
 
-const handleDropdownOpenChange = useCallback((isOpen: boolean) => {
-  setOpenDropdownCount(prev => isOpen ? prev + 1 : Math.max(0, prev - 1));
-}, []);
+---
 
-// Use capture phase to intercept before Modal's handler
-useEffect(() => {
-  if (!modalIsOpen) return;
+### QuickFilters
+**Purpose:** Quick filter buttons (e.g., All, Overdue, Today, This week).
 
-  const handleKeyDown = (e: KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      // 1. If dropdown open - let dropdown handle it
-      if (openDropdownCount > 0) return;
-      
-      // 2. If section expanded - collapse one section
-      if (expandedSections.size > 0) {
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-        
-        const lastExpanded = Array.from(expandedSections).pop();
-        if (lastExpanded) {
-          setExpandedSections(prev => {
-            const next = new Set(prev);
-            next.delete(lastExpanded);
-            return next;
-          });
-        }
-        return;
-      }
-      
-      // 3. All collapsed - let modal close
+**Props:**
+- `options`: QuickFilterOption<T>[] - Array of { value, label, count?, isWarning? }
+- `value`: T - Currently selected value
+- `onChange`: (value: T) => void
+
+**Usage:**
+```tsx
+const timeFilterOptions: QuickFilterOption<TimeFilter>[] = [
+  { value: 'all', label: 'All' },
+  { value: 'overdue', label: 'Overdue', count: overdueCount, isWarning: true },
+  { value: 'today', label: 'Today' },
+  { value: 'tomorrow', label: 'Tomorrow' },
+  { value: 'this-week', label: 'This week' },
+];
+
+<QuickFilters
+  options={timeFilterOptions}
+  value={timeFilter}
+  onChange={setTimeFilter}
+/>
+```
+
+**Styling:**
+- `isWarning: true` shows red styling when active or when count > 0
+- Count shown in parentheses when > 0: "Overdue (3)"
+
+---
+
+### FilterDivider
+**Purpose:** Vertical divider line between filter groups.
+
+**Usage:**
+```tsx
+<FilterBar>
+  <SelectFilter ... />
+  <SelectFilter ... />
+  <FilterDivider />
+  <QuickFilters ... />
+</FilterBar>
+```
+
+---
+
+## Cascading Filter Pattern
+
+Filters should update their available options based on other active filters. Items with 0 matching results should be disabled and sorted to the bottom.
+
+**Implementation (TasksPage example):**
+```tsx
+// Type filter options - cascading with user and time filters
+const taskTypeOptions = useMemo(() => {
+  const allTypeCounts = new Map<string, number>();
+  const filteredTypeCounts = new Map<string, number>();
+  
+  tasks.forEach(t => {
+    if (!t.type) return;
+    
+    // Count all tasks by type
+    allTypeCounts.set(t.type, (allTypeCounts.get(t.type) || 0) + 1);
+    
+    // Check if task matches OTHER active filters (not this one)
+    let matchesFilters = true;
+    if (selectedUser) matchesFilters = t.assignedUserId === selectedUser;
+    if (timeFilter !== 'all' && matchesFilters) matchesFilters = matchesTime(t.dueDate);
+    
+    if (matchesFilters) {
+      filteredTypeCounts.set(t.type, (filteredTypeCounts.get(t.type) || 0) + 1);
     }
-  };
-
-  document.addEventListener('keydown', handleKeyDown, true); // capture phase
-  return () => document.removeEventListener('keydown', handleKeyDown, true);
-}, [modalIsOpen, openDropdownCount, expandedSections]);
-```
-
----
-
-### Focus Trap with Custom Event Pattern
-
-For components that need to prevent navigation until a condition is met (like clearing an invalid selection):
-
-```tsx
-// In the component that needs focus trap
-useEffect(() => {
-  if (pending && !isOpen) {
-    buttonRef.current?.focus();
-    
-    const handleFocusOut = () => {
-      setTimeout(() => {
-        if (!containerRef.current?.contains(document.activeElement)) {
-          onChange(''); // Clear selection
-          window.dispatchEvent(new CustomEvent('my-component-pending', { 
-            detail: { message: 'Selection cleared because...' } 
-          }));
-        }
-      }, 0);
-    };
-    
-    containerRef.current?.addEventListener('focusout', handleFocusOut);
-    return () => containerRef.current?.removeEventListener('focusout', handleFocusOut);
-  }
-}, [pending, isOpen, onChange]);
-
-// In the parent component
-useEffect(() => {
-  const handlePending = (e: CustomEvent) => {
-    toast.warning('Title', e.detail.message);
-  };
-  window.addEventListener('my-component-pending', handlePending as EventListener);
-  return () => window.removeEventListener('my-component-pending', handlePending as EventListener);
-}, [toast]);
-```
-
----
-
-### Company with Multiple Addresses Pattern
-
-Companies can have multiple office locations stored in an `addresses` array.
-
-**Data Model:**
-```tsx
-interface Company {
-  id: string;
-  name: string;
-  // Primary address (legacy, still used for display)
-  street?: string;
-  suite?: string;
-  city?: string;
-  state?: string;
-  zip?: string;
-  // Multiple addresses
-  addresses?: CompanyAddress[];
-}
-
-interface CompanyAddress {
-  id: string;
-  label: string;        // e.g., "New York Office", "LA Branch"
-  street?: string;
-  suite?: string;
-  city?: string;
-  state?: string;
-  zip?: string;
-}
-```
-
-**Contact Office Location:**
-```tsx
-interface Contact {
-  // ... other fields
-  companyId: string;
-  officeLocationId?: string;  // References company.addresses[].id
-}
-```
-
-**When duplicate company detected with different address:**
-- Option to add as new location to existing company
-- Updates `addresses` array on existing company
-
----
-
-### Chain of Command for User Reassignment
-
-When deactivating a user, all their assigned items must be reassigned following the chain of command.
-
-**Logic:**
-```tsx
-const getChainOfCommand = (userId: string): string[] => {
-  const user = users.find(u => u.id === userId);
-  if (!user?.positionId) return [];
+  });
   
-  const chain: string[] = [];
-  let currentPositionId = user.positionId;
-  const visited = new Set<string>();
+  const hasActiveFilter = selectedUser || timeFilter !== 'all';
   
-  while (currentPositionId) {
-    if (visited.has(currentPositionId)) break;
-    visited.add(currentPositionId);
-    
-    const position = positions.find(p => p.id === currentPositionId);
-    if (!position?.reportsToPositionId) break;
-    
-    // Find active users in parent position
-    const managers = users.filter(
-      u => u.positionId === position.reportsToPositionId && 
-           u.isActive && 
-           u.id !== userId
-    );
-    
-    managers.forEach(m => {
-      if (!chain.includes(m.id)) chain.push(m.id);
+  return taskTypes
+    .map(tt => ({
+      value: tt.value,
+      label: tt.label,
+      count: hasActiveFilter ? (filteredTypeCounts.get(tt.value) || 0) : (allTypeCounts.get(tt.value) || 0),
+      disabled: hasActiveFilter ? (filteredTypeCounts.get(tt.value) || 0) === 0 : false,
+    }))
+    .filter(tt => (allTypeCounts.get(tt.value) || 0) > 0)
+    .sort((a, b) => {
+      if (a.disabled !== b.disabled) return a.disabled ? 1 : -1;
+      return a.label.localeCompare(b.label);
     });
-    
-    currentPositionId = position.reportsToPositionId;
+}, [tasks, selectedUser, timeFilter, matchesTime]);
+```
+
+**Key Points:**
+- Each filter's options depend on OTHER filters, not itself
+- Show count based on filtered results when other filters active
+- `disabled: true` when count is 0
+- Sort disabled options to bottom
+
+---
+
+## ESC Key Clear Selection Pattern
+
+All dropdown filters should clear their selection when ESC is pressed while the dropdown is closed.
+
+**Hierarchy:**
+1. ESC with search text → Clear search
+2. ESC with dropdown open → Close dropdown
+3. ESC with dropdown closed + selection → Clear selection
+
+**Implementation in SelectFilter:**
+```tsx
+const handleButtonKeyDown = (e: React.KeyboardEvent) => {
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    if (isOpen) {
+      setIsOpen(false);
+      setSearchQuery('');
+    } else if (hasSelection) {
+      // ESC when closed clears the filter
+      onChange('');
+    }
   }
-  
-  return chain; // [directManager, manager'sManager, ..., CEO]
+  // ... other key handlers
 };
 ```
 
-**UI shows:**
-1. Chain of Command users first (with "Manager" badge on direct manager)
-2. Separator
-3. Other Users
-
-**Default behavior:** All items default to direct manager, can override per-section or per-item.
-
 ---
 
-## Type Definitions
+## Consistent Dropdown Widths
 
-### Position Type
-```tsx
-interface Position {
-  id: string;
-  name: string;                    // Position title, e.g., "Sales Manager"
-  reportsToPositionId?: string;    // Parent position in hierarchy
-}
-```
+All SelectFilter dropdowns on a page should have the same width for visual consistency.
 
-### Department Type
+**Pattern:**
 ```tsx
-interface Department {
-  id: string;
-  name: string;
-  positions: Position[];
-}
-```
-
-### DependencyItem Type
-```tsx
-interface DependencyItem {
-  id: string;
-  name: string;
-  url?: string;    // Link to view the item
-}
+// Use className="w-36" for all dropdowns on a page
+<SelectFilter label="Status" ... className="w-36" />
+<SelectFilter label="Department" ... className="w-36" />
+<SelectFilter label="Office" ... className="w-36" />
 ```
 
 ---
 
-*Last Updated: January 27, 2026*
+## CollapsibleSection Content Fix
+
+**Issue:** Content inside CollapsibleSection was being clipped at the bottom.
+
+**Fix:** 
+1. Removed `overflow-hidden` from container
+2. Added `rounded-t-xl` to header for border radius
+3. Made border-bottom conditional (only when open)
+4. Added `p-4` padding to content wrapper
+
+---
+
+## Task Panel Redesign
+
+### Form Layout
+The New Task / Edit Task panel now has improved alignment:
+
+1. **Title Input** - Full width, larger text
+2. **Activity Type** - Button group row
+3. **Divider**
+4. **Due Date / Due Time / Assigned To** - 3-column row
+5. **Priority** - Full width button row
+6. **Divider**
+7. **Company / Contact** - 2-column row
+8. **Link to Item** - Full width search
+9. **Divider**
+10. **Notes** - Textarea
+
+### Mini Calendar Sidebar
+
+The sidebar now includes an interactive mini calendar:
+
+**Features:**
+- Month navigation (prev/next buttons)
+- Visual indicators:
+  - Blue highlight for selected date
+  - Light blue for today
+  - Blue dot under dates with tasks
+- Click any date to set it as Due Date
+- Shows tasks scheduled for selected date below calendar
+
+**Props added to DayScheduleSidebar:**
+```tsx
+interface DayScheduleSidebarProps {
+  date: string;
+  tasks: Task[];
+  onDateChange?: (date: string) => void;  // NEW - updates form's dueDate
+}
+```
+
+**Implementation:**
+```tsx
+<DayScheduleSidebar 
+  date={formData.dueDate || ''} 
+  tasks={allTasks}
+  onDateChange={(newDate) => setFormData(d => ({ ...d, dueDate: newDate }))}
+/>
+```
+
+---
+
+## Page Structure Pattern for List Pages
+
+All list pages should follow this structure for consistent filter bar placement:
+
+```tsx
+<Page title="..." fillHeight actions={...}>
+  <div className="flex flex-col h-full min-h-0">
+    {/* FilterBar - outside DataTable */}
+    <FilterBar 
+      rightContent={<FilterCount ... />}
+      secondaryRow={/* AlphabetFilter if needed */}
+    >
+      <SearchInput ... />
+      <SelectFilter ... className="w-36" />
+    </FilterBar>
+
+    {/* DataTable - fills remaining height */}
+    <div className="flex-1 min-h-0">
+      <DataTable
+        columns={columns}
+        data={filteredData}
+        emptyState={...}
+        // NO filters prop - FilterBar is separate
+      />
+    </div>
+  </div>
+</Page>
+```
+
+**Key Points:**
+- FilterBar is OUTSIDE DataTable, not passed as `filters` prop
+- Wrapped in flex container with `h-full min-h-0`
+- DataTable wrapped in `flex-1 min-h-0` div
+
+---
+
+*Last Updated: January 28, 2026*

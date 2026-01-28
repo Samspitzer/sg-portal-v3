@@ -249,7 +249,7 @@ function DayScheduleSidebar({
   const goToNextMonth = () => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
 
   return (
-    <div className="w-72 border-l border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 flex flex-col">
+    <div className="w-full h-full border-l border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 flex flex-col">
       {/* Mini Calendar */}
       <div className="p-3 border-b border-slate-200 dark:border-slate-700">
         {/* Month Navigation */}
@@ -597,7 +597,59 @@ export function TaskDetailPanel({
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
   const [linkedCompany, setLinkedCompany] = useState<LinkedEntity | null>(null);
   
+  // Resizable sidebar state
+  const [sidebarWidth, setSidebarWidth] = useState(280); // 280px default
+  const [panelWidth, setPanelWidth] = useState(900); // Total panel width
+  const [isResizing, setIsResizing] = useState<'sidebar' | 'panel' | null>(null);
+  const minSidebarWidth = 220;
+  const maxSidebarWidth = 360;
+  const minPanelWidth = 750;
+  const maxPanelWidth = 1200;
+  const minFormWidth = 520; // Minimum form width to prevent text cutoff
+  
   const taskTypes = useMemo(() => getActiveTaskTypes(), [getActiveTaskTypes]);
+
+  // Handle resize drag
+  useEffect(() => {
+    if (!isResizing) return;
+    
+    const handleMouseMove = (e: MouseEvent) => {
+      if (isResizing === 'sidebar') {
+        // Resize sidebar (drag from middle divider)
+        const panelRight = window.innerWidth;
+        const newSidebarWidth = panelRight - e.clientX;
+        // Ensure form area doesn't get too narrow
+        const formWidth = panelWidth - newSidebarWidth - 6; // 6px for dividers
+        if (formWidth >= minFormWidth) {
+          setSidebarWidth(Math.min(maxSidebarWidth, Math.max(minSidebarWidth, newSidebarWidth)));
+        }
+      } else if (isResizing === 'panel') {
+        // Resize panel (drag from left edge)
+        const newWidth = window.innerWidth - e.clientX;
+        // Ensure form area doesn't get too narrow
+        const formWidth = newWidth - sidebarWidth - 6; // 6px for dividers
+        if (formWidth >= minFormWidth || newWidth > panelWidth) {
+          setPanelWidth(Math.min(maxPanelWidth, Math.max(minPanelWidth, newWidth)));
+        }
+      }
+    };
+    
+    const handleMouseUp = () => {
+      setIsResizing(null);
+    };
+    
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [isResizing, panelWidth, sidebarWidth]);
 
   // Initialize form data when panel opens
   useEffect(() => {
@@ -721,10 +773,23 @@ export function TaskDetailPanel({
           onClick={handleClose} 
         />
         
-        {/* Panel - wider to accommodate sidebar */}
-        <div className="absolute right-0 top-0 bottom-0 w-full max-w-4xl bg-white dark:bg-slate-900 shadow-2xl flex animate-slide-in-right">
+        {/* Panel - resizable width */}
+        <div 
+          className="absolute right-0 top-0 bottom-0 bg-white dark:bg-slate-900 shadow-2xl flex animate-slide-in-right"
+          style={{ width: panelWidth, maxWidth: '100vw' }}
+        >
+          {/* Left Edge Resize Handle */}
+          <div 
+            onMouseDown={() => setIsResizing('panel')}
+            className={clsx(
+              "w-1.5 cursor-col-resize hover:bg-blue-400 active:bg-blue-500 transition-colors flex-shrink-0",
+              isResizing === 'panel' ? "bg-blue-500" : "bg-slate-300 dark:bg-slate-600"
+            )}
+            title="Drag to resize panel"
+          />
+
           {/* Main Content Area */}
-          <div className="flex-1 flex flex-col min-w-0">
+          <div className="flex-1 flex flex-col min-w-0" style={{ minWidth: minFormWidth }}>
             {/* Header */}
             <div className="flex items-center gap-3 px-6 py-4 border-b border-slate-200 dark:border-slate-700">
               <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -753,7 +818,7 @@ export function TaskDetailPanel({
           </div>
 
           {/* Content */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          <div className="flex-1 overflow-y-auto p-6 space-y-5">
             {/* Task Title */}
             <Input
               value={formData.title}
@@ -778,8 +843,8 @@ export function TaskDetailPanel({
             {/* Divider */}
             <div className="border-t border-slate-200 dark:border-slate-700" />
             
-            {/* Due Date, Time & Assigned To - Single Row */}
-            <div className="grid grid-cols-3 gap-4">
+            {/* Due Date, Time, Assigned To - Row */}
+            <div className="grid grid-cols-3 gap-3">
               <DatePicker 
                 label="Due Date" 
                 value={formData.dueDate || ''} 
@@ -790,24 +855,29 @@ export function TaskDetailPanel({
                 value={formData.dueTime || ''} 
                 onChange={v => setFormData(d => ({ ...d, dueTime: v }))} 
               />
-              <SelectFilter
-                label="Assigned To"
-                value={formData.assignedUserId}
-                onChange={(value) => setFormData(d => ({ ...d, assignedUserId: value }))}
-                options={userOptions}
-                placeholder="Select user..."
-                showAllOption={false}
-                size="md"
-                className="w-full"
-              />
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                  Assigned To
+                </label>
+                <SelectFilter
+                  label="Select user"
+                  value={formData.assignedUserId}
+                  onChange={(value) => setFormData(d => ({ ...d, assignedUserId: value }))}
+                  options={userOptions}
+                  placeholder="Select user..."
+                  showAllOption={false}
+                  size="md"
+                  className="w-full"
+                />
+              </div>
             </div>
-            
-            {/* Priority */}
+
+            {/* Priority - Full width row */}
             <div>
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                 Priority
               </label>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 {PRIORITIES.map(p => (
                   <button 
                     key={p.value} 
@@ -925,12 +995,24 @@ export function TaskDetailPanel({
           </div>
           </div>
           
-          {/* Day Schedule Sidebar with Mini Calendar */}
-          <DayScheduleSidebar 
-            date={formData.dueDate || ''} 
-            tasks={allTasks}
-            onDateChange={(newDate) => setFormData(d => ({ ...d, dueDate: newDate }))}
+          {/* Middle Resizable Divider */}
+          <div 
+            onMouseDown={() => setIsResizing('sidebar')}
+            className={clsx(
+              "w-1.5 cursor-col-resize hover:bg-blue-400 active:bg-blue-500 transition-colors flex-shrink-0",
+              isResizing === 'sidebar' ? "bg-blue-500" : "bg-slate-200 dark:bg-slate-700"
+            )}
+            title="Drag to resize calendar"
           />
+          
+          {/* Day Schedule Sidebar with Mini Calendar */}
+          <div style={{ width: sidebarWidth, minWidth: minSidebarWidth, maxWidth: maxSidebarWidth }} className="flex-shrink-0">
+            <DayScheduleSidebar 
+              date={formData.dueDate || ''} 
+              tasks={allTasks}
+              onDateChange={(newDate) => setFormData(d => ({ ...d, dueDate: newDate }))}
+            />
+          </div>
         </div>
       </div>
       
@@ -964,6 +1046,8 @@ function TaskQuickPreview({
   onMarkDone: () => void; 
 }) {
   const { taskTypes } = useTaskTypesStore();
+  const { contacts, companies } = useClientsStore();
+  const navigate = useNavigate();
   const popoverRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -987,21 +1071,59 @@ function TaskQuickPreview({
   
   const adjustedPosition = useMemo(() => {
     let x = position.x, y = position.y;
-    if (x + 280 > window.innerWidth - 20) x = position.x - 280;
-    if (y + 200 > window.innerHeight - 20) y = position.y - 200;
+    if (x + 300 > window.innerWidth - 20) x = position.x - 300;
+    if (y + 280 > window.innerHeight - 20) y = position.y - 280;
     return { x: Math.max(10, x), y: Math.max(10, y) };
   }, [position]);
+
+  // Get URLs for linked entities
+  const getContactUrl = (contactId: string) => {
+    const contact = contacts.find(c => c.id === contactId);
+    if (!contact) return null;
+    const company = companies.find(c => c.id === contact.companyId);
+    if (!company) return null;
+    const companySlug = company.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    const contactSlug = `${contact.firstName}-${contact.lastName}`.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    return `/customers/company/${companySlug}/${company.id}/contact/${contactSlug}/${contact.id}`;
+  };
+
+  const getCompanyUrl = (companyId: string) => {
+    const company = companies.find(c => c.id === companyId);
+    if (!company) return null;
+    const companySlug = company.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    return `/customers/company/${companySlug}/${company.id}`;
+  };
+
+  const handleEntityClick = (e: React.MouseEvent, type: string, id: string) => {
+    e.stopPropagation();
+    let url: string | null = null;
+    if (type === 'contact') {
+      url = getContactUrl(id);
+    } else if (type === 'company') {
+      url = getCompanyUrl(id);
+    }
+    // For linked items (projects, deals, etc.), construct URL based on type
+    if (type === 'project') url = `/projects/${id}`;
+    if (type === 'deal') url = `/deals/${id}`;
+    if (type === 'estimate') url = `/estimates/${id}`;
+    if (type === 'invoice') url = `/invoices/${id}`;
+    
+    if (url) {
+      onClose();
+      navigate(url);
+    }
+  };
 
   return createPortal(
     <div 
       ref={popoverRef} 
       style={{ left: adjustedPosition.x, top: adjustedPosition.y }} 
-      className="fixed z-[60] w-72 bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-slate-200 dark:border-slate-700 overflow-hidden"
+      className="fixed z-[60] w-80 bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-slate-200 dark:border-slate-700 overflow-hidden"
     >
       {/* Header */}
       <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-200 dark:border-slate-700">
         {taskType && (
-          <div className="w-7 h-7 rounded bg-slate-100 dark:bg-slate-700 flex items-center justify-center">
+          <div className="w-7 h-7 rounded bg-slate-100 dark:bg-slate-700 flex items-center justify-center flex-shrink-0">
             <TaskTypeIcon icon={taskType.icon} className="w-4 h-4 text-slate-500 dark:text-slate-400" />
           </div>
         )}
@@ -1015,24 +1137,89 @@ function TaskQuickPreview({
       </div>
       
       {/* Content */}
-      <div className="px-4 py-3 space-y-2 text-sm">
+      <div className="px-4 py-3 space-y-2.5 text-sm">
+        {/* Assigned To */}
         {task.assignedUserName && (
-          <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
-            <User className="w-4 h-4 text-slate-400" />
-            <span>{task.assignedUserName}</span>
+          <div className="flex items-center gap-3">
+            <span className="text-slate-400 w-20 flex-shrink-0">Assigned to</span>
+            <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300 min-w-0">
+              <User className="w-4 h-4 text-slate-400 flex-shrink-0" />
+              <span className="truncate">{task.assignedUserName}</span>
+            </div>
           </div>
         )}
-        {task.linkedContact && (
-          <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
-            {(() => { 
-              const Icon = ENTITY_ICONS[task.linkedContact.type]; 
-              return <Icon className="w-4 h-4 text-slate-400" />; 
+        
+        {/* Company - derived from contact if available */}
+        {task.linkedContact?.type === 'company' && (
+          <div className="flex items-center gap-3">
+            <span className="text-slate-400 w-20 flex-shrink-0">Company</span>
+            <button
+              onClick={(e) => handleEntityClick(e, 'company', task.linkedContact!.id)}
+              className="flex items-center gap-2 text-slate-700 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors min-w-0 group"
+            >
+              <Building2 className="w-4 h-4 text-slate-400 group-hover:text-blue-500 flex-shrink-0" />
+              <span className="truncate underline-offset-2 group-hover:underline">{task.linkedContact.name}</span>
+            </button>
+          </div>
+        )}
+        
+        {/* Contact */}
+        {task.linkedContact?.type === 'contact' && (
+          <>
+            {/* Show Company first if contact has one */}
+            {(() => {
+              const contact = contacts.find(c => c.id === task.linkedContact!.id);
+              const company = contact ? companies.find(c => c.id === contact.companyId) : null;
+              if (company) {
+                return (
+                  <div className="flex items-center gap-3">
+                    <span className="text-slate-400 w-20 flex-shrink-0">Company</span>
+                    <button
+                      onClick={(e) => handleEntityClick(e, 'company', company.id)}
+                      className="flex items-center gap-2 text-slate-700 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors min-w-0 group"
+                    >
+                      <Building2 className="w-4 h-4 text-slate-400 group-hover:text-blue-500 flex-shrink-0" />
+                      <span className="truncate underline-offset-2 group-hover:underline">{company.name}</span>
+                    </button>
+                  </div>
+                );
+              }
+              return null;
             })()}
-            <span className="truncate">{task.linkedContact.name}</span>
+            <div className="flex items-center gap-3">
+              <span className="text-slate-400 w-20 flex-shrink-0">Contact</span>
+              <button
+                onClick={(e) => handleEntityClick(e, 'contact', task.linkedContact!.id)}
+                className="flex items-center gap-2 text-slate-700 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors min-w-0 group"
+              >
+                <User className="w-4 h-4 text-slate-400 group-hover:text-blue-500 flex-shrink-0" />
+                <span className="truncate underline-offset-2 group-hover:underline">{task.linkedContact.name}</span>
+              </button>
+            </div>
+          </>
+        )}
+        
+        {/* Linked Item (Project, Deal, etc.) */}
+        {task.linkedItem && (
+          <div className="flex items-center gap-3">
+            <span className="text-slate-400 w-20 flex-shrink-0 capitalize">{task.linkedItem.type}</span>
+            <button
+              onClick={(e) => handleEntityClick(e, task.linkedItem!.type, task.linkedItem!.id)}
+              className="flex items-center gap-2 text-slate-700 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors min-w-0 group"
+            >
+              {(() => { 
+                const Icon = ENTITY_ICONS[task.linkedItem.type] || FileText; 
+                return <Icon className="w-4 h-4 text-slate-400 group-hover:text-blue-500 flex-shrink-0" />; 
+              })()}
+              <span className="truncate underline-offset-2 group-hover:underline">{task.linkedItem.name}</span>
+            </button>
           </div>
         )}
+        
+        {/* Priority */}
         {task.priority && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            <span className="text-slate-400 w-20 flex-shrink-0">Priority</span>
             <span className={clsx(
               'px-2 py-0.5 text-xs font-medium rounded', 
               PRIORITIES.find(p => p.value === task.priority)?.color
