@@ -217,12 +217,7 @@ function AppRoutes() {
             <AuthGuard>
               <Layout>
                 <SalesLayout>
-                  <Routes>
-                    <Route index element={<SalesPage />} />
-                    <Route path="pipeline" element={<SalesPage />} />
-                    <Route path="leads" element={<SalesPage />} />
-                    <Route path="activities" element={<SalesPage />} />
-                  </Routes>
+                  <SalesPage />
                 </SalesLayout>
               </Layout>
             </AuthGuard>

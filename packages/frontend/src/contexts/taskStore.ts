@@ -7,7 +7,8 @@ export type TaskType = string;
 export type TaskStatus = 'todo' | 'in_progress' | 'review' | 'completed' | 'cancelled';
 export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
 
-export type LinkedEntityType = 'contact' | 'company' | 'project' | 'estimate' | 'invoice' | 'deal';
+// Updated: Added 'lead' for sales CRM integration
+export type LinkedEntityType = 'contact' | 'company' | 'project' | 'estimate' | 'invoice' | 'lead' | 'deal';
 
 export interface LinkedEntity {
   type: LinkedEntityType;
@@ -76,6 +77,8 @@ interface TaskActions {
   completeTask: (id: string) => Promise<void>;
   reopenTask: (id: string) => Promise<void>;
   reassignTasksByEntity: (entityType: LinkedEntityType, entityId: string, newUserId: string, newUserName: string) => Promise<void>;
+  // Helper to get tasks linked to leads or deals (for Activities page)
+  getTasksByEntityType: (entityTypes: LinkedEntityType[]) => Task[];
 }
 
 export const useTaskStore = create<TaskState & TaskActions>()(
@@ -202,6 +205,19 @@ export const useTaskStore = create<TaskState & TaskActions>()(
               return task;
             }),
           }));
+        },
+
+        // Get tasks linked to specific entity types (e.g., ['lead', 'deal'] for Activities page)
+        getTasksByEntityType: (entityTypes: LinkedEntityType[]) => {
+          const { tasks } = get();
+          return tasks.filter(task => {
+            const linkedContactType = task.linkedContact?.type;
+            const linkedItemType = task.linkedItem?.type;
+            return (
+              (linkedContactType && entityTypes.includes(linkedContactType)) ||
+              (linkedItemType && entityTypes.includes(linkedItemType))
+            );
+          });
         },
       }),
       {

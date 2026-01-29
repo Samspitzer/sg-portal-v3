@@ -42,3 +42,11 @@ export {
   type QuickFilterOption,
   type QuickFiltersProps,
 } from './Filterbar';
+export { 
+  KanbanBoard, 
+  DefaultKanbanCard,
+  type KanbanColumn, 
+  type KanbanCardProps, 
+  type KanbanBoardProps,
+  type DefaultKanbanCardData,
+} from './KanbanBoard';

@@ -9,6 +9,10 @@ export {
   type Department, 
   type Position,
   type PositionLevel,
+  // Sales field types
+  type SalesStage,
+  type SalesLabel,
+  type SalesSource,
 } from './fieldsStore';
 export { useRolesStore, type Role, type Permission } from './rolesStore';
 export { useNavigationGuardStore } from './navigationGuardStore';
@@ -43,3 +47,18 @@ export {
   type TaskTypeConfig, 
   type TaskTypeIconName 
 } from './taskTypesStore';
+// Sales store
+export {
+  useSalesStore,
+  type Lead,
+  type Deal,
+  type LeadInput,
+  type DealInput,
+  type LeadStage,
+  type DealStage,
+  type LeadLabel,
+  type LeadSource,
+  type DealStatus,
+  type JobsiteAddress,
+  type SalesStore,
+} from './salesStore';

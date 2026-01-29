@@ -23,10 +23,47 @@ export interface Department {
   updatedAt: string;
 }
 
+// ============================================================================
+// Sales Field Types
+// ============================================================================
+
+export interface SalesStage {
+  id: string;
+  name: string;
+  color: string; // Hex color for Kanban column header
+  order: number;
+}
+
+export interface SalesLabel {
+  id: string;
+  name: string;
+  color: string; // Hex color for label badge
+  order: number;
+}
+
+export interface SalesSource {
+  id: string;
+  name: string;
+  order: number;
+}
+
+// ============================================================================
+// State Interface
+// ============================================================================
+
 interface FieldsState {
   departments: Department[];
   contactRoles: string[];
+  // Sales fields
+  leadStages: SalesStage[];
+  dealStages: SalesStage[];
+  leadLabels: SalesLabel[];
+  leadSources: SalesSource[];
 }
+
+// ============================================================================
+// Store Interface
+// ============================================================================
 
 interface FieldsStore extends FieldsState {
   // Department actions
@@ -46,6 +83,30 @@ interface FieldsStore extends FieldsState {
   deleteContactRole: (role: string) => void;
   reorderContactRoles: (roles: string[]) => void;
   
+  // Lead stage actions
+  addLeadStage: (name: string, color?: string) => void;
+  updateLeadStage: (id: string, data: Partial<Pick<SalesStage, 'name' | 'color'>>) => void;
+  deleteLeadStage: (id: string) => void;
+  reorderLeadStages: (stageIds: string[]) => void;
+  
+  // Deal stage actions
+  addDealStage: (name: string, color?: string) => void;
+  updateDealStage: (id: string, data: Partial<Pick<SalesStage, 'name' | 'color'>>) => void;
+  deleteDealStage: (id: string) => void;
+  reorderDealStages: (stageIds: string[]) => void;
+  
+  // Lead label actions
+  addLeadLabel: (name: string, color?: string) => void;
+  updateLeadLabel: (id: string, data: Partial<Pick<SalesLabel, 'name' | 'color'>>) => void;
+  deleteLeadLabel: (id: string) => void;
+  reorderLeadLabels: (labelIds: string[]) => void;
+  
+  // Lead source actions
+  addLeadSource: (name: string) => void;
+  updateLeadSource: (id: string, name: string) => void;
+  deleteLeadSource: (id: string) => void;
+  reorderLeadSources: (sourceIds: string[]) => void;
+  
   // Helper functions
   getPositionsByDepartment: (departmentId: string) => Position[];
   getPositionById: (positionId: string) => Position | null;
@@ -59,6 +120,10 @@ interface FieldsStore extends FieldsState {
   // Reset
   resetToDefaults: () => void;
 }
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
 
 const generateId = () => Math.random().toString(36).substring(2, 11);
 
@@ -75,6 +140,10 @@ function calculateLevel(positionId: string | null, positions: Position[], visite
   return Math.min(5, parentLevel + 1) as PositionLevel;
 }
 
+// ============================================================================
+// Default Values
+// ============================================================================
+
 // Default contact roles
 const defaultContactRoles: string[] = [
   'Owner',
@@ -84,6 +153,37 @@ const defaultContactRoles: string[] = [
   'Estimating',
   'VP of Construction',
   'Accounts Payable',
+];
+
+// Default lead stages
+const defaultLeadStages: SalesStage[] = [
+  { id: 'lead-stage-1', name: 'Job Site Lead', color: '#64748b', order: 0 },
+  { id: 'lead-stage-2', name: 'Company Lead', color: '#3b82f6', order: 1 },
+];
+
+// Default deal stages
+const defaultDealStages: SalesStage[] = [
+  { id: 'deal-stage-1', name: 'By Estimation', color: '#8b5cf6', order: 0 },
+  { id: 'deal-stage-2', name: 'Proposal Sent', color: '#f59e0b', order: 1 },
+  { id: 'deal-stage-3', name: 'Negotiations', color: '#f97316', order: 2 },
+];
+
+// Default lead labels (temperature)
+const defaultLeadLabels: SalesLabel[] = [
+  { id: 'label-cold', name: 'Cold', color: '#3b82f6', order: 0 },
+  { id: 'label-warm', name: 'Warm', color: '#f59e0b', order: 1 },
+  { id: 'label-hot', name: 'Hot', color: '#ef4444', order: 2 },
+];
+
+// Default lead sources
+const defaultLeadSources: SalesSource[] = [
+  { id: 'source-1', name: 'Referral', order: 0 },
+  { id: 'source-2', name: 'Website', order: 1 },
+  { id: 'source-3', name: 'Cold Call', order: 2 },
+  { id: 'source-4', name: 'Trade Show', order: 3 },
+  { id: 'source-5', name: 'Social Media', order: 4 },
+  { id: 'source-6', name: 'Email Campaign', order: 5 },
+  { id: 'source-7', name: 'Other', order: 6 },
 ];
 
 // Default departments with direct reporting structure
@@ -168,11 +268,19 @@ interface LegacyPosition {
   order?: number;
 }
 
+// ============================================================================
+// Store Implementation
+// ============================================================================
+
 export const useFieldsStore = create<FieldsStore>()(
   persist(
     (set, get) => ({
       departments: defaultDepartments,
       contactRoles: defaultContactRoles,
+      leadStages: defaultLeadStages,
+      dealStages: defaultDealStages,
+      leadLabels: defaultLeadLabels,
+      leadSources: defaultLeadSources,
 
       // ============ DEPARTMENT ACTIONS ============
       
@@ -225,57 +333,51 @@ export const useFieldsStore = create<FieldsStore>()(
 
       reorderDepartments: (departmentIds) => {
         set((state) => ({
-          departments: state.departments.map((dept) => {
-            const newOrder = departmentIds.indexOf(dept.id);
-            return newOrder >= 0 ? { ...dept, order: newOrder } : dept;
-          }),
+          departments: state.departments.map((dept) => ({
+            ...dept,
+            order: departmentIds.indexOf(dept.id),
+          })),
         }));
       },
 
       // ============ POSITION ACTIONS ============
-      
+
       addPosition: (departmentId, name, reportsToPositionId) => {
-        const dept = get().departments.find(d => d.id === departmentId);
-        if (!dept) return;
-        
-        // Calculate level based on reporting chain
         const allPositions = get().departments.flatMap(d => d.positions);
-        const level = reportsToPositionId 
+        const level = reportsToPositionId
           ? Math.min(5, calculateLevel(reportsToPositionId, allPositions) + 1) as PositionLevel
           : 1;
         
-        const maxOrder = Math.max(...dept.positions.map(p => p.order), -1);
-        
-        const newPosition: Position = {
-          id: `pos-${generateId()}`,
-          name,
-          departmentId,
-          level,
-          reportsToPositionId,
-          order: maxOrder + 1,
-        };
-        
         set((state) => ({
-          departments: state.departments.map((dept) =>
-            dept.id === departmentId
-              ? { 
-                  ...dept, 
-                  positions: [...dept.positions, newPosition],
-                  updatedAt: new Date().toISOString(),
-                }
-              : dept
-          ),
+          departments: state.departments.map((dept) => {
+            if (dept.id !== departmentId) return dept;
+            
+            const maxOrder = Math.max(...dept.positions.map(p => p.order), -1);
+            const newPosition: Position = {
+              id: `pos-${generateId()}`,
+              name,
+              departmentId,
+              level,
+              reportsToPositionId,
+              order: maxOrder + 1,
+            };
+            
+            return {
+              ...dept,
+              positions: [...dept.positions, newPosition],
+              updatedAt: new Date().toISOString(),
+            };
+          }),
         }));
       },
 
       updatePosition: (positionId, data) => {
         set((state) => {
-          const allPositions = state.departments.flatMap(d => d.positions);
-          
-          // Calculate new level if reportsToPositionId is being updated
+          // If reportsToPositionId is changing, recalculate level
           let newLevel: PositionLevel | undefined;
           if (data.reportsToPositionId !== undefined) {
-            newLevel = data.reportsToPositionId 
+            const allPositions = state.departments.flatMap(d => d.positions);
+            newLevel = data.reportsToPositionId
               ? Math.min(5, calculateLevel(data.reportsToPositionId, allPositions) + 1) as PositionLevel
               : 1;
           }
@@ -283,15 +385,16 @@ export const useFieldsStore = create<FieldsStore>()(
           return {
             departments: state.departments.map((dept) => ({
               ...dept,
-              positions: dept.positions.map((pos) => {
-                if (pos.id !== positionId) return pos;
-                return {
-                  ...pos,
-                  ...(data.name !== undefined && { name: data.name }),
-                  ...(data.reportsToPositionId !== undefined && { reportsToPositionId: data.reportsToPositionId }),
-                  ...(newLevel !== undefined && { level: newLevel }),
-                };
-              }),
+              positions: dept.positions.map((pos) =>
+                pos.id === positionId
+                  ? {
+                      ...pos,
+                      ...(data.name !== undefined && { name: data.name }),
+                      ...(data.reportsToPositionId !== undefined && { reportsToPositionId: data.reportsToPositionId }),
+                      ...(newLevel !== undefined && { level: newLevel }),
+                    }
+                  : pos
+              ),
               updatedAt: dept.positions.some(p => p.id === positionId)
                 ? new Date().toISOString()
                 : dept.updatedAt,
@@ -376,6 +479,191 @@ export const useFieldsStore = create<FieldsStore>()(
         set({ contactRoles: roles });
       },
 
+      // ============ LEAD STAGE ACTIONS ============
+
+      addLeadStage: (name, color = '#64748b') => {
+        const trimmedName = name.trim();
+        if (!trimmedName) return;
+
+        set((state) => {
+          const maxOrder = Math.max(...state.leadStages.map(s => s.order), -1);
+          const newStage: SalesStage = {
+            id: `lead-stage-${generateId()}`,
+            name: trimmedName,
+            color,
+            order: maxOrder + 1,
+          };
+          return {
+            leadStages: [...state.leadStages, newStage],
+          };
+        });
+      },
+
+      updateLeadStage: (id, data) => {
+        set((state) => ({
+          leadStages: state.leadStages.map((stage) =>
+            stage.id === id ? { ...stage, ...data } : stage
+          ),
+        }));
+      },
+
+      deleteLeadStage: (id) => {
+        set((state) => ({
+          leadStages: state.leadStages.filter((stage) => stage.id !== id),
+        }));
+      },
+
+      reorderLeadStages: (stageIds) => {
+        set((state) => ({
+          leadStages: state.leadStages
+            .map((stage) => ({
+              ...stage,
+              order: stageIds.indexOf(stage.id),
+            }))
+            .sort((a, b) => a.order - b.order),
+        }));
+      },
+
+      // ============ DEAL STAGE ACTIONS ============
+
+      addDealStage: (name, color = '#8b5cf6') => {
+        const trimmedName = name.trim();
+        if (!trimmedName) return;
+
+        set((state) => {
+          const maxOrder = Math.max(...state.dealStages.map(s => s.order), -1);
+          const newStage: SalesStage = {
+            id: `deal-stage-${generateId()}`,
+            name: trimmedName,
+            color,
+            order: maxOrder + 1,
+          };
+          return {
+            dealStages: [...state.dealStages, newStage],
+          };
+        });
+      },
+
+      updateDealStage: (id, data) => {
+        set((state) => ({
+          dealStages: state.dealStages.map((stage) =>
+            stage.id === id ? { ...stage, ...data } : stage
+          ),
+        }));
+      },
+
+      deleteDealStage: (id) => {
+        set((state) => ({
+          dealStages: state.dealStages.filter((stage) => stage.id !== id),
+        }));
+      },
+
+      reorderDealStages: (stageIds) => {
+        set((state) => ({
+          dealStages: state.dealStages
+            .map((stage) => ({
+              ...stage,
+              order: stageIds.indexOf(stage.id),
+            }))
+            .sort((a, b) => a.order - b.order),
+        }));
+      },
+
+      // ============ LEAD LABEL ACTIONS ============
+
+      addLeadLabel: (name, color = '#64748b') => {
+        const trimmedName = name.trim();
+        if (!trimmedName) return;
+
+        set((state) => {
+          const maxOrder = Math.max(...state.leadLabels.map(l => l.order), -1);
+          const newLabel: SalesLabel = {
+            id: `label-${generateId()}`,
+            name: trimmedName,
+            color,
+            order: maxOrder + 1,
+          };
+          return {
+            leadLabels: [...state.leadLabels, newLabel],
+          };
+        });
+      },
+
+      updateLeadLabel: (id, data) => {
+        set((state) => ({
+          leadLabels: state.leadLabels.map((label) =>
+            label.id === id ? { ...label, ...data } : label
+          ),
+        }));
+      },
+
+      deleteLeadLabel: (id) => {
+        set((state) => ({
+          leadLabels: state.leadLabels.filter((label) => label.id !== id),
+        }));
+      },
+
+      reorderLeadLabels: (labelIds) => {
+        set((state) => ({
+          leadLabels: state.leadLabels
+            .map((label) => ({
+              ...label,
+              order: labelIds.indexOf(label.id),
+            }))
+            .sort((a, b) => a.order - b.order),
+        }));
+      },
+
+      // ============ LEAD SOURCE ACTIONS ============
+
+      addLeadSource: (name) => {
+        const trimmedName = name.trim();
+        if (!trimmedName) return;
+
+        set((state) => {
+          if (state.leadSources.some(s => s.name.toLowerCase() === trimmedName.toLowerCase())) {
+            return state;
+          }
+          const maxOrder = Math.max(...state.leadSources.map(s => s.order), -1);
+          const newSource: SalesSource = {
+            id: `source-${generateId()}`,
+            name: trimmedName,
+            order: maxOrder + 1,
+          };
+          return {
+            leadSources: [...state.leadSources, newSource],
+          };
+        });
+      },
+
+      updateLeadSource: (id, name) => {
+        const trimmedName = name.trim();
+        if (!trimmedName) return;
+
+        set((state) => ({
+          leadSources: state.leadSources.map((source) =>
+            source.id === id ? { ...source, name: trimmedName } : source
+          ),
+        }));
+      },
+
+      deleteLeadSource: (id) => {
+        set((state) => ({
+          leadSources: state.leadSources.filter((source) => source.id !== id),
+        }));
+      },
+
+      reorderLeadSources: (sourceIds) => {
+        set((state) => ({
+          leadSources: state.leadSources
+            .map((source) => ({
+              ...source,
+              order: sourceIds.indexOf(source.id),
+            }))
+            .sort((a, b) => a.order - b.order),
+        }));
+      },
+
       // ============ HELPER FUNCTIONS ============
       
       getPositionsByDepartment: (departmentId) => {
@@ -449,14 +737,18 @@ export const useFieldsStore = create<FieldsStore>()(
         set({
           departments: defaultDepartments,
           contactRoles: defaultContactRoles,
+          leadStages: defaultLeadStages,
+          dealStages: defaultDealStages,
+          leadLabels: defaultLeadLabels,
+          leadSources: defaultLeadSources,
         });
       },
     }),
     {
       name: 'sg-portal-fields',
-      version: 2,
+      version: 3, // Bumped version for sales fields migration
       migrate: (persistedState: unknown, version: number) => {
-        const state = persistedState as { departments?: Department[]; contactRoles?: string[] };
+        const state = persistedState as FieldsState & { departments?: Department[]; contactRoles?: string[] };
         
         // Migration from version 1 to 2: add reportsToPositionId
         if (version < 2 && state.departments) {
@@ -484,6 +776,22 @@ export const useFieldsStore = create<FieldsStore>()(
               } as Position;
             }),
           }));
+        }
+        
+        // Migration from version 2 to 3: add sales fields
+        if (version < 3) {
+          if (!state.leadStages) {
+            state.leadStages = defaultLeadStages;
+          }
+          if (!state.dealStages) {
+            state.dealStages = defaultDealStages;
+          }
+          if (!state.leadLabels) {
+            state.leadLabels = defaultLeadLabels;
+          }
+          if (!state.leadSources) {
+            state.leadSources = defaultLeadSources;
+          }
         }
         
         if (!state.contactRoles) {
