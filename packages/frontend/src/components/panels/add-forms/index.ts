@@ -16,5 +16,8 @@ export { AddLeadForm, type AddLeadFormProps, type AddLeadFormData } from './AddL
 export { AddDealForm, type AddDealFormProps, type AddDealFormData } from './AddDealForm';
 export { AddTaskForm, type AddTaskFormProps, type AddTaskFormData } from './AddTaskForm';
 
+// Entity edit forms
+export { EditTaskForm, type EditTaskFormProps } from './EditTaskForm';
+
 // Form stack provider and hook
 export { FormStackProvider, useFormStack } from './FormStackProvider';
