@@ -67,6 +67,7 @@ export interface Deal extends SalesEntityBase {
   status: DealStatus;
   commission?: number; // Commission amount (flexible - not always % of sale)
   units?: number; // Number of units (apartments in multi-family)
+  expectedCloseDate?: string; // Expected close date
   convertedFromLeadId?: string; // Reference to original lead (if converted)
   wonAt?: string;
   lostAt?: string;
@@ -108,6 +109,7 @@ export interface DealInput {
   value?: number;
   commission?: number;
   units?: number;
+  expectedCloseDate?: string;
 }
 
 // ============================================================================

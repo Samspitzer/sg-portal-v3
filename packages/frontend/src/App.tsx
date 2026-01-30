@@ -15,6 +15,7 @@ import {
   TasksLayout,
 } from '@/components/layout';
 import { ToastContainer, PageNavigationGuard } from '@/components/common';
+import { FormStackProvider } from '@/components/panels/add-forms';
 import {
   LoginPage,
   LandingPage,
@@ -253,9 +254,11 @@ export function App() {
       <QueryClientProvider client={queryClient}>
         <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <AppInitializer>
-            <AppRoutes />
-            <PageNavigationGuard />
-            <ToastContainer />
+            <FormStackProvider>
+              <AppRoutes />
+              <PageNavigationGuard />
+              <ToastContainer />
+            </FormStackProvider>
           </AppInitializer>
         </BrowserRouter>
       </QueryClientProvider>

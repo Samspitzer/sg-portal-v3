@@ -42,11 +42,5 @@ export {
   type QuickFilterOption,
   type QuickFiltersProps,
 } from './Filterbar';
-export { 
-  KanbanBoard, 
-  DefaultKanbanCard,
-  type KanbanColumn, 
-  type KanbanCardProps, 
-  type KanbanBoardProps,
-  type DefaultKanbanCardData,
-} from './KanbanBoard';
+export { QuickViewModal, type QuickViewModalProps, type QuickViewField, type QuickViewBadge, type QuickViewAction } from './QuickViewModal';
+export { EntitySalesSection } from './EntitySalesSection';

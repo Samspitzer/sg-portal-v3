@@ -1,3 +1,10 @@
+// ============================================================================
+// CompaniesPage - Company Listing with Add Company Form
+// Location: src/components/panels/CompaniesPage.tsx
+// 
+// UPDATED: Now uses AddCompanyForm from add-forms for creating companies
+// ============================================================================
+
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -6,65 +13,23 @@ import {
   Globe,
   MapPin,
   User,
-  Trash2,
 } from 'lucide-react';
 import { Page } from '@/components/layout';
-import { useClientsStore, useUsersStore, useToast, type Company, getCompanySalesRepIds } from '@/contexts';
-import { CardContent, Button, Input, Modal, SearchInput, Textarea, AddressInput, FilterBar, FilterCount, SelectFilter } from '@/components/common';
-import { MultiSelectUsers } from '@/components/common/MultiSelectUsers';
+import { useClientsStore, useUsersStore, type Company, getCompanySalesRepIds } from '@/contexts';
+import { CardContent, Button, SearchInput, FilterBar, FilterCount, SelectFilter } from '@/components/common';
 import { AlphabetFilter } from '@/components/common/AlphabetFilter';
 import { DataTable, type DataTableColumn } from '@/components/common/DataTable';
-import { DuplicateCompanyModal } from '@/components/common/DuplicateCompanyModal';
-import { validatePhone, validateWebsite, formatPhoneNumber } from '@/utils/validation';
+import { useFormStack } from '@/components/panels/add-forms';
 import { useDocumentTitle, getCompanyUrl } from '@/hooks';
-
-// Secondary address interface
-interface SecondaryAddress {
-  id: string;
-  label: string;
-  street: string;
-  suite?: string;
-  city: string;
-  state: string;
-  zip: string;
-}
-
-interface CompanyFormData {
-  name: string;
-  phone: string;
-  website: string;
-  street: string;
-  suite: string;
-  city: string;
-  state: string;
-  zip: string;
-  notes: string;
-  salesRepIds: string[];
-  secondaryAddresses: SecondaryAddress[];
-}
-
-const initialFormData: CompanyFormData = {
-  name: '',
-  phone: '',
-  website: '',
-  street: '',
-  suite: '',
-  city: '',
-  state: '',
-  zip: '',
-  notes: '',
-  salesRepIds: [],
-  secondaryAddresses: [],
-};
 
 type SortField = 'name' | 'location' | 'salesRep' | 'contacts';
 type SortDirection = 'asc' | 'desc';
 
 export function CompaniesPage() {
   const navigate = useNavigate();
-  const { companies, contacts, addCompany } = useClientsStore();
+  const { companies, contacts } = useClientsStore();
   const { users } = useUsersStore();
-  const toast = useToast();
+  const { openAddCompany } = useFormStack();
   useDocumentTitle('Companies');
 
   // Search and filters
@@ -73,39 +38,9 @@ export function CompaniesPage() {
   const [locationFilter, setLocationFilter] = useState('');
   const [salesRepFilter, setSalesRepFilter] = useState('');
 
-  // Modal state
-  const [showModal, setShowModal] = useState(false);
-  const [formData, setFormData] = useState<CompanyFormData>(initialFormData);
-
   // Sorting
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
-
-  // Duplicate company detection
-  const [showDuplicateModal, setShowDuplicateModal] = useState(false);
-  const [duplicateType, setDuplicateType] = useState<'exact' | 'different-address' | 'different-website'>('exact');
-  const [duplicateCompany, setDuplicateCompany] = useState<{
-    id: string;
-    slug?: string;
-    name: string;
-    phone?: string;
-    website?: string;
-    street?: string;
-    city?: string;
-    state?: string;
-    zip?: string;
-  } | null>(null);
-
-  // Secondary address modal state
-  const [showSecondaryAddressModal, setShowSecondaryAddressModal] = useState(false);
-  const [secondaryAddressLabel, setSecondaryAddressLabel] = useState('');
-  const [secondaryAddressData, setSecondaryAddressData] = useState({
-    street: '',
-    suite: '',
-    city: '',
-    state: '',
-    zip: '',
-  });
 
   // Helper functions
   const getSalesRepName = (salesRepId?: string) => {
@@ -153,312 +88,169 @@ export function CompaniesPage() {
     return locations;
   };
 
-  // Helper to get locations where a specific sales rep is assigned within a company
-  const getLocationsForSalesRep = (company: Company, salesRepId: string): string[] => {
-    const locations: string[] = [];
-    
-    // If company uses company-level reps, check if this rep is assigned at company level
-    if (!company.salesRepsByLocation) {
-      const companyRepIds = company.salesRepIds || (company.salesRepId ? [company.salesRepId] : []);
-      if (companyRepIds.includes(salesRepId)) {
-        // This rep is assigned at company level - they cover all locations
-        return getAllLocations(company);
+  // Handle add company
+  const handleAddCompany = () => {
+    openAddCompany({
+      onCreated: () => {
+        // Company created - list auto-updates via store
       }
-      return [];
-    }
-    
-    // Company uses location-based reps - find locations where this rep is assigned
-    // Check main office
-    if (company.address) {
-      const mainRepIds = company.address.salesRepIds || (company.address.salesRepId ? [company.address.salesRepId] : []);
-      if (mainRepIds.includes(salesRepId)) {
-        const mainLoc = [company.address.city, company.address.state].filter(Boolean).join(', ');
-        if (mainLoc) locations.push(mainLoc);
-      }
-    }
-    
-    // Check additional addresses
-    if (company.addresses) {
-      company.addresses.forEach((addr) => {
-        const addrRepIds = addr.salesRepIds || (addr.salesRepId ? [addr.salesRepId] : []);
-        if (addrRepIds.includes(salesRepId)) {
-          const addrLoc = [addr.city, addr.state].filter(Boolean).join(', ');
-          if (addrLoc && !locations.includes(addrLoc)) locations.push(addrLoc);
-        }
-      });
-    }
-    
-    return locations;
+    });
   };
-
-  // Get unique locations for filter (cascading based on sales rep filter)
-  const locationOptions = useMemo(() => {
-    const locations = new Map<string, number>();
-    const allLocations = new Map<string, number>();
-    
-    companies.forEach((company) => {
-      const companyLocations = getAllLocations(company);
-      
-      // Track all locations
-      companyLocations.forEach((loc) => {
-        allLocations.set(loc, (allLocations.get(loc) || 0) + 1);
-      });
-      
-      // If sales rep filter is active, only count locations where THAT rep is assigned
-      if (salesRepFilter) {
-        const repLocations = getLocationsForSalesRep(company, salesRepFilter);
-        repLocations.forEach((loc) => {
-          locations.set(loc, (locations.get(loc) || 0) + 1);
-        });
-      }
-    });
-    
-    // Return all locations but mark those with 0 matches as disabled
-    return Array.from(allLocations.entries())
-      .map(([value]) => {
-        const matchCount = salesRepFilter ? (locations.get(value) || 0) : (allLocations.get(value) || 0);
-        return { 
-          value, 
-          label: value, 
-          count: matchCount,
-          disabled: salesRepFilter ? matchCount === 0 : undefined,
-        };
-      })
-      .sort((a, b) => {
-        // Sort enabled options first, then by label
-        if (a.disabled !== b.disabled) return a.disabled ? 1 : -1;
-        return a.label.localeCompare(b.label);
-      });
-  }, [companies, salesRepFilter]);
-
-  // Helper to get sales rep IDs for a specific location within a company
-  const getSalesRepIdsForLocation = (company: Company, location: string): string[] => {
-    const repIds: string[] = [];
-    
-    // First check if company has ANY address in this location
-    const companyLocations = getAllLocations(company);
-    if (!companyLocations.includes(location)) {
-      return []; // Company has no address in this location
-    }
-    
-    // If company uses company-level reps, those reps apply to all their locations
-    if (!company.salesRepsByLocation) {
-      if (company.salesRepIds) {
-        repIds.push(...company.salesRepIds);
-      } else if (company.salesRepId) {
-        repIds.push(company.salesRepId);
-      }
-      return repIds;
-    }
-    
-    // Company uses location-based reps - find reps for matching addresses only
-    // Check main office
-    if (company.address) {
-      const mainLoc = [company.address.city, company.address.state].filter(Boolean).join(', ');
-      if (mainLoc === location) {
-        if (company.address.salesRepIds) {
-          repIds.push(...company.address.salesRepIds);
-        } else if (company.address.salesRepId) {
-          repIds.push(company.address.salesRepId);
-        }
-      }
-    }
-    
-    // Check additional addresses
-    if (company.addresses) {
-      company.addresses.forEach((addr) => {
-        const addrLoc = [addr.city, addr.state].filter(Boolean).join(', ');
-        if (addrLoc === location) {
-          if (addr.salesRepIds) {
-            repIds.push(...addr.salesRepIds);
-          } else if (addr.salesRepId) {
-            repIds.push(addr.salesRepId);
-          }
-        }
-      });
-    }
-    
-    return repIds;
-  };
-
-  // Get sales reps for filter - cascading based on location filter
-  const salesRepOptions = useMemo(() => {
-    const reps = new Map<string, { name: string; count: number }>();
-    const allReps = new Map<string, { name: string; count: number }>();
-    
-    companies.forEach((company) => {
-      // Get all sales rep IDs for this company (for "all reps" list)
-      const allRepIds = getCompanySalesRepIds(company);
-      allRepIds.forEach((repId) => {
-        const name = getSalesRepName(repId);
-        if (name) {
-          const existingAll = allReps.get(repId);
-          if (existingAll) {
-            existingAll.count++;
-          } else {
-            allReps.set(repId, { name, count: 1 });
-          }
-        }
-      });
-      
-      // If location filter is active, only count reps assigned to THAT location
-      if (locationFilter) {
-        const locationRepIds = getSalesRepIdsForLocation(company, locationFilter);
-        locationRepIds.forEach((repId) => {
-          const name = getSalesRepName(repId);
-          if (name) {
-            const existing = reps.get(repId);
-            if (existing) {
-              existing.count++;
-            } else {
-              reps.set(repId, { name, count: 1 });
-            }
-          }
-        });
-      }
-    });
-    
-    // Return all reps but mark those with 0 matches as disabled
-    return Array.from(allReps.entries())
-      .map(([value, { name }]) => {
-        const matchData = reps.get(value);
-        const matchCount = locationFilter ? (matchData?.count || 0) : allReps.get(value)?.count || 0;
-        return { 
-          value, 
-          label: name, 
-          count: matchCount,
-          disabled: locationFilter ? matchCount === 0 : undefined,
-        };
-      })
-      .sort((a, b) => {
-        // Sort enabled options first, then by label
-        if (a.disabled !== b.disabled) return a.disabled ? 1 : -1;
-        return a.label.localeCompare(b.label);
-      });
-  }, [companies, users, locationFilter]);
-
-  // Get all company names for the alphabet filter
-  const companyNames = useMemo(() => companies.map((c) => c.name), [companies]);
-
-  // Filtered and sorted companies
-  const filteredAndSortedCompanies = useMemo(() => {
-    let result = companies.filter((company) => {
-      // Search filter
-      const matchesSearch = company.name.toLowerCase().includes(search.toLowerCase());
-
-      // Letter filter
-      const matchesLetter =
-        !letterFilter || company.name?.charAt(0)?.toUpperCase() === letterFilter;
-
-      // Location filter
-      const matchesLocation = !locationFilter || getAllLocations(company).includes(locationFilter);
-
-      // Sales rep filter - check if selected rep is in any of the company's sales reps
-      const matchesSalesRep = !salesRepFilter || getCompanySalesRepIds(company).includes(salesRepFilter);
-
-      return matchesSearch && matchesLetter && matchesLocation && matchesSalesRep;
-    });
-
-    result = [...result].sort((a, b) => {
-      let aVal: string | number = '';
-      let bVal: string | number = '';
-
-      switch (sortField) {
-        case 'name':
-          aVal = a.name.toLowerCase();
-          bVal = b.name.toLowerCase();
-          break;
-        case 'location':
-          aVal = getLocation(a).toLowerCase();
-          bVal = getLocation(b).toLowerCase();
-          break;
-        case 'salesRep':
-          aVal = (getCompanySalesRepNames(a)[0] || '').toLowerCase();
-          bVal = (getCompanySalesRepNames(b)[0] || '').toLowerCase();
-          break;
-        case 'contacts':
-          aVal = getContactCount(a.id);
-          bVal = getContactCount(b.id);
-          break;
-      }
-
-      if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
-      if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
-      return 0;
-    });
-
-    return result;
-  }, [companies, search, letterFilter, locationFilter, salesRepFilter, sortField, sortDirection, contacts, users]);
 
   // Sorting handler
   const handleSort = (field: string) => {
-    if (sortField === field) {
+    const sortableField = field as SortField;
+    if (sortField === sortableField) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
     } else {
-      setSortField(field as SortField);
+      setSortField(sortableField);
       setSortDirection('asc');
     }
+  };
+
+  // Filter logic
+  const filteredAndSortedCompanies = useMemo(() => {
+    let filtered = companies;
+
+    // Search filter
+    if (search) {
+      const lowerSearch = search.toLowerCase();
+      filtered = filtered.filter(
+        (company) =>
+          company.name.toLowerCase().includes(lowerSearch) ||
+          company.phone?.toLowerCase().includes(lowerSearch) ||
+          company.website?.toLowerCase().includes(lowerSearch)
+      );
+    }
+
+    // Letter filter
+    if (letterFilter) {
+      if (letterFilter === '#') {
+        filtered = filtered.filter((company) => /^[^a-zA-Z]/.test(company.name));
+      } else {
+        filtered = filtered.filter((company) =>
+          company.name.toLowerCase().startsWith(letterFilter.toLowerCase())
+        );
+      }
+    }
+
+    // Location filter
+    if (locationFilter) {
+      filtered = filtered.filter((company) => {
+        const locations = getAllLocations(company);
+        return locations.some(loc => loc.toLowerCase().includes(locationFilter.toLowerCase()));
+      });
+    }
+
+    // Sales rep filter
+    if (salesRepFilter) {
+      filtered = filtered.filter((company) => {
+        const repIds = getCompanySalesRepIds(company);
+        return repIds.includes(salesRepFilter);
+      });
+    }
+
+    // Sorting
+    const sorted = [...filtered].sort((a, b) => {
+      let comparison = 0;
+      switch (sortField) {
+        case 'name':
+          comparison = a.name.localeCompare(b.name);
+          break;
+        case 'location':
+          comparison = getLocation(a).localeCompare(getLocation(b));
+          break;
+        case 'salesRep':
+          const aReps = getCompanySalesRepNames(a).join(', ');
+          const bReps = getCompanySalesRepNames(b).join(', ');
+          comparison = aReps.localeCompare(bReps);
+          break;
+        case 'contacts':
+          comparison = getContactCount(a.id) - getContactCount(b.id);
+          break;
+      }
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+
+    return sorted;
+  }, [companies, search, letterFilter, locationFilter, salesRepFilter, sortField, sortDirection]);
+
+  // Get unique locations for filter dropdown
+  const locationOptions = useMemo(() => {
+    const locations = new Set<string>();
+    companies.forEach((company) => {
+      getAllLocations(company).forEach(loc => locations.add(loc));
+    });
+    return Array.from(locations)
+      .sort()
+      .map((loc) => ({ value: loc, label: loc }));
+  }, [companies]);
+
+  // Get sales rep options for filter
+  const salesRepOptions = useMemo(() => {
+    const repsWithCompanies = new Set<string>();
+    companies.forEach((company) => {
+      const repIds = getCompanySalesRepIds(company);
+      repIds.forEach(id => repsWithCompanies.add(id));
+    });
+    return users
+      .filter((u) => repsWithCompanies.has(u.id))
+      .map((u) => ({ value: u.id, label: u.name }));
+  }, [companies, users]);
+
+  // Check if any filters are active
+  const hasActiveFilters = !!(search || letterFilter || locationFilter || salesRepFilter);
+
+  // Clear all filters
+  const clearFilters = () => {
+    setSearch('');
+    setLetterFilter(null);
+    setLocationFilter('');
+    setSalesRepFilter('');
   };
 
   // Table columns
   const columns: DataTableColumn<Company>[] = [
     {
       key: 'name',
-      header: 'Company Name',
+      header: 'Company',
       sortable: true,
       render: (company) => (
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center flex-shrink-0">
-            <Building2 className="w-4 h-4 text-brand-600 dark:text-brand-400" />
+          <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center">
+            <Building2 className="w-4 h-4 text-slate-500 dark:text-slate-400" />
           </div>
-          <span className="font-medium text-slate-900 dark:text-white hover:text-brand-600 dark:hover:text-brand-400">
-            {company.name}
-          </span>
+          <div>
+            <div className="font-medium text-slate-900 dark:text-white">
+              {company.name}
+            </div>
+            {company.website && (
+              <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                <Globe className="w-3 h-3" />
+                {company.website}
+              </div>
+            )}
+          </div>
         </div>
       ),
-    },
-    {
-      key: 'phone',
-      header: 'Phone',
-      render: (company) => (
-        <span className="text-slate-600 dark:text-slate-400">{company.phone || '—'}</span>
-      ),
-      hideOnMobile: true,
-    },
-    {
-      key: 'website',
-      header: 'Website',
-      render: (company) => {
-        if (!company.website) {
-          return <span className="text-slate-400">—</span>;
-        }
-        const websiteUrl = company.website.startsWith('http')
-          ? company.website
-          : 'https://' + company.website;
-        const websiteDisplay = company.website.replace(/^https?:\/\//, '');
-        return (
-          <a
-            href={websiteUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-brand-600 dark:text-brand-400 hover:underline flex items-center gap-1"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <Globe className="w-3 h-3" />
-            {websiteDisplay}
-          </a>
-        );
-      },
-      hideOnMobile: true,
     },
     {
       key: 'location',
       header: 'Location',
       sortable: true,
-      render: (company) => (
-        <span className="text-slate-600 dark:text-slate-400">{getLocation(company) || '—'}</span>
-      ),
-      hideOnMobile: true,
+      render: (company) => {
+        const locations = getAllLocations(company);
+        if (locations.length === 0) return <span className="text-slate-400">—</span>;
+        return (
+          <div className="flex items-center gap-1 text-slate-600 dark:text-slate-300">
+            <MapPin className="w-3.5 h-3.5 text-slate-400" />
+            <span>{locations[0]}</span>
+            {locations.length > 1 && (
+              <span className="text-xs text-slate-400">+{locations.length - 1}</span>
+            )}
+          </div>
+        );
+      },
     },
     {
       key: 'salesRep',
@@ -469,327 +261,62 @@ export function CompaniesPage() {
         if (repNames.length === 0) {
           return <span className="text-slate-400">—</span>;
         }
-        if (repNames.length === 1) {
-          return <span className="text-slate-600 dark:text-slate-400">{repNames[0]}</span>;
-        }
         return (
-          <div className="flex flex-wrap gap-1">
-            {repNames.map((name, idx) => (
-              <span
-                key={idx}
-                className="inline-flex items-center px-1.5 py-0.5 bg-brand-50 dark:bg-brand-900/20 text-brand-700 dark:text-brand-300 rounded text-xs"
-              >
-                {name}
-              </span>
-            ))}
+          <div className="flex items-center gap-1 text-slate-600 dark:text-slate-300">
+            <User className="w-3.5 h-3.5 text-slate-400" />
+            <span>{repNames[0]}</span>
+            {repNames.length > 1 && (
+              <span className="text-xs text-slate-400">+{repNames.length - 1}</span>
+            )}
           </div>
         );
       },
-      hideOnMobile: true,
     },
     {
       key: 'contacts',
       header: 'Contacts',
       sortable: true,
-      align: 'center',
-      render: (company) => (
-        <span className="text-slate-600 dark:text-slate-400">{getContactCount(company.id)}</span>
-      ),
+      render: (company) => {
+        const count = getContactCount(company.id);
+        return (
+          <span className="text-slate-600 dark:text-slate-300">
+            {count}
+          </span>
+        );
+      },
     },
   ];
-
-  // Modal handlers
-  const openAddModal = () => {
-    setFormData(initialFormData);
-    setShowModal(true);
-  };
-
-  const closeModal = () => {
-    setShowModal(false);
-    setFormData(initialFormData);
-  };
-
-  // Check for duplicate company by name and determine type
-  const checkForDuplicate = (name: string) => {
-    const normalizedName = name.trim().toLowerCase();
-    const existing = companies.find((company) => company.name.toLowerCase() === normalizedName);
-    
-    if (!existing) return null;
-
-    // Check if addresses match
-    const newAddress = {
-      street: formData.street.trim().toLowerCase(),
-      city: formData.city.trim().toLowerCase(),
-      state: formData.state.trim().toLowerCase(),
-      zip: formData.zip.trim(),
-    };
-    const existingAddress = {
-      street: (existing.address?.street || '').trim().toLowerCase(),
-      city: (existing.address?.city || '').trim().toLowerCase(),
-      state: (existing.address?.state || '').trim().toLowerCase(),
-      zip: (existing.address?.zip || '').trim(),
-    };
-
-    const addressMatches = 
-      newAddress.street === existingAddress.street &&
-      newAddress.city === existingAddress.city &&
-      newAddress.state === existingAddress.state &&
-      newAddress.zip === existingAddress.zip;
-
-    // Check if websites match (both empty counts as match)
-    const newWebsite = (formData.website || '').trim().toLowerCase();
-    const existingWebsite = (existing.website || '').trim().toLowerCase();
-    const websiteMatches = newWebsite === existingWebsite;
-
-    // Determine duplicate type
-    let type: 'exact' | 'different-address' | 'different-website' = 'exact';
-    if (!addressMatches) {
-      type = 'different-address';
-    } else if (!websiteMatches) {
-      type = 'different-website';
-    }
-
-    return { existing, type };
-  };
-
-  const handleSave = () => {
-    if (!formData.name.trim()) {
-      toast.error('Error', 'Company name is required');
-      return;
-    }
-
-    // Validate phone if provided
-    if (formData.phone && !validatePhone(formData.phone)) {
-      toast.error('Error', 'Please enter a valid phone number');
-      return;
-    }
-
-    // Validate website if provided
-    if (formData.website && !validateWebsite(formData.website)) {
-      toast.error('Error', 'Please enter a valid website URL');
-      return;
-    }
-
-    // Check for duplicate
-    const duplicateCheck = checkForDuplicate(formData.name);
-    if (duplicateCheck) {
-      const { existing, type } = duplicateCheck;
-      setDuplicateCompany({
-        id: existing.id,
-        slug: existing.slug,
-        name: existing.name,
-        phone: existing.phone,
-        website: existing.website,
-        street: existing.address?.street,
-        city: existing.address?.city,
-        state: existing.address?.state,
-        zip: existing.address?.zip,
-      });
-      setDuplicateType(type);
-      setShowDuplicateModal(true);
-      return;
-    }
-
-    // No duplicate, create company
-    createCompany();
-  };
-
-  const createCompany = () => {
-    // Build secondary addresses array
-    const addresses = formData.secondaryAddresses.map((addr) => ({
-      id: addr.id,
-      label: addr.label,
-      street: addr.street,
-      suite: addr.suite || undefined,
-      city: addr.city,
-      state: addr.state,
-      zip: addr.zip,
-    }));
-
-    const companyData = {
-      name: formData.name.trim(),
-      phone: formData.phone || undefined,
-      website: formData.website || undefined,
-      address:
-        formData.street || formData.city || formData.state || formData.zip
-          ? {
-              street: formData.street,
-              suite: formData.suite || undefined,
-              city: formData.city,
-              state: formData.state,
-              zip: formData.zip,
-            }
-          : undefined,
-      addresses: addresses.length > 0 ? addresses : undefined,
-      notes: formData.notes || undefined,
-      salesRepIds: formData.salesRepIds.length > 0 ? formData.salesRepIds : undefined,
-    };
-
-    addCompany(companyData);
-    toast.success('Created', formData.name + ' has been added');
-    closeModal();
-  };
-
-  const handleViewExistingCompany = () => {
-    if (duplicateCompany) {
-      // Use slug if available, otherwise fall back to id
-      navigate(`/clients/companies/${duplicateCompany.slug || duplicateCompany.id}`);
-    }
-    setShowDuplicateModal(false);
-    setDuplicateCompany(null);
-    closeModal();
-  };
-
-  const handleAddAsNewLocation = () => {
-    if (duplicateCompany) {
-      // Add the new address to the existing company
-      const { updateCompany } = useClientsStore.getState();
-      const existingCompany = companies.find(c => c.id === duplicateCompany.id);
-      
-      if (existingCompany) {
-        const newAddress = {
-          id: crypto.randomUUID(),
-          label: formData.city && formData.state ? `${formData.city}, ${formData.state}` : 'Office',
-          street: formData.street,
-          suite: formData.suite || undefined,
-          city: formData.city,
-          state: formData.state,
-          zip: formData.zip,
-        };
-
-        const existingAddresses = existingCompany.addresses || [];
-        updateCompany(duplicateCompany.id, {
-          addresses: [...existingAddresses, newAddress],
-        });
-
-        toast.success('Location Added', `New office added to ${existingCompany.name}`);
-        navigate(`/clients/companies/${duplicateCompany.slug || duplicateCompany.id}`);
-      }
-    }
-    setShowDuplicateModal(false);
-    setDuplicateCompany(null);
-    closeModal();
-  };
-
-  const handleCreateSeparateCompany = () => {
-    setShowDuplicateModal(false);
-    setDuplicateCompany(null);
-    createCompany();
-  };
-
-  // Secondary address handlers
-  const openSecondaryAddressModal = () => {
-    setSecondaryAddressLabel('');
-    setSecondaryAddressData({ street: '', suite: '', city: '', state: '', zip: '' });
-    setShowSecondaryAddressModal(true);
-  };
-
-  const handleAddSecondaryAddress = () => {
-    if (!secondaryAddressLabel.trim()) {
-      toast.error('Error', 'Label is required');
-      return;
-    }
-    if (!secondaryAddressData.street && !secondaryAddressData.city) {
-      toast.error('Error', 'Please enter at least street or city');
-      return;
-    }
-
-    const newAddress: SecondaryAddress = {
-      id: crypto.randomUUID(),
-      label: secondaryAddressLabel.trim(),
-      street: secondaryAddressData.street,
-      suite: secondaryAddressData.suite || undefined,
-      city: secondaryAddressData.city,
-      state: secondaryAddressData.state,
-      zip: secondaryAddressData.zip,
-    };
-
-    setFormData({
-      ...formData,
-      secondaryAddresses: [...formData.secondaryAddresses, newAddress],
-    });
-
-    setShowSecondaryAddressModal(false);
-  };
-
-  const handleRemoveSecondaryAddress = (addressId: string) => {
-    setFormData({
-      ...formData,
-      secondaryAddresses: formData.secondaryAddresses.filter(a => a.id !== addressId),
-    });
-  };
-
-  // Phone input handler with formatting
-  const handlePhoneChange = (value: string) => {
-    const currentDigits = formData.phone.replace(/\D/g, '').length;
-    const newDigits = value.replace(/\D/g, '').length;
-    
-    if (newDigits > currentDigits) {
-      setFormData({ ...formData, phone: formatPhoneNumber(value) });
-    } else {
-      setFormData({ ...formData, phone: value });
-    }
-  };
-
-  const handleCloseDuplicateModal = () => {
-    setShowDuplicateModal(false);
-    setDuplicateCompany(null);
-  };
-
-  const hasChanges =
-    formData.name.trim() !== '' ||
-    formData.phone !== '' ||
-    formData.website !== '' ||
-    formData.street !== '' ||
-    formData.suite !== '' ||
-    formData.city !== '' ||
-    formData.state !== '' ||
-    formData.zip !== '' ||
-    formData.notes !== '' ||
-    formData.salesRepIds.length > 0 ||
-    formData.secondaryAddresses.length > 0;
-
-  // Clear all filters
-  const clearFilters = () => {
-    setSearch('');
-    setLetterFilter(null);
-    setLocationFilter('');
-    setSalesRepFilter('');
-  };
-
-  const hasActiveFilters = search || letterFilter || locationFilter || salesRepFilter;
 
   return (
     <Page
       title="Companies"
-      description="Manage your client companies."
-      fillHeight
+      description={`${companies.length} ${companies.length === 1 ? 'company' : 'companies'}`}
       actions={
-        <Button variant="primary" onClick={openAddModal}>
+        <Button onClick={handleAddCompany}>
           <Plus className="w-4 h-4 mr-2" />
           Add Company
         </Button>
       }
     >
-      {/* Main Content Container - fills available height */}
-      <div className="flex flex-col h-full min-h-0">
-        {/* Filter Bar - two rows: filters on top, alphabet on bottom */}
-        <FilterBar 
-          rightContent={<FilterCount count={filteredAndSortedCompanies.length} singular="company" plural="companies" />}
-          secondaryRow={
-            <AlphabetFilter
-              selected={letterFilter}
-              onSelect={setLetterFilter}
-              items={companyNames}
-            />
-          }
-        >
+      <div className="flex flex-col h-full">
+        {/* Alphabet Filter */}
+        <div className="mb-4">
+          <AlphabetFilter
+            selected={letterFilter}
+            onSelect={setLetterFilter}
+            items={companies.map(c => c.name)}
+          />
+        </div>
+
+        {/* Search and Filters */}
+        <FilterBar className="mb-4">
           <SearchInput
             value={search}
             onChange={setSearch}
             placeholder="Search companies..."
-            className="w-48 [&_input]:h-[34px] [&_input]:text-sm"
+            className="w-64"
           />
+          <FilterCount count={filteredAndSortedCompanies.length} singular="company" plural="companies" />
           <SelectFilter
             label="Location"
             value={locationFilter}
@@ -837,7 +364,7 @@ export function CompaniesPage() {
                     : 'Get started by adding your first company'}
                 </p>
                 {!hasActiveFilters && (
-                  <Button variant="primary" className="mt-4" onClick={openAddModal}>
+                  <Button variant="primary" className="mt-4" onClick={handleAddCompany}>
                     <Plus className="w-4 h-4 mr-2" />
                     Add Company
                   </Button>
@@ -847,218 +374,8 @@ export function CompaniesPage() {
           />
         </div>
       </div>
-
-      {/* Add Company Modal */}
-      <Modal
-        isOpen={showModal}
-        onClose={() => {
-          if (showSecondaryAddressModal) return;
-          closeModal();
-        }}
-        title="Add Company"
-        size="lg"
-        hasUnsavedChanges={hasChanges}
-        onSaveChanges={handleSave}
-        onDiscardChanges={closeModal}
-        footer={
-          <>
-            <Button variant="secondary" onClick={closeModal}>
-              Cancel
-            </Button>
-            <Button variant="primary" onClick={handleSave}>
-              Add Company
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          <Input
-            label="Company Name *"
-            value={formData.name}
-            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-            placeholder="Enter company name"
-            autoFocus
-          />
-
-          <div className="space-y-1">
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-              Sales Reps
-            </label>
-            <MultiSelectUsers
-              value={formData.salesRepIds}
-              onChange={(ids) => setFormData({ ...formData, salesRepIds: ids })}
-              placeholder="Select sales reps..."
-              activeOnly={false}
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <Input
-              label="Phone"
-              type="tel"
-              value={formData.phone}
-              onChange={(e) => handlePhoneChange(e.target.value)}
-              placeholder="(555) 123-4567"
-            />
-            <Input
-              label="Website"
-              type="url"
-              value={formData.website}
-              onChange={(e) => setFormData({ ...formData, website: e.target.value })}
-              placeholder="www.example.com"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-              Main Office Address
-            </label>
-            <AddressInput
-              street={formData.street}
-              suite={formData.suite}
-              city={formData.city}
-              state={formData.state}
-              zip={formData.zip}
-              autoSave
-              onSave={(address) => {
-                setFormData({
-                  ...formData,
-                  street: address.street,
-                  suite: address.suite || '',
-                  city: address.city,
-                  state: address.state,
-                  zip: address.zip,
-                });
-              }}
-            />
-          </div>
-
-          {/* Secondary Addresses */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                Additional Offices
-              </label>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={openSecondaryAddressModal}
-              >
-                <Plus className="w-3 h-3 mr-1" />
-                Add Office
-              </Button>
-            </div>
-            
-            {formData.secondaryAddresses.length > 0 ? (
-              <div className="space-y-2">
-                {formData.secondaryAddresses.map((addr) => (
-                  <div
-                    key={addr.id}
-                    className="flex items-center justify-between px-3 py-2 bg-slate-50 dark:bg-slate-800/50 rounded-lg"
-                  >
-                    <div className="flex items-center gap-2">
-                      <MapPin className="w-4 h-4 text-slate-400" />
-                      <div>
-                        <span className="text-xs text-slate-500 dark:text-slate-400">{addr.label}</span>
-                        <p className="text-sm text-slate-900 dark:text-white">
-                          {[addr.street, addr.city, addr.state, addr.zip].filter(Boolean).join(', ')}
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveSecondaryAddress(addr.id)}
-                      className="p-1 text-slate-400 hover:text-danger-600 rounded transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-slate-400 italic">No additional offices</p>
-            )}
-          </div>
-
-          <Textarea
-            label="Notes"
-            value={formData.notes}
-            onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-            rows={3}
-            placeholder="Any additional notes..."
-          />
-        </div>
-      </Modal>
-
-      {/* Add Secondary Address Modal */}
-      <Modal
-        isOpen={showSecondaryAddressModal}
-        onClose={() => setShowSecondaryAddressModal(false)}
-        title="Add Additional Office"
-        size="md"
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setShowSecondaryAddressModal(false)}>
-              Cancel
-            </Button>
-            <Button variant="primary" onClick={handleAddSecondaryAddress}>
-              Add Office
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          <Input
-            label="Office Label *"
-            value={secondaryAddressLabel}
-            onChange={(e) => setSecondaryAddressLabel(e.target.value)}
-            placeholder="e.g., Warehouse, Branch Office, Distribution Center"
-            autoFocus
-          />
-          <div className="space-y-1">
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-              Address
-            </label>
-            <AddressInput
-              street={secondaryAddressData.street}
-              suite={secondaryAddressData.suite}
-              city={secondaryAddressData.city}
-              state={secondaryAddressData.state}
-              zip={secondaryAddressData.zip}
-              autoSave
-              onSave={(address) => {
-                setSecondaryAddressData({
-                  street: address.street,
-                  suite: address.suite || '',
-                  city: address.city,
-                  state: address.state,
-                  zip: address.zip,
-                });
-              }}
-            />
-          </div>
-        </div>
-      </Modal>
-
-      {/* Duplicate Company Modal */}
-      <DuplicateCompanyModal
-        isOpen={showDuplicateModal}
-        duplicateType={duplicateType}
-        existingCompany={duplicateCompany}
-        newCompanyInfo={{
-          name: formData.name,
-          phone: formData.phone,
-          website: formData.website,
-          street: formData.street,
-          city: formData.city,
-          state: formData.state,
-          zip: formData.zip,
-        }}
-        onClose={handleCloseDuplicateModal}
-        onViewExisting={handleViewExistingCompany}
-        onAddAsNewLocation={handleAddAsNewLocation}
-        onCreateSeparate={handleCreateSeparateCompany}
-      />
     </Page>
   );
 }
+
+export default CompaniesPage;

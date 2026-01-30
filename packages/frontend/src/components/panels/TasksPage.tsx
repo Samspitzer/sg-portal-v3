@@ -2,13 +2,8 @@
 // TasksPage - Pipedrive-inspired Task Management
 // Location: packages/frontend/src/components/panels/TasksPage.tsx
 // 
-// AUDIT COMPLIANCE:
-// - Uses common components: Button, Card, CardContent, DataTable, SelectFilter,
-//   Select, Textarea, SearchInput, DatePicker, TimePicker, UnsavedChangesModal,
-//   Input, Toggle, TaskTypeIcon
-// - Uses hooks: useDocumentTitle, useDropdownKeyboard
-// - Uses contexts: useToast, useUsersStore, useClientsStore, useTaskStore, useTaskTypesStore
-// - Uses layout: Page
+// UPDATED: Now uses AddCompanyForm, AddContactForm, AddLeadForm, AddDealForm
+// from add-forms via useFormStack instead of inline QuickAdd modals
 // ===========================================================================
 
 import { useDocumentTitle, useDropdownKeyboard } from '@/hooks';
@@ -18,16 +13,21 @@ import { useNavigate } from 'react-router-dom';
 import { clsx } from 'clsx';
 import { 
   Plus, Calendar as CalendarIcon, List, ChevronLeft, ChevronRight, 
-  Clock, X, User, Building2, FileText, Check, Trash2, Search
+  Clock, X, User, Building2, FileText, Check, Trash2, Search,
+  Target, TrendingUp
 } from 'lucide-react';
 import { Page } from '@/components/layout';
 import { 
   Card, CardContent, Button, SelectFilter, Textarea, SearchInput,
   DataTable, type DataTableColumn, DatePicker, TimePicker, UnsavedChangesModal,
   Input, Toggle, TaskTypeIcon, EntitySearchDropdown, type EntitySearchItem,
-  FilterBar, FilterCount, FilterToggle, QuickFilters, type QuickFilterOption
+  FilterBar, FilterCount, FilterToggle, QuickFilters, type QuickFilterOption,
+  QuickViewModal, type QuickViewField
 } from '@/components/common';
-import { useUsersStore, useClientsStore, useToast } from '@/contexts';
+import { AddItemPanel } from '@/components/panels/AddItemPanel';
+import { DayScheduleSidebar } from '@/components/panels/DayScheduleSidebar';
+import { useFormStack } from '@/components/panels/add-forms';
+import { useUsersStore, useClientsStore, useToast, useSalesStore } from '@/contexts';
 import { 
   useTaskStore, type Task, type TaskType, type TaskPriority, 
   type TaskInput, type LinkedEntity, type LinkedEntityType 
@@ -49,19 +49,16 @@ const PRIORITIES: { value: TaskPriority; label: string; color: string }[] = [
 
 type TimeFilter = 'all' | 'overdue' | 'today' | 'tomorrow' | 'this-week' | 'next-week';
 
-// =============================================================================
-// =============================================================================
-// Company Search Component
-// =============================================================================
-
 function CompanySearch({ 
   value, 
   onChange,
-  onCompanySelected 
+  onCompanySelected,
+  onAddCompany,
 }: { 
   value: LinkedEntity | null; 
   onChange: (v: LinkedEntity | null) => void;
   onCompanySelected?: (companyId: string | null) => void;
+  onAddCompany?: (name: string, callback: (company: { id: string; name: string }) => void) => void;
 }) {
   const { companies } = useClientsStore();
 
@@ -80,6 +77,15 @@ function CompanySearch({
     }
   };
 
+  const handleAddNew = (name: string) => {
+    if (onAddCompany) {
+      onAddCompany(name, (company) => {
+        onChange({ type: 'company', id: company.id, name: company.name });
+        onCompanySelected?.(company.id);
+      });
+    }
+  };
+
   const selectedItem = value ? { id: value.id, name: value.name } : null;
 
   return (
@@ -90,24 +96,31 @@ function CompanySearch({
       items={companyItems}
       placeholder="Search companies..."
       icon={Building2}
+      allowCreate={!!onAddCompany}
+      onCreateNew={handleAddNew}
+      createLabel="Add new company"
     />
   );
 }
 
 // =============================================================================
-// Contact Search Component (filtered by company)
+// Contact Search Component (filtered by company, with add new option)
 // =============================================================================
 
 function ContactSearch({ 
   value, 
   onChange,
   companyId,
+  companyName,
   onContactSelected,
+  onAddContact,
 }: { 
   value: LinkedEntity | null; 
   onChange: (v: LinkedEntity | null) => void;
   companyId: string | null;
+  companyName?: string;
   onContactSelected?: (contact: { id: string; companyId: string; name: string } | null) => void;
+  onAddContact?: (name: string, companyId: string, companyName: string, callback: (contact: { id: string; name: string }) => void) => void;
 }) {
   const { contacts, companies } = useClientsStore();
 
@@ -144,6 +157,16 @@ function ContactSearch({
     }
   };
 
+  const handleAddNew = (name: string) => {
+    if (onAddContact && companyId) {
+      const resolvedCompanyName = companyName || companies.find(c => c.id === companyId)?.name || '';
+      onAddContact(name, companyId, resolvedCompanyName, (contact) => {
+        onChange({ type: 'contact', id: contact.id, name: contact.name });
+        onContactSelected?.({ id: contact.id, companyId, name: contact.name });
+      });
+    }
+  };
+
   const selectedItem = value ? { id: value.id, name: value.name } : null;
 
   return (
@@ -156,240 +179,119 @@ function ContactSearch({
       icon={User}
       labelSuffix={companyId ? "(filtered by company)" : undefined}
       emptyMessage="No contacts found"
+      allowCreate={!!companyId && !!onAddContact}
+      onCreateNew={handleAddNew}
+      createLabel="Add new contact"
     />
   );
 }
 
 // =============================================================================
-// Day Schedule Sidebar Component
-// =============================================================================
-
-function DayScheduleSidebar({ 
-  date,
-  tasks,
-  onDateChange,
-}: { 
-  date: string;
-  tasks: Task[];
-  onDateChange?: (date: string) => void;
-}) {
-  const [currentMonth, setCurrentMonth] = useState(() => {
-    if (date) return parseLocalDate(date);
-    return new Date();
-  });
-
-  // Update current month when date changes
-  useEffect(() => {
-    if (date) {
-      setCurrentMonth(parseLocalDate(date));
-    }
-  }, [date]);
-
-  // Filter tasks for the selected date
-  const dayTasks = useMemo(() => {
-    if (!date) return [];
-    return tasks
-      .filter(t => t.dueDate === date && t.status !== 'completed' && t.status !== 'cancelled')
-      .sort((a, b) => {
-        if (!a.dueTime && !b.dueTime) return 0;
-        if (!a.dueTime) return 1;
-        if (!b.dueTime) return -1;
-        return a.dueTime.localeCompare(b.dueTime);
-      });
-  }, [date, tasks]);
-
-  // Get tasks for the current month view
-  const tasksByDate = useMemo(() => {
-    const map = new Map<string, number>();
-    tasks.forEach(t => {
-      if (t.dueDate && t.status !== 'completed' && t.status !== 'cancelled') {
-        map.set(t.dueDate, (map.get(t.dueDate) || 0) + 1);
-      }
-    });
-    return map;
-  }, [tasks]);
-
-  // Generate calendar days
-  const calendarDays = useMemo(() => {
-    const year = currentMonth.getFullYear();
-    const month = currentMonth.getMonth();
-    const firstDay = new Date(year, month, 1);
-    const lastDay = new Date(year, month + 1, 0);
-    const startPadding = firstDay.getDay();
-    const days: { date: Date; isCurrentMonth: boolean }[] = [];
-
-    // Previous month padding
-    for (let i = startPadding - 1; i >= 0; i--) {
-      const d = new Date(year, month, -i);
-      days.push({ date: d, isCurrentMonth: false });
-    }
-
-    // Current month
-    for (let i = 1; i <= lastDay.getDate(); i++) {
-      days.push({ date: new Date(year, month, i), isCurrentMonth: true });
-    }
-
-    // Next month padding
-    const remaining = 42 - days.length;
-    for (let i = 1; i <= remaining; i++) {
-      days.push({ date: new Date(year, month + 1, i), isCurrentMonth: false });
-    }
-
-    return days;
-  }, [currentMonth]);
-
-  const formatDateStr = (d: Date) => {
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  };
-
-  const today = new Date();
-  const todayStr = formatDateStr(today);
-
-  const goToPrevMonth = () => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1));
-  const goToNextMonth = () => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
-
-  return (
-    <div className="w-full h-full border-l border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 flex flex-col">
-      {/* Mini Calendar */}
-      <div className="p-3 border-b border-slate-200 dark:border-slate-700">
-        {/* Month Navigation */}
-        <div className="flex items-center justify-between mb-3">
-          <button 
-            onClick={goToPrevMonth}
-            className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors"
-          >
-            <ChevronLeft className="w-4 h-4 text-slate-500" />
-          </button>
-          <span className="text-sm font-medium text-slate-900 dark:text-white">
-            {currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-          </span>
-          <button 
-            onClick={goToNextMonth}
-            className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors"
-          >
-            <ChevronRight className="w-4 h-4 text-slate-500" />
-          </button>
-        </div>
-
-        {/* Day Headers */}
-        <div className="grid grid-cols-7 gap-0.5 mb-1">
-          {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, i) => (
-            <div key={i} className="text-center text-xs font-medium text-slate-400 py-1">
-              {day}
-            </div>
-          ))}
-        </div>
-
-        {/* Calendar Grid */}
-        <div className="grid grid-cols-7 gap-0.5">
-          {calendarDays.map(({ date: d, isCurrentMonth }, i) => {
-            const dateStr = formatDateStr(d);
-            const isSelected = dateStr === date;
-            const isToday = dateStr === todayStr;
-            const taskCount = tasksByDate.get(dateStr) || 0;
-
-            return (
-              <button
-                key={i}
-                onClick={() => onDateChange?.(dateStr)}
-                className={clsx(
-                  'relative h-8 text-xs rounded transition-colors',
-                  isCurrentMonth 
-                    ? 'text-slate-700 dark:text-slate-300' 
-                    : 'text-slate-400 dark:text-slate-600',
-                  isSelected 
-                    ? 'bg-blue-600 text-white font-medium' 
-                    : isToday
-                      ? 'bg-blue-100 dark:bg-blue-900/30 font-medium'
-                      : 'hover:bg-slate-200 dark:hover:bg-slate-700'
-                )}
-              >
-                {d.getDate()}
-                {taskCount > 0 && !isSelected && (
-                  <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-blue-500" />
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Schedule for Selected Date */}
-      {date ? (
-        <>
-          <div className="px-3 py-2 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
-            <p className="text-sm font-medium text-slate-900 dark:text-white">
-              {parseLocalDate(date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
-            </p>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              {dayTasks.length} task{dayTasks.length !== 1 ? 's' : ''} scheduled
-            </p>
-          </div>
-          
-          <div className="flex-1 overflow-y-auto p-2 space-y-1">
-            {dayTasks.length === 0 ? (
-              <p className="text-xs text-slate-400 text-center py-4">No tasks scheduled</p>
-            ) : (
-              dayTasks.map(task => (
-                <div 
-                  key={task.id}
-                  className="px-2 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg"
-                >
-                  <p className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate">
-                    {task.title}
-                  </p>
-                  {task.dueTime && (
-                    <p className="text-xs text-slate-400 flex items-center gap-1 mt-0.5">
-                      <Clock className="w-3 h-3" />
-                      {task.dueTime}
-                    </p>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
-        </>
-      ) : (
-        <div className="flex-1 flex flex-col items-center justify-center p-4 text-center">
-          <CalendarIcon className="w-8 h-8 text-slate-300 dark:text-slate-600 mb-2" />
-          <p className="text-sm text-slate-500 dark:text-slate-400">Select a due date to see your schedule</p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// =============================================================================
-// Contact/Company Search (Legacy - keeping for backward compatibility)
-// =============================================================================
-// Item Search Component (Projects, Deals, Estimates, Invoices)
+// Item Search Component (Leads, Deals - filtered by company/contact)
 // =============================================================================
 
 interface SearchItem { 
   type: LinkedEntityType; 
   id: string; 
   name: string; 
-  subtitle?: string; 
+  subtitle?: string;
+  companyId?: string;
+  companyName?: string;
+  contactId?: string;
+  contactName?: string;
 }
 
 function ItemSearch({ 
   value, 
-  onChange 
+  onChange,
+  companyId,
+  companyName,
+  contactId,
+  contactName,
+  onItemSelected,
+  onAddLead,
+  onAddDeal,
 }: { 
   value: LinkedEntity | null; 
-  onChange: (v: LinkedEntity | null) => void; 
+  onChange: (v: LinkedEntity | null) => void;
+  companyId?: string | null;
+  companyName?: string;
+  contactId?: string | null;
+  contactName?: string;
+  onItemSelected?: (item: { 
+    companyId?: string; 
+    companyName?: string; 
+    contactId?: string; 
+    contactName?: string;
+  } | null) => void;
+  onAddLead?: (name: string, companyId: string, companyName: string, contactId: string | undefined, contactName: string | undefined, callback: (lead: { id: string; name: string }) => void) => void;
+  onAddDeal?: (name: string, companyId: string, companyName: string, contactId: string | undefined, contactName: string | undefined, callback: (deal: { id: string; name: string }) => void) => void;
 }) {
   const [search, setSearch] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // TODO: Replace with actual stores when available
+  // Get leads and deals from sales store
+  const { leads, deals } = useSalesStore();
+  const { contacts, companies } = useClientsStore();
+
+  // Build all linkable items from leads and deals (filtered by company/contact)
   const allItems = useMemo<SearchItem[]>(() => {
     const items: SearchItem[] = [];
-    // Add items from project store, deal store, etc. when available
+    
+    // Add leads (filtered)
+    leads.forEach(lead => {
+      if (lead.convertedToDealId) return; // Skip converted leads
+      
+      // Filter by company if selected
+      if (companyId && lead.companyId !== companyId) return;
+      
+      // Filter by contact if selected
+      if (contactId && lead.contactId !== contactId) return;
+      
+      // Get contact name if available
+      const contact = lead.contactId ? contacts.find(c => c.id === lead.contactId) : null;
+      const leadContactName = contact ? `${contact.firstName} ${contact.lastName}`.trim() : undefined;
+      
+      items.push({
+        type: 'lead' as LinkedEntityType,
+        id: lead.id,
+        name: lead.name,
+        subtitle: lead.companyName || 'Lead',
+        companyId: lead.companyId,
+        companyName: lead.companyName,
+        contactId: lead.contactId,
+        contactName: leadContactName,
+      });
+    });
+    
+    // Add active deals (filtered)
+    deals.filter(d => !d.deletedAt && d.status === 'active').forEach(deal => {
+      // Filter by company if selected
+      if (companyId && deal.companyId !== companyId) return;
+      
+      // Filter by contact if selected
+      if (contactId && deal.contactId !== contactId) return;
+      
+      // Get contact name if available
+      const contact = deal.contactId ? contacts.find(c => c.id === deal.contactId) : null;
+      const dealContactName = contact ? `${contact.firstName} ${contact.lastName}`.trim() : undefined;
+      
+      items.push({
+        type: 'deal' as LinkedEntityType,
+        id: deal.id,
+        name: deal.name,
+        subtitle: deal.companyName || 'Deal',
+        companyId: deal.companyId,
+        companyName: deal.companyName,
+        contactId: deal.contactId,
+        contactName: dealContactName,
+      });
+    });
+    
     return items;
-  }, []);
+  }, [leads, deals, contacts, companyId, contactId]);
 
   const filteredItems = useMemo(() => {
     if (!search.trim()) return allItems.slice(0, 10);
@@ -398,16 +300,30 @@ function ItemSearch({
       .slice(0, 10);
   }, [search, allItems]);
 
+  const handleSelectItem = (item: SearchItem) => {
+    onChange({ type: item.type, id: item.id, name: item.name });
+    setSearch('');
+    setIsOpen(false);
+    resetHighlight();
+    
+    // Notify parent about company/contact from selected lead/deal
+    if (onItemSelected) {
+      onItemSelected({
+        companyId: item.companyId,
+        companyName: item.companyName,
+        contactId: item.contactId,
+        contactName: item.contactName,
+      });
+    }
+  };
+
   // Keyboard navigation using the hook
   const { highlightedIndex, handleKeyDown, resetHighlight } = useDropdownKeyboard({
     items: filteredItems,
     isOpen,
     onSelect: (item) => {
       if (item) {
-        onChange({ type: item.type, id: item.id, name: item.name });
-        setSearch('');
-        setIsOpen(false);
-        resetHighlight();
+        handleSelectItem(item);
       }
     },
     onClose: () => {
@@ -434,82 +350,157 @@ function ItemSearch({
     resetHighlight();
   };
 
+  // Get icon for entity type
+  const getEntityIcon = (type: LinkedEntityType) => {
+    switch (type) {
+      case 'lead': return Target;
+      case 'deal': return TrendingUp;
+      default: return ENTITY_ICONS[type] || FileText;
+    }
+  };
+
+  // Check if we can create new items (need company to be selected)
+  const canCreateNew = !!companyId && search.trim().length > 0;
+  const searchTerm = search.trim();
+
+  const handleCreateLead = () => {
+    if (!companyId || !searchTerm || !onAddLead) return;
+    const resolvedCompanyName = companyName || companies.find(c => c.id === companyId)?.name || '';
+    onAddLead(searchTerm, companyId, resolvedCompanyName, contactId || undefined, contactName, (lead) => {
+      onChange({ type: 'lead', id: lead.id, name: lead.name });
+      setSearch('');
+    });
+    setIsOpen(false);
+  };
+
+  const handleCreateDeal = () => {
+    if (!companyId || !searchTerm || !onAddDeal) return;
+    const resolvedCompanyName = companyName || companies.find(c => c.id === companyId)?.name || '';
+    onAddDeal(searchTerm, companyId, resolvedCompanyName, contactId || undefined, contactName, (deal) => {
+      onChange({ type: 'deal', id: deal.id, name: deal.name });
+      setSearch('');
+    });
+    setIsOpen(false);
+  };
+
+  // Build filter label
+  const filterLabel = companyId || contactId 
+    ? `(filtered${companyId ? ' by company' : ''}${contactId ? ' by contact' : ''})`
+    : undefined;
+
   return (
-    <div className="space-y-1.5">
-      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-        Link to Item (Project, Deal, etc.)
-      </label>
-      {value ? (
-        <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg">
-          {(() => { 
-            const Icon = ENTITY_ICONS[value.type]; 
-            return <Icon className="w-4 h-4 text-slate-400" />; 
-          })()}
-          <span className="flex-1 text-sm text-slate-900 dark:text-white">{value.name}</span>
-          <span className="text-xs text-slate-400 capitalize">{value.type}</span>
-          <button 
-            type="button" 
-            onClick={() => onChange(null)} 
-            className="text-slate-400 hover:text-red-500 transition-colors"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      ) : (
-        <div ref={containerRef} className="relative">
-          <Input
-            value={search}
-            onChange={handleInputChange}
-            onFocus={() => setIsOpen(true)}
-            onKeyDown={handleKeyDown}
-            placeholder="Search projects, deals, estimates..."
-            leftIcon={<Search className="w-4 h-4" />}
-            disableAutoValidation
-          />
-          {isOpen && (
-            <div 
-              ref={dropdownRef} 
-              className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-50 max-h-60 overflow-y-auto"
-            >
-              {filteredItems.length > 0 ? (
-                filteredItems.map((item, index) => {
-                  const Icon = ENTITY_ICONS[item.type];
-                  const isHighlighted = index === highlightedIndex;
-                  return (
-                    <button 
-                      key={`${item.type}-${item.id}`} 
-                      type="button" 
-                      onClick={() => { 
-                        onChange({ type: item.type, id: item.id, name: item.name }); 
-                        setSearch(''); 
-                        setIsOpen(false);
-                        resetHighlight();
-                      }}
-                      className={clsx(
-                        'w-full flex items-center gap-2 px-3 py-2 text-left transition-colors',
-                        isHighlighted 
-                          ? 'bg-slate-100 dark:bg-slate-700' 
-                          : 'hover:bg-slate-50 dark:hover:bg-slate-700'
-                      )}
-                    >
-                      <Icon className="w-4 h-4 text-slate-400" />
-                      <span className="flex-1 text-sm text-slate-900 dark:text-white truncate">
-                        {item.name}
-                      </span>
-                      <span className="text-xs text-slate-400">{item.subtitle}</span>
-                    </button>
-                  );
-                })
-              ) : (
-                <div className="p-3 text-center text-xs text-slate-400">
-                  No projects or deals available yet
-                </div>
-              )}
-            </div>
+    <>
+      <div className="space-y-1.5">
+        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+          Link to Lead or Deal
+          {filterLabel && (
+            <span className="ml-1 text-xs font-normal text-slate-400">{filterLabel}</span>
           )}
-        </div>
-      )}
-    </div>
+        </label>
+        {value ? (
+          <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg">
+            {(() => { 
+              const Icon = getEntityIcon(value.type); 
+              return <Icon className="w-4 h-4 text-slate-400" />; 
+            })()}
+            <span className="flex-1 text-sm text-slate-900 dark:text-white">{value.name}</span>
+            <span className="text-xs text-slate-400 capitalize">{value.type}</span>
+            <button 
+              type="button" 
+              onClick={() => { onChange(null); onItemSelected?.(null); }}
+              className="text-slate-400 hover:text-red-500 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        ) : (
+          <div ref={containerRef} className="relative">
+            <Input
+              value={search}
+              onChange={handleInputChange}
+              onFocus={() => setIsOpen(true)}
+              onKeyDown={handleKeyDown}
+              placeholder="Search leads, deals..."
+              leftIcon={<Search className="w-4 h-4" />}
+              disableAutoValidation
+            />
+            {isOpen && (
+              <div 
+                ref={dropdownRef} 
+                className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-50 max-h-60 overflow-y-auto"
+              >
+                {/* Create new options */}
+                {canCreateNew && (
+                  <div className="border-b border-slate-200 dark:border-slate-700">
+                    <button 
+                      type="button" 
+                      onClick={handleCreateLead}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-blue-50 dark:hover:bg-blue-900/20 text-blue-600 dark:text-blue-400"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span className="text-sm">Add "{searchTerm}" as new Lead</span>
+                    </button>
+                    <button 
+                      type="button" 
+                      onClick={handleCreateDeal}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-green-50 dark:hover:bg-green-900/20 text-green-600 dark:text-green-400"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span className="text-sm">Add "{searchTerm}" as new Deal</span>
+                    </button>
+                  </div>
+                )}
+                
+                {filteredItems.length > 0 ? (
+                  filteredItems.map((item, index) => {
+                    const Icon = getEntityIcon(item.type);
+                    const isHighlighted = index === highlightedIndex;
+                    return (
+                      <button 
+                        key={`${item.type}-${item.id}`} 
+                        type="button" 
+                        onClick={() => handleSelectItem(item)}
+                        className={clsx(
+                          'w-full flex items-center gap-2 px-3 py-2 text-left transition-colors',
+                          isHighlighted 
+                            ? 'bg-slate-100 dark:bg-slate-700' 
+                            : 'hover:bg-slate-50 dark:hover:bg-slate-700'
+                        )}
+                      >
+                        <Icon className="w-4 h-4 text-slate-400" />
+                        <div className="flex-1 min-w-0">
+                          <span className="text-sm text-slate-900 dark:text-white truncate block">
+                            {item.name}
+                          </span>
+                          {item.subtitle && (
+                            <span className="text-xs text-slate-400 truncate block">
+                              {item.subtitle}
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-xs text-slate-400 capitalize flex-shrink-0">{item.type}</span>
+                      </button>
+                    );
+                  })
+                ) : (
+                  <div className="p-3 text-center text-xs text-slate-400">
+                    {allItems.length === 0 
+                      ? (companyId || contactId 
+                          ? 'No leads or deals for this selection' 
+                          : 'No leads or deals available yet')
+                      : 'No matching items found'
+                    }
+                    {!companyId && (
+                      <p className="mt-1 text-slate-500">Select a company to create new leads/deals</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </>
   );
 }
 
@@ -549,7 +540,7 @@ function TaskTypeButtonGroup({
 }
 
 // =============================================================================
-// Task Detail Panel (Slide-out)
+// Task Detail Panel (Slide-out with Calendar Sidebar)
 // =============================================================================
 
 export function TaskDetailPanel({ 
@@ -560,6 +551,7 @@ export function TaskDetailPanel({
   onDelete,
   defaultLinkedContact,
   defaultLinkedItem,
+  defaultCompany,
 }: { 
   task: Task | null; 
   isOpen: boolean; 
@@ -570,12 +562,15 @@ export function TaskDetailPanel({
   defaultLinkedContact?: LinkedEntity | null;
   /** Pre-fill linked item when creating new task */
   defaultLinkedItem?: LinkedEntity | null;
+  /** Pre-fill company when creating new task (for contact pages) */
+  defaultCompany?: LinkedEntity | null;
 }) {
   const { users } = useUsersStore();
   const { companies } = useClientsStore();
   const { tasks: allTasks } = useTaskStore();
   const { getActiveTaskTypes } = useTaskTypesStore();
   const toast = useToast();
+  const { openAddCompany, openAddContact, openAddLead, openAddDeal } = useFormStack();
   
   const [formData, setFormData] = useState<TaskInput>({ 
     title: '', 
@@ -597,59 +592,7 @@ export function TaskDetailPanel({
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
   const [linkedCompany, setLinkedCompany] = useState<LinkedEntity | null>(null);
   
-  // Resizable sidebar state
-  const [sidebarWidth, setSidebarWidth] = useState(280); // 280px default
-  const [panelWidth, setPanelWidth] = useState(900); // Total panel width
-  const [isResizing, setIsResizing] = useState<'sidebar' | 'panel' | null>(null);
-  const minSidebarWidth = 220;
-  const maxSidebarWidth = 360;
-  const minPanelWidth = 750;
-  const maxPanelWidth = 1200;
-  const minFormWidth = 520; // Minimum form width to prevent text cutoff
-  
   const taskTypes = useMemo(() => getActiveTaskTypes(), [getActiveTaskTypes]);
-
-  // Handle resize drag
-  useEffect(() => {
-    if (!isResizing) return;
-    
-    const handleMouseMove = (e: MouseEvent) => {
-      if (isResizing === 'sidebar') {
-        // Resize sidebar (drag from middle divider)
-        const panelRight = window.innerWidth;
-        const newSidebarWidth = panelRight - e.clientX;
-        // Ensure form area doesn't get too narrow
-        const formWidth = panelWidth - newSidebarWidth - 6; // 6px for dividers
-        if (formWidth >= minFormWidth) {
-          setSidebarWidth(Math.min(maxSidebarWidth, Math.max(minSidebarWidth, newSidebarWidth)));
-        }
-      } else if (isResizing === 'panel') {
-        // Resize panel (drag from left edge)
-        const newWidth = window.innerWidth - e.clientX;
-        // Ensure form area doesn't get too narrow
-        const formWidth = newWidth - sidebarWidth - 6; // 6px for dividers
-        if (formWidth >= minFormWidth || newWidth > panelWidth) {
-          setPanelWidth(Math.min(maxPanelWidth, Math.max(minPanelWidth, newWidth)));
-        }
-      }
-    };
-    
-    const handleMouseUp = () => {
-      setIsResizing(null);
-    };
-    
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-    
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    };
-  }, [isResizing, panelWidth, sidebarWidth]);
 
   // Initialize form data when panel opens
   useEffect(() => {
@@ -700,12 +643,16 @@ export function TaskDetailPanel({
       if (defaultLinkedContact?.type === 'company') {
         setLinkedCompany(defaultLinkedContact);
         setSelectedCompanyId(defaultLinkedContact.id);
+      } else if (defaultCompany) {
+        // Use explicit defaultCompany prop (from contact detail page)
+        setLinkedCompany(defaultCompany);
+        setSelectedCompanyId(defaultCompany.id);
       } else {
         setLinkedCompany(null);
         setSelectedCompanyId(null);
       }
     }
-  }, [task, isOpen, defaultLinkedContact, defaultLinkedItem]);
+  }, [task, isOpen, defaultLinkedContact, defaultLinkedItem, defaultCompany]);
 
   // Track if there are unsaved changes
   const hasChanges = useMemo(() => {
@@ -762,259 +709,266 @@ export function TaskDetailPanel({
   
   const currentTaskType = taskTypes.find(t => t.value === formData.type);
 
-  if (!isOpen) return null;
-
-  return createPortal(
-    <>
-      <div className="fixed inset-0 z-50 flex">
-        {/* Backdrop */}
-        <div 
-          className="absolute inset-0 bg-black/20 dark:bg-black/40" 
-          onClick={handleClose} 
-        />
-        
-        {/* Panel - resizable width */}
-        <div 
-          className="absolute right-0 top-0 bottom-0 bg-white dark:bg-slate-900 shadow-2xl flex animate-slide-in-right"
-          style={{ width: panelWidth, maxWidth: '100vw' }}
-        >
-          {/* Left Edge Resize Handle */}
-          <div 
-            onMouseDown={() => setIsResizing('panel')}
-            className={clsx(
-              "w-1.5 cursor-col-resize hover:bg-blue-400 active:bg-blue-500 transition-colors flex-shrink-0",
-              isResizing === 'panel' ? "bg-blue-500" : "bg-slate-300 dark:bg-slate-600"
-            )}
-            title="Drag to resize panel"
-          />
-
-          {/* Main Content Area */}
-          <div className="flex-1 flex flex-col min-w-0" style={{ minWidth: minFormWidth }}>
-            {/* Header */}
-            <div className="flex items-center gap-3 px-6 py-4 border-b border-slate-200 dark:border-slate-700">
-              <div className="flex items-center gap-2 flex-1 min-w-0">
-                {currentTaskType && (
-                  <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
-                    <TaskTypeIcon icon={currentTaskType.icon} className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                  </div>
-                )}
-                <div className="flex-1 min-w-0">
-                  <h2 className="text-lg font-semibold text-slate-900 dark:text-white truncate">
-                    {task ? formData.title || 'Untitled Task' : 'New Task'}
-                  </h2>
-                  {formData.dueDate && (
-                    <p className="text-sm text-slate-500 dark:text-slate-400">
-                      {formatDate(formData.dueDate, 'long')}
-                    </p>
-                )}
-              </div>
-            </div>
+  // Footer content
+  const panelFooter = (
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-3">
+        {task && (
+          <>
             <button 
-              onClick={handleClose} 
-              className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+              onClick={handleDelete} 
+              className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors" 
+              title="Delete task"
             >
-              <X className="w-5 h-5 text-slate-500" />
+              <Trash2 className="w-5 h-5" />
             </button>
-          </div>
-
-          {/* Content */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-5">
-            {/* Task Title */}
-            <Input
-              value={formData.title}
-              onChange={e => setFormData(d => ({ ...d, title: e.target.value }))}
-              placeholder="Task title..."
-              className="text-lg font-medium [&_input]:py-3"
-              disableAutoValidation
+            <Toggle
+              checked={isMarkingDone}
+              onChange={setIsMarkingDone}
+              label="Mark as done"
+              size="sm"
+              activeColor="success"
             />
-            
-            {/* Activity Type */}
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                Activity Type
-              </label>
-              <TaskTypeButtonGroup 
-                value={formData.type} 
-                onChange={v => setFormData(d => ({ ...d, type: v }))} 
-                taskTypes={taskTypes} 
-              />
-            </div>
+          </>
+        )}
+      </div>
+      <div className="flex items-center gap-2">
+        <Button variant="ghost" onClick={handleClose}>Cancel</Button>
+        <Button 
+          onClick={handleSave} 
+          disabled={!formData.title.trim() || !formData.assignedUserId}
+        >
+          {task ? 'Save' : 'Create Task'}
+        </Button>
+      </div>
+    </div>
+  );
 
-            {/* Divider */}
-            <div className="border-t border-slate-200 dark:border-slate-700" />
-            
-            {/* Due Date, Time, Assigned To - Row */}
-            <div className="grid grid-cols-3 gap-3">
-              <DatePicker 
-                label="Due Date" 
-                value={formData.dueDate || ''} 
-                onChange={v => setFormData(d => ({ ...d, dueDate: v }))} 
-              />
-              <TimePicker 
-                label="Due Time" 
-                value={formData.dueTime || ''} 
-                onChange={v => setFormData(d => ({ ...d, dueTime: v }))} 
-              />
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                  Assigned To
-                </label>
-                <SelectFilter
-                  label="Select user"
-                  value={formData.assignedUserId}
-                  onChange={(value) => setFormData(d => ({ ...d, assignedUserId: value }))}
-                  options={userOptions}
-                  placeholder="Select user..."
-                  showAllOption={false}
-                  size="md"
-                  className="w-full"
-                />
-              </div>
-            </div>
-
-            {/* Priority - Full width row */}
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                Priority
-              </label>
-              <div className="flex items-center gap-2 flex-wrap">
-                {PRIORITIES.map(p => (
-                  <button 
-                    key={p.value} 
-                    type="button" 
-                    onClick={() => setFormData(d => ({ 
-                      ...d, 
-                      priority: d.priority === p.value ? undefined : p.value 
-                    }))}
-                    className={clsx(
-                      'px-4 py-2 rounded-lg text-sm font-medium transition-all', 
-                      formData.priority === p.value 
-                        ? p.color + ' ring-2 ring-offset-1 ring-blue-500' 
-                        : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-600'
-                    )}
-                  >
-                    {p.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Divider */}
-            <div className="border-t border-slate-200 dark:border-slate-700" />
-            
-            {/* Company & Contact - Row */}
-            <div className="grid grid-cols-2 gap-4">
-              <CompanySearch 
-                value={linkedCompany} 
-                onChange={(v) => {
-                  setLinkedCompany(v);
-                }}
-                onCompanySelected={(companyId) => {
-                  setSelectedCompanyId(companyId);
-                  // If clearing company, also clear contact
-                  if (!companyId) {
-                    setFormData(d => ({ ...d, linkedContact: null }));
-                  }
-                }}
-              />
-              <ContactSearch 
-                value={formData.linkedContact?.type === 'contact' ? formData.linkedContact : null} 
-                onChange={v => setFormData(d => ({ ...d, linkedContact: v }))}
-                companyId={selectedCompanyId}
-                onContactSelected={(contact) => {
-                  if (contact) {
-                    // Auto-select company when contact is selected
-                    const company = companies.find(c => c.id === contact.companyId);
-                    if (company) {
-                      setLinkedCompany({ type: 'company', id: company.id, name: company.name });
-                      setSelectedCompanyId(company.id);
-                    }
-                  }
-                }}
-              />
-            </div>
-            
-            {/* Link to Item */}
-            <ItemSearch 
-              value={formData.linkedItem || null} 
-              onChange={v => setFormData(d => ({ ...d, linkedItem: v }))} 
-            />
-
-            {/* Divider */}
-            <div className="border-t border-slate-200 dark:border-slate-700" />
-            
-            {/* Notes */}
-            <Textarea
-              label="Notes"
-              value={formData.notes || ''}
-              onChange={e => setFormData(d => ({ ...d, notes: e.target.value }))}
-              rows={4}
-              placeholder="Add notes..."
-            />
-            
-            {/* Created info */}
-            {task && (
-              <div className="text-xs text-slate-400 pt-2 border-t border-slate-200 dark:border-slate-700">
-                Created: {new Date(task.createdAt).toLocaleString()}
-                {task.createdByName && ` by ${task.createdByName}`}
-              </div>
-            )}
-          </div>
-
-          {/* Footer */}
-          <div className="flex items-center justify-between px-6 py-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
-            <div className="flex items-center gap-3">
-              {task && (
-                <>
-                  <button 
-                    onClick={handleDelete} 
-                    className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors" 
-                    title="Delete task"
-                  >
-                    <Trash2 className="w-5 h-5" />
-                  </button>
-                  <Toggle
-                    checked={isMarkingDone}
-                    onChange={setIsMarkingDone}
-                    label="Mark as done"
-                    size="sm"
-                    activeColor="success"
-                  />
-                </>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" onClick={handleClose}>Cancel</Button>
-              <Button 
-                onClick={handleSave} 
-                disabled={!formData.title.trim() || !formData.assignedUserId}
-              >
-                {task ? 'Save' : 'Create Task'}
-              </Button>
-            </div>
-          </div>
-          </div>
-          
-          {/* Middle Resizable Divider */}
-          <div 
-            onMouseDown={() => setIsResizing('sidebar')}
-            className={clsx(
-              "w-1.5 cursor-col-resize hover:bg-blue-400 active:bg-blue-500 transition-colors flex-shrink-0",
-              isResizing === 'sidebar' ? "bg-blue-500" : "bg-slate-200 dark:bg-slate-700"
-            )}
-            title="Drag to resize calendar"
+  return (
+    <>
+      <AddItemPanel
+        isOpen={isOpen}
+        onClose={handleClose}
+        title={task ? (formData.title || 'Untitled Task') : 'New Task'}
+        subtitle={formData.dueDate ? formatDate(formData.dueDate, 'long') : undefined}
+        icon={currentTaskType ? (
+          <TaskTypeIcon icon={currentTaskType.icon} className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+        ) : (
+          <Clock className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+        )}
+        footer={panelFooter}
+        initialWidth={900}
+        minWidth={700}
+        maxWidth={1200}
+        sidebar={
+          <DayScheduleSidebar 
+            date={formData.dueDate || ''} 
+            tasks={allTasks}
+            onDateChange={(newDate) => setFormData(d => ({ ...d, dueDate: newDate }))}
+          />
+        }
+        sidebarWidth={280}
+        scrollable
+      >
+        <div className="space-y-5">
+          {/* Task Title */}
+          <Input
+            value={formData.title}
+            onChange={e => setFormData(d => ({ ...d, title: e.target.value }))}
+            placeholder="Task title..."
+            className="text-lg font-medium [&_input]:py-3"
+            disableAutoValidation
           />
           
-          {/* Day Schedule Sidebar with Mini Calendar */}
-          <div style={{ width: sidebarWidth, minWidth: minSidebarWidth, maxWidth: maxSidebarWidth }} className="flex-shrink-0">
-            <DayScheduleSidebar 
-              date={formData.dueDate || ''} 
-              tasks={allTasks}
-              onDateChange={(newDate) => setFormData(d => ({ ...d, dueDate: newDate }))}
+          {/* Activity Type */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+              Activity Type
+            </label>
+            <TaskTypeButtonGroup 
+              value={formData.type} 
+              onChange={v => setFormData(d => ({ ...d, type: v }))} 
+              taskTypes={taskTypes} 
             />
           </div>
+
+          {/* Divider */}
+          <div className="border-t border-slate-200 dark:border-slate-700" />
+          
+          {/* Due Date, Time, Assigned To - Row */}
+          <div className="grid grid-cols-3 gap-3">
+            <DatePicker 
+              label="Due Date" 
+              value={formData.dueDate || ''} 
+              onChange={v => setFormData(d => ({ ...d, dueDate: v }))} 
+            />
+            <TimePicker 
+              label="Due Time" 
+              value={formData.dueTime || ''} 
+              onChange={v => setFormData(d => ({ ...d, dueTime: v }))} 
+            />
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                Assigned To
+              </label>
+              <SelectFilter
+                label="Select user"
+                value={formData.assignedUserId}
+                onChange={(value) => setFormData(d => ({ ...d, assignedUserId: value }))}
+                options={userOptions}
+                placeholder="Select user..."
+                showAllOption={false}
+                size="md"
+                className="w-full"
+              />
+            </div>
+          </div>
+
+          {/* Priority - Full width row */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+              Priority
+            </label>
+            <div className="flex items-center gap-2 flex-wrap">
+              {PRIORITIES.map(p => (
+                <button 
+                  key={p.value} 
+                  type="button" 
+                  onClick={() => setFormData(d => ({ 
+                    ...d, 
+                    priority: d.priority === p.value ? undefined : p.value 
+                  }))}
+                  className={clsx(
+                    'px-4 py-2 rounded-lg text-sm font-medium transition-all', 
+                    formData.priority === p.value 
+                      ? p.color + ' ring-2 ring-offset-1 ring-blue-500' 
+                      : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-600'
+                  )}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Divider */}
+          <div className="border-t border-slate-200 dark:border-slate-700" />
+          
+          {/* Company & Contact - Row */}
+          <div className="grid grid-cols-2 gap-4">
+            <CompanySearch 
+              value={linkedCompany} 
+              onChange={(v) => {
+                setLinkedCompany(v);
+              }}
+              onCompanySelected={(companyId) => {
+                setSelectedCompanyId(companyId);
+                // If clearing company, also clear contact and linked item
+                if (!companyId) {
+                  setFormData(d => ({ ...d, linkedContact: null, linkedItem: null }));
+                }
+              }}
+              onAddCompany={(name, callback) => {
+                openAddCompany({
+                  defaultName: name,
+                  onCreated: (company) => callback({ id: company.id, name: company.name }),
+                });
+              }}
+            />
+            <ContactSearch 
+              value={formData.linkedContact?.type === 'contact' ? formData.linkedContact : null} 
+              onChange={v => setFormData(d => ({ ...d, linkedContact: v }))}
+              companyId={selectedCompanyId}
+              companyName={linkedCompany?.name}
+              onContactSelected={(contact) => {
+                if (contact) {
+                  // Auto-select company when contact is selected
+                  const company = companies.find(c => c.id === contact.companyId);
+                  if (company) {
+                    setLinkedCompany({ type: 'company', id: company.id, name: company.name });
+                    setSelectedCompanyId(company.id);
+                  }
+                }
+              }}
+              onAddContact={(name, companyId, companyName, callback) => {
+                openAddContact({
+                  defaultCompanyId: companyId,
+                  defaultCompanyName: companyName,
+                  defaultName: name,
+                  onCreated: (contact) => callback({ id: contact.id, name: `${contact.firstName} ${contact.lastName}`.trim() }),
+                });
+              }}
+            />
+          </div>
+          
+          {/* Link to Item */}
+          <ItemSearch 
+            value={formData.linkedItem || null} 
+            onChange={v => setFormData(d => ({ ...d, linkedItem: v }))}
+            companyId={selectedCompanyId}
+            companyName={linkedCompany?.name}
+            contactId={formData.linkedContact?.type === 'contact' ? formData.linkedContact.id : null}
+            contactName={formData.linkedContact?.type === 'contact' ? formData.linkedContact.name : undefined}
+            onItemSelected={(item) => {
+              if (item) {
+                // Auto-fill company from lead/deal if not already set
+                if (item.companyId && item.companyName && !selectedCompanyId) {
+                  setLinkedCompany({ type: 'company', id: item.companyId, name: item.companyName });
+                  setSelectedCompanyId(item.companyId);
+                }
+                
+                // Auto-fill contact from lead/deal if not already set and only one contact
+                if (item.contactId && item.contactName && !formData.linkedContact) {
+                  setFormData(d => ({ 
+                    ...d, 
+                    linkedContact: { type: 'contact', id: item.contactId!, name: item.contactName! }
+                  }));
+                }
+              }
+            }}
+            onAddLead={(name, companyId, companyName, contactId, contactName, callback) => {
+              openAddLead({
+                defaultName: name,
+                defaultCompanyId: companyId,
+                defaultCompanyName: companyName,
+                defaultContactId: contactId,
+                defaultContactName: contactName,
+                onCreated: (lead) => callback({ id: lead.id, name: lead.name }),
+              });
+            }}
+            onAddDeal={(name, companyId, companyName, contactId, contactName, callback) => {
+              openAddDeal({
+                defaultName: name,
+                defaultCompanyId: companyId,
+                defaultCompanyName: companyName,
+                defaultContactId: contactId,
+                defaultContactName: contactName,
+                onCreated: (deal) => callback({ id: deal.id, name: deal.name }),
+              });
+            }}
+          />
+
+          {/* Divider */}
+          <div className="border-t border-slate-200 dark:border-slate-700" />
+          
+          {/* Notes */}
+          <Textarea
+            label="Notes"
+            value={formData.notes || ''}
+            onChange={e => setFormData(d => ({ ...d, notes: e.target.value }))}
+            rows={4}
+            placeholder="Add notes..."
+          />
+          
+          {/* Created info */}
+          {task && (
+            <div className="text-xs text-slate-400 pt-2 border-t border-slate-200 dark:border-slate-700">
+              Created: {new Date(task.createdAt).toLocaleString()}
+              {task.createdByName && ` by ${task.createdByName}`}
+            </div>
+          )}
         </div>
-      </div>
+      </AddItemPanel>
       
       {/* Unsaved Changes Modal */}
       <UnsavedChangesModal
@@ -1023,90 +977,59 @@ export function TaskDetailPanel({
         onDiscard={handleDiscard}
         onCancel={() => setShowDiscardModal(false)}
       />
-    </>,
-    document.body
+    </>
   );
 }
 
 // =============================================================================
-// Quick Preview Popover (for calendar view)
+// Task Quick View (uses generic QuickViewModal)
 // =============================================================================
 
-function TaskQuickPreview({ 
+function TaskQuickView({ 
   task, 
-  position, 
+  isOpen,
   onClose, 
   onEdit, 
-  onMarkDone 
+  onMarkDone,
+  onDelete,
 }: { 
-  task: Task; 
-  position: { x: number; y: number }; 
+  task: Task | null;
+  isOpen: boolean;
   onClose: () => void; 
   onEdit: () => void; 
-  onMarkDone: () => void; 
+  onMarkDone: () => void;
+  onDelete: () => void;
 }) {
   const { taskTypes } = useTaskTypesStore();
   const { contacts, companies } = useClientsStore();
+  const { users } = useUsersStore();
   const navigate = useNavigate();
-  const popoverRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => { 
-      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
-        onClose(); 
-      }
-    };
-    const handleEsc = (e: KeyboardEvent) => { 
-      if (e.key === 'Escape') onClose(); 
-    };
-    document.addEventListener('mousedown', handleClickOutside); 
-    document.addEventListener('keydown', handleEsc);
-    return () => { 
-      document.removeEventListener('mousedown', handleClickOutside); 
-      document.removeEventListener('keydown', handleEsc); 
-    };
-  }, [onClose]);
+  if (!task) return null;
 
   const taskType = taskTypes.find(t => t.value === task.type);
-  
-  const adjustedPosition = useMemo(() => {
-    let x = position.x, y = position.y;
-    if (x + 300 > window.innerWidth - 20) x = position.x - 300;
-    if (y + 280 > window.innerHeight - 20) y = position.y - 280;
-    return { x: Math.max(10, x), y: Math.max(10, y) };
-  }, [position]);
+  const assignedUser = users.find(u => u.id === task.assignedUserId);
+  const priority = PRIORITIES.find(p => p.value === task.priority);
 
-  // Get URLs for linked entities
-  const getContactUrl = (contactId: string) => {
-    const contact = contacts.find(c => c.id === contactId);
-    if (!contact) return null;
-    const company = companies.find(c => c.id === contact.companyId);
-    if (!company) return null;
-    const companySlug = company.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-    const contactSlug = `${contact.firstName}-${contact.lastName}`.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-    return `/customers/company/${companySlug}/${company.id}/contact/${contactSlug}/${contact.id}`;
-  };
+  // Get company from contact if linked
+  const linkedContact = task.linkedContact?.type === 'contact' 
+    ? contacts.find(c => c.id === task.linkedContact!.id) 
+    : null;
+  const linkedCompany = task.linkedContact?.type === 'company'
+    ? companies.find(c => c.id === task.linkedContact!.id)
+    : linkedContact 
+      ? companies.find(c => c.id === linkedContact.companyId)
+      : null;
 
-  const getCompanyUrl = (companyId: string) => {
-    const company = companies.find(c => c.id === companyId);
-    if (!company) return null;
-    const companySlug = company.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-    return `/customers/company/${companySlug}/${company.id}`;
-  };
-
-  const handleEntityClick = (e: React.MouseEvent, type: string, id: string) => {
-    e.stopPropagation();
+  const handleEntityClick = (type: string, id: string) => {
     let url: string | null = null;
-    if (type === 'contact') {
-      url = getContactUrl(id);
-    } else if (type === 'company') {
-      url = getCompanyUrl(id);
-    }
-    // For linked items (projects, deals, etc.), construct URL based on type
-    if (type === 'project') url = `/projects/${id}`;
-    if (type === 'deal') url = `/deals/${id}`;
-    if (type === 'estimate') url = `/estimates/${id}`;
-    if (type === 'invoice') url = `/invoices/${id}`;
+    if (type === 'contact') url = `/clients/contacts/${id}`;
+    else if (type === 'company') url = `/clients/companies/${id}`;
+    else if (type === 'project') url = `/projects/${id}`;
+    else if (type === 'deal') url = `/sales/deals/${id}`;
+    else if (type === 'lead') url = `/sales/leads/${id}`;
+    else if (type === 'estimate') url = `/estimates/${id}`;
+    else if (type === 'invoice') url = `/accounting/invoices/${id}`;
     
     if (url) {
       onClose();
@@ -1114,132 +1037,203 @@ function TaskQuickPreview({
     }
   };
 
+  // Build badges
+  const badges: { label: string; className?: string }[] = [
+    {
+      label: task.status === 'completed' ? 'Completed' : task.status === 'in_progress' ? 'In Progress' : 'Pending',
+      className: task.status === 'completed' 
+        ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+        : task.status === 'in_progress'
+          ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+          : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
+    }
+  ];
+  if (priority) {
+    badges.push({ label: `${priority.label} Priority`, className: priority.color });
+  }
+
+  // Build fields
+  const fields: QuickViewField[] = [];
+  
+  if (assignedUser) {
+    fields.push({
+      label: 'Assigned To',
+      value: assignedUser.name,
+      icon: <User className="w-4 h-4" />,
+    });
+  }
+  
+  if (taskType) {
+    fields.push({
+      label: 'Type',
+      value: taskType.label,
+      icon: <TaskTypeIcon icon={taskType.icon} className="w-4 h-4" />,
+    });
+  }
+
+  if (linkedCompany) {
+    fields.push({
+      label: 'Company',
+      value: linkedCompany.name,
+      icon: <Building2 className="w-4 h-4" />,
+      onClick: () => handleEntityClick('company', linkedCompany.id),
+    });
+  }
+
+  if (linkedContact) {
+    fields.push({
+      label: 'Contact',
+      value: `${linkedContact.firstName} ${linkedContact.lastName}`,
+      icon: <User className="w-4 h-4" />,
+      onClick: () => handleEntityClick('contact', linkedContact.id),
+    });
+  }
+
+  if (task.linkedItem) {
+    const Icon = task.linkedItem.type === 'lead' ? Target
+      : task.linkedItem.type === 'deal' ? TrendingUp
+      : ENTITY_ICONS[task.linkedItem.type] || FileText;
+    fields.push({
+      label: `Linked ${task.linkedItem.type}`,
+      value: task.linkedItem.name,
+      icon: <Icon className="w-4 h-4" />,
+      onClick: () => handleEntityClick(task.linkedItem!.type, task.linkedItem!.id),
+      fullWidth: true,
+    });
+  }
+
+  // Build subtitle
+  const subtitle = (
+    <>
+      {task.dueDate && (
+        <span className="flex items-center gap-1">
+          <CalendarIcon className="w-3.5 h-3.5" />
+          {formatDate(task.dueDate, 'long')}
+        </span>
+      )}
+      {task.dueTime && (
+        <span className="flex items-center gap-1">
+          <Clock className="w-3.5 h-3.5" />
+          {task.dueTime}
+        </span>
+      )}
+    </>
+  );
+
+  return (
+    <QuickViewModal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={task.title}
+      subtitle={subtitle}
+      icon={taskType ? (
+        <TaskTypeIcon icon={taskType.icon} className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+      ) : (
+        <Clock className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+      )}
+      badges={badges}
+      fields={fields}
+      notes={task.notes}
+      footerMeta={
+        <>
+          Created {new Date(task.createdAt).toLocaleString()}
+          {task.createdByName && ` by ${task.createdByName}`}
+        </>
+      }
+      leftActions={[
+        {
+          label: 'Delete',
+          icon: <Trash2 className="w-4 h-4" />,
+          onClick: onDelete,
+          variant: 'danger',
+        },
+        ...(task.status !== 'completed' ? [{
+          label: 'Mark as done',
+          icon: <Check className="w-4 h-4" />,
+          onClick: onMarkDone,
+        }] : []),
+      ]}
+      primaryAction={{
+        label: 'Edit Task',
+        onClick: onEdit,
+      }}
+    />
+  );
+}
+
+// =============================================================================
+// Follow-Up Task Modal (appears after marking task done if linked to lead/deal)
+// =============================================================================
+
+function FollowUpTaskModal({
+  isOpen,
+  onClose,
+  onCreateFollowUp,
+  linkedItem,
+  linkedContact,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onCreateFollowUp: () => void;
+  linkedItem?: LinkedEntity | null;
+  linkedContact?: LinkedEntity | null;
+}) {
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => { 
+      if (e.key === 'Escape') onClose(); 
+    };
+    if (isOpen) {
+      document.addEventListener('keydown', handleEsc);
+    }
+    return () => document.removeEventListener('keydown', handleEsc);
+  }, [isOpen, onClose]);
+
+  if (!isOpen) return null;
+
+  const entityName = linkedItem?.name || linkedContact?.name || 'this item';
+  const entityType = linkedItem?.type || linkedContact?.type || 'item';
+
   return createPortal(
-    <div 
-      ref={popoverRef} 
-      style={{ left: adjustedPosition.x, top: adjustedPosition.y }} 
-      className="fixed z-[60] w-80 bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-slate-200 dark:border-slate-700 overflow-hidden"
-    >
-      {/* Header */}
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-200 dark:border-slate-700">
-        {taskType && (
-          <div className="w-7 h-7 rounded bg-slate-100 dark:bg-slate-700 flex items-center justify-center flex-shrink-0">
-            <TaskTypeIcon icon={taskType.icon} className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/30 dark:bg-black/50" onClick={onClose} />
+      
+      {/* Modal */}
+      <div className="relative w-full max-w-sm bg-white dark:bg-slate-800 rounded-xl shadow-2xl overflow-hidden animate-fade-in">
+        {/* Header */}
+        <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-700">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+              <Check className="w-5 h-5 text-green-600 dark:text-green-400" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-slate-900 dark:text-white">Task Completed!</h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400">Great work!</p>
+            </div>
           </div>
-        )}
-        <div className="flex-1 min-w-0">
-          <h4 className="font-medium text-slate-900 dark:text-white truncate">{task.title}</h4>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            {task.dueDate && formatDate(task.dueDate, 'long')}
-            {task.dueTime && ` at ${task.dueTime}`}
+        </div>
+        
+        {/* Content */}
+        <div className="px-5 py-4">
+          <p className="text-sm text-slate-600 dark:text-slate-300">
+            Would you like to schedule a follow-up task for{' '}
+            <span className="font-medium text-slate-900 dark:text-white">{entityName}</span>?
+          </p>
+          <p className="text-xs text-slate-400 mt-2">
+            Keeping track of your {entityType}s with regular follow-ups helps close more deals.
           </p>
         </div>
-      </div>
-      
-      {/* Content */}
-      <div className="px-4 py-3 space-y-2.5 text-sm">
-        {/* Assigned To */}
-        {task.assignedUserName && (
-          <div className="flex items-center gap-3">
-            <span className="text-slate-400 w-20 flex-shrink-0">Assigned to</span>
-            <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300 min-w-0">
-              <User className="w-4 h-4 text-slate-400 flex-shrink-0" />
-              <span className="truncate">{task.assignedUserName}</span>
-            </div>
-          </div>
-        )}
         
-        {/* Company - derived from contact if available */}
-        {task.linkedContact?.type === 'company' && (
-          <div className="flex items-center gap-3">
-            <span className="text-slate-400 w-20 flex-shrink-0">Company</span>
-            <button
-              onClick={(e) => handleEntityClick(e, 'company', task.linkedContact!.id)}
-              className="flex items-center gap-2 text-slate-700 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors min-w-0 group"
-            >
-              <Building2 className="w-4 h-4 text-slate-400 group-hover:text-blue-500 flex-shrink-0" />
-              <span className="truncate underline-offset-2 group-hover:underline">{task.linkedContact.name}</span>
-            </button>
-          </div>
-        )}
-        
-        {/* Contact */}
-        {task.linkedContact?.type === 'contact' && (
-          <>
-            {/* Show Company first if contact has one */}
-            {(() => {
-              const contact = contacts.find(c => c.id === task.linkedContact!.id);
-              const company = contact ? companies.find(c => c.id === contact.companyId) : null;
-              if (company) {
-                return (
-                  <div className="flex items-center gap-3">
-                    <span className="text-slate-400 w-20 flex-shrink-0">Company</span>
-                    <button
-                      onClick={(e) => handleEntityClick(e, 'company', company.id)}
-                      className="flex items-center gap-2 text-slate-700 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors min-w-0 group"
-                    >
-                      <Building2 className="w-4 h-4 text-slate-400 group-hover:text-blue-500 flex-shrink-0" />
-                      <span className="truncate underline-offset-2 group-hover:underline">{company.name}</span>
-                    </button>
-                  </div>
-                );
-              }
-              return null;
-            })()}
-            <div className="flex items-center gap-3">
-              <span className="text-slate-400 w-20 flex-shrink-0">Contact</span>
-              <button
-                onClick={(e) => handleEntityClick(e, 'contact', task.linkedContact!.id)}
-                className="flex items-center gap-2 text-slate-700 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors min-w-0 group"
-              >
-                <User className="w-4 h-4 text-slate-400 group-hover:text-blue-500 flex-shrink-0" />
-                <span className="truncate underline-offset-2 group-hover:underline">{task.linkedContact.name}</span>
-              </button>
-            </div>
-          </>
-        )}
-        
-        {/* Linked Item (Project, Deal, etc.) */}
-        {task.linkedItem && (
-          <div className="flex items-center gap-3">
-            <span className="text-slate-400 w-20 flex-shrink-0 capitalize">{task.linkedItem.type}</span>
-            <button
-              onClick={(e) => handleEntityClick(e, task.linkedItem!.type, task.linkedItem!.id)}
-              className="flex items-center gap-2 text-slate-700 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors min-w-0 group"
-            >
-              {(() => { 
-                const Icon = ENTITY_ICONS[task.linkedItem.type] || FileText; 
-                return <Icon className="w-4 h-4 text-slate-400 group-hover:text-blue-500 flex-shrink-0" />; 
-              })()}
-              <span className="truncate underline-offset-2 group-hover:underline">{task.linkedItem.name}</span>
-            </button>
-          </div>
-        )}
-        
-        {/* Priority */}
-        {task.priority && (
-          <div className="flex items-center gap-3">
-            <span className="text-slate-400 w-20 flex-shrink-0">Priority</span>
-            <span className={clsx(
-              'px-2 py-0.5 text-xs font-medium rounded', 
-              PRIORITIES.find(p => p.value === task.priority)?.color
-            )}>
-              {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
-            </span>
-          </div>
-        )}
-      </div>
-      
-      {/* Footer */}
-      <div className="flex items-center justify-between px-4 py-3 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
-        <button 
-          onClick={onMarkDone} 
-          className="flex items-center gap-1.5 text-sm text-slate-600 dark:text-slate-400 hover:text-green-600 dark:hover:text-green-400 transition-colors"
-        >
-          <Check className="w-4 h-4" />
-          <span>Mark as done</span>
-        </button>
-        <Button size="sm" onClick={onEdit}>Edit</Button>
+        {/* Footer */}
+        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            Not now
+          </Button>
+          <Button size="sm" onClick={onCreateFollowUp}>
+            <Plus className="w-4 h-4 mr-1" />
+            Create Follow-up
+          </Button>
+        </div>
       </div>
     </div>,
     document.body
@@ -1434,29 +1428,41 @@ export function TasksPage() {
   
   const { users } = useUsersStore();
   const { contacts, companies } = useClientsStore();
-  const { tasks, createTask, updateTask, deleteTask, completeTask, reopenTask } = useTaskStore();
+  const { tasks, updateTask, deleteTask, completeTask, reopenTask } = useTaskStore();
   const { getActiveTaskTypes, taskTypes } = useTaskTypesStore();
   const toast = useToast();
+  const { openAddTask } = useFormStack();
   
-  // View state
-  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
+  // View state - persist viewMode to localStorage
+  const [viewMode, setViewMode] = useState<'list' | 'calendar'>(() => {
+    const saved = localStorage.getItem('tasks-view-mode');
+    return (saved === 'list' || saved === 'calendar') ? saved : 'list';
+  });
   const [search, setSearch] = useState('');
   const [selectedUser, setSelectedUser] = useState<string>('');
   const [selectedType, setSelectedType] = useState<string>('');
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('all');
   const [currentDate, setCurrentDate] = useState(new Date());
   
+  // Persist viewMode changes to localStorage
+  useEffect(() => {
+    localStorage.setItem('tasks-view-mode', viewMode);
+  }, [viewMode]);
+  
   // Sort state
   const [sortField, setSortField] = useState<string>('dueDate');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   
-  // Panel state
+  // Panel state (for editing existing tasks only)
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   
-  // Preview state (for calendar)
-  const [previewTask, setPreviewTask] = useState<Task | null>(null);
-  const [previewPosition, setPreviewPosition] = useState({ x: 0, y: 0 });
+  // Quick View Modal state (for list and calendar view)
+  const [quickViewTask, setQuickViewTask] = useState<Task | null>(null);
+  
+  // Follow-up Modal state (appears after marking done)
+  const [showFollowUpModal, setShowFollowUpModal] = useState(false);
+  const [completedTask, setCompletedTask] = useState<Task | null>(null);
 
   // Sort handler (same pattern as CompaniesPage)
   const handleSort = useCallback((field: string) => {
@@ -1477,6 +1483,7 @@ export function TasksPage() {
       estimate: `/estimates/${id}`,
       invoice: `/accounting/invoices/${id}`,
       deal: `/sales/deals/${id}`,
+      lead: `/sales/leads/${id}`,
     };
     navigate(routes[type] || '/');
   }, [navigate]);
@@ -1782,17 +1789,20 @@ export function TasksPage() {
         );
       }
     },
-    // 3. Deal/Project (linked item - clickable)
+    // 3. Lead/Deal/Project (linked item - clickable)
     { 
       key: 'linkedItem', 
-      header: 'Deal / Project', 
+      header: 'Lead / Deal / Project', 
       sortable: true,
       width: 180,
       minWidth: 120,
       render: (task) => {
         const entity = task.linkedItem;
         if (!entity) return <span className="text-slate-400">—</span>;
-        const Icon = ENTITY_ICONS[entity.type] || FileText;
+        // Use appropriate icon for leads/deals
+        const Icon = entity.type === 'lead' ? Target 
+          : entity.type === 'deal' ? TrendingUp 
+          : ENTITY_ICONS[entity.type] || FileText;
         return (
           <button
             onClick={(e) => {
@@ -2038,42 +2048,78 @@ export function TasksPage() {
         await updateTask(selectedTask.id, taskData);
         toast.success('Task Updated', 'Your changes have been saved');
       }
-    } else {
-      await createTask(taskData);
-      toast.success('Task Created', 'New task has been added');
+      setIsPanelOpen(false); 
+      setSelectedTask(null);
     }
-    setIsPanelOpen(false); 
-    setSelectedTask(null);
   };
 
   const handleDelete = async (taskId: string) => { 
     await deleteTask(taskId); 
-    toast.success('Task Deleted', 'The task has been removed'); 
+    toast.success('Task Deleted', 'The task has been removed');
+    setQuickViewTask(null);
   };
   
+  // Open quick view modal (for list clicks)
+  const openQuickView = (task: Task) => {
+    setQuickViewTask(task);
+  };
+  
+  // Open edit panel (from quick view)
   const openEditPanel = (task: Task) => { 
     setSelectedTask(task); 
     setIsPanelOpen(true); 
-    setPreviewTask(null); 
+    setQuickViewTask(null);
   };
   
   const openNewPanel = () => { 
-    setSelectedTask(null); 
-    setIsPanelOpen(true); 
+    openAddTask({});
+  };
+  
+  // Open new panel with pre-filled linked item (for follow-up)
+  const openFollowUpPanel = () => {
+    if (completedTask) {
+      // Pass the linked item/contact from completed task to new task
+      openAddTask({
+        defaultContactId: completedTask.linkedContact?.id,
+        defaultContactName: completedTask.linkedContact?.name,
+        defaultLinkedItemType: completedTask.linkedItem?.type === 'lead' || completedTask.linkedItem?.type === 'deal' 
+          ? completedTask.linkedItem.type 
+          : undefined,
+        defaultLinkedItemId: completedTask.linkedItem?.id,
+        defaultLinkedItemName: completedTask.linkedItem?.name,
+      });
+    }
+    setShowFollowUpModal(false);
   };
   
   const handleCalendarTaskClick = (task: Task, event: React.MouseEvent) => { 
-    event.stopPropagation(); 
-    setPreviewTask(task); 
-    setPreviewPosition({ x: event.clientX, y: event.clientY }); 
+    event.stopPropagation();
+    // Use the same quick view modal as list view
+    setQuickViewTask(task);
   };
   
-  const handleMarkDone = async () => { 
-    if (previewTask) { 
-      await updateTask(previewTask.id, { status: 'completed' } as Partial<TaskInput>); 
-      toast.success('Task Completed', 'Task has been marked as done'); 
-      setPreviewTask(null); 
-    } 
+  // Mark task as done (from quick view modal - used by both list and calendar)
+  const handleQuickViewMarkDone = async () => {
+    if (quickViewTask) {
+      await updateTask(quickViewTask.id, { status: 'completed' } as Partial<TaskInput>);
+      toast.success('Task Completed', 'Task has been marked as done');
+      
+      // Check if task is linked to lead/deal and show follow-up modal
+      if (quickViewTask.linkedItem?.type === 'lead' || quickViewTask.linkedItem?.type === 'deal') {
+        setCompletedTask(quickViewTask);
+        setShowFollowUpModal(true);
+      }
+      setQuickViewTask(null);
+    }
+  };
+  
+  // Delete task from quick view
+  const handleQuickViewDelete = async () => {
+    if (quickViewTask) {
+      await deleteTask(quickViewTask.id);
+      toast.success('Task Deleted', 'The task has been removed');
+      setQuickViewTask(null);
+    }
   };
 
   return (
@@ -2155,7 +2201,7 @@ export function TasksPage() {
             columns={taskColumns} 
             data={filteredTasks} 
             rowKey={(task) => task.id} 
-            onRowClick={(task) => openEditPanel(task)}
+            onRowClick={(task) => openQuickView(task)}
             sortField={sortField}
             sortDirection={sortDirection}
             onSort={handleSort}
@@ -2186,25 +2232,33 @@ export function TasksPage() {
       </div>
       </div>
 
-      {/* Task Detail Panel */}
+      {/* Task Detail Panel (for editing existing tasks) */}
       <TaskDetailPanel 
         task={selectedTask} 
-        isOpen={isPanelOpen} 
+        isOpen={isPanelOpen && selectedTask !== null} 
         onClose={() => { setIsPanelOpen(false); setSelectedTask(null); }} 
         onSave={handleSave} 
-        onDelete={handleDelete} 
+        onDelete={handleDelete}
       />
       
-      {/* Quick Preview (Calendar) */}
-      {previewTask && (
-        <TaskQuickPreview 
-          task={previewTask} 
-          position={previewPosition} 
-          onClose={() => setPreviewTask(null)} 
-          onEdit={() => openEditPanel(previewTask)} 
-          onMarkDone={handleMarkDone} 
-        />
-      )}
+      {/* Quick View Modal (List & Calendar View) */}
+      <TaskQuickView
+        task={quickViewTask}
+        isOpen={!!quickViewTask}
+        onClose={() => setQuickViewTask(null)}
+        onEdit={() => quickViewTask && openEditPanel(quickViewTask)}
+        onMarkDone={handleQuickViewMarkDone}
+        onDelete={handleQuickViewDelete}
+      />
+      
+      {/* Follow-Up Task Modal */}
+      <FollowUpTaskModal
+        isOpen={showFollowUpModal}
+        onClose={() => { setShowFollowUpModal(false); setCompletedTask(null); }}
+        onCreateFollowUp={openFollowUpPanel}
+        linkedItem={completedTask?.linkedItem}
+        linkedContact={completedTask?.linkedContact}
+      />
       
       {/* Animation Styles */}
       <style>{`
@@ -2214,6 +2268,13 @@ export function TasksPage() {
         }
         .animate-slide-in-right { 
           animation: slide-in-right 0.2s ease-out; 
+        }
+        @keyframes fade-in {
+          from { opacity: 0; transform: scale(0.95); }
+          to { opacity: 1; transform: scale(1); }
+        }
+        .animate-fade-in {
+          animation: fade-in 0.15s ease-out;
         }
       `}</style>
     </Page>

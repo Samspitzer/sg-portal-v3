@@ -1,8 +1,8 @@
 // ============================================================================
-// LeadsPage - Lead Management with Kanban and List Views
-// Location: src/components/panels/sales/LeadsPage.tsx
+// DealsPage - Deal Management with Kanban and List Views
+// Location: src/components/panels/sales/DealsPage.tsx
 // 
-// UPDATED: Now uses AddLeadForm from add-forms via useFormStack
+// UPDATED: Now uses AddDealForm from add-forms via useFormStack
 // ============================================================================
 
 import { useState, useMemo, useCallback, useEffect } from 'react';
@@ -10,13 +10,15 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { clsx } from 'clsx';
 import {
   Plus,
-  Target,
+  TrendingUp,
   LayoutGrid,
   List,
   Building2,
   User,
   Tag,
-  Megaphone,
+  CheckCircle,
+  XCircle,
+  Clock,
 } from 'lucide-react';
 import { Page } from '@/components/layout';
 import {
@@ -37,7 +39,7 @@ import {
   useUsersStore,
   useClientsStore,
   useToast,
-  type Lead,
+  type Deal,
 } from '@/contexts';
 import { useDocumentTitle } from '@/hooks';
 import { formatDate } from '@/utils/dateUtils';
@@ -49,12 +51,13 @@ import { formatDate } from '@/utils/dateUtils';
 type ViewMode = 'list' | 'kanban';
 type SortField = 'name' | 'company' | 'value' | 'owner' | 'createdAt';
 type SortDirection = 'asc' | 'desc';
+type StatusFilter = '' | 'active' | 'won' | 'lost';
 
 // ============================================================================
-// Lead Card for Kanban
+// Deal Card for Kanban
 // ============================================================================
 
-interface LeadCardData {
+interface DealCardData {
   id: string;
   title: string;
   subtitle?: string;
@@ -63,27 +66,37 @@ interface LeadCardData {
   owner?: { name: string };
   companyName?: string;
   contactName?: string;
-  source?: string;
+  status: 'active' | 'won' | 'lost';
   createdAt: string;
 }
 
-function LeadCard({
+function DealCard({
   item,
   onClick,
   onDragStart,
   isDragging,
-}: KanbanCardProps<LeadCardData>) {
+}: KanbanCardProps<DealCardData>) {
+  const statusColors = {
+    active: 'text-blue-600 dark:text-blue-400',
+    won: 'text-green-600 dark:text-green-400',
+    lost: 'text-red-600 dark:text-red-400',
+  };
+
+  const StatusIcon = item.status === 'won' ? CheckCircle : item.status === 'lost' ? XCircle : Clock;
+
   return (
     <div
-      draggable
-      onDragStart={(e) => onDragStart(e, item)}
+      draggable={item.status === 'active'}
+      onDragStart={(e) => item.status === 'active' && onDragStart(e, item)}
       onClick={() => onClick(item)}
       className={clsx(
         'bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700',
         'p-3 cursor-pointer transition-all duration-150',
         'hover:shadow-md hover:border-slate-300 dark:hover:border-slate-600',
         'group',
-        isDragging && 'opacity-50 shadow-lg scale-105'
+        isDragging && 'opacity-50 shadow-lg scale-105',
+        item.status === 'won' && 'border-l-4 border-l-green-500',
+        item.status === 'lost' && 'border-l-4 border-l-red-500 opacity-60'
       )}
     >
       {/* Title Row */}
@@ -91,11 +104,7 @@ function LeadCard({
         <h4 className="font-medium text-slate-900 dark:text-white text-sm line-clamp-2">
           {item.title}
         </h4>
-        {item.label && (
-          <span className={clsx('px-1.5 py-0.5 rounded text-xs font-medium flex-shrink-0', item.label.color)}>
-            {item.label.text}
-          </span>
-        )}
+        <StatusIcon className={clsx('w-4 h-4 flex-shrink-0', statusColors[item.status])} />
       </div>
 
       {/* Company/Contact */}
@@ -119,7 +128,12 @@ function LeadCard({
       {/* Value and Owner Row */}
       <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-700">
         {item.value !== undefined && item.value > 0 ? (
-          <span className="text-sm font-semibold text-green-600 dark:text-green-400">
+          <span className={clsx(
+            'text-sm font-semibold',
+            item.status === 'won' ? 'text-green-600 dark:text-green-400' :
+            item.status === 'lost' ? 'text-slate-400 line-through' :
+            'text-green-600 dark:text-green-400'
+          )}>
             ${item.value.toLocaleString()}
           </span>
         ) : (
@@ -139,13 +153,6 @@ function LeadCard({
           </div>
         )}
       </div>
-
-      {/* Source */}
-      {item.source && (
-        <div className="mt-2 text-xs text-slate-400 dark:text-slate-500">
-          Source: {item.source}
-        </div>
-      )}
     </div>
   );
 }
@@ -154,25 +161,24 @@ function LeadCard({
 // Main Component
 // ============================================================================
 
-export function LeadsPage() {
-  useDocumentTitle('Leads');
+export function DealsPage() {
+  useDocumentTitle('Deals');
   const navigate = useNavigate();
   const toast = useToast();
 
   // Stores
-  const { leads, updateLead } = useSalesStore();
-  const { leadStages, leadLabels, leadSources } = useFieldsStore();
+  const { deals, updateDeal } = useSalesStore();
+  const { dealStages } = useFieldsStore();
   const { users } = useUsersStore();
   const { companies, contacts } = useClientsStore();
-  const { openAddLead } = useFormStack();
+  const { openAddDeal } = useFormStack();
 
   // View state
   const [viewMode, setViewMode] = useState<ViewMode>('kanban');
   const [search, setSearch] = useState('');
   const [stageFilter, setStageFilter] = useState('');
-  const [labelFilter, setLabelFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('');
   const [ownerFilter, setOwnerFilter] = useState('');
-  const [sourceFilter, setSourceFilter] = useState('');
 
   // Sort state (for list view)
   const [sortField, setSortField] = useState<SortField>('createdAt');
@@ -183,12 +189,12 @@ export function LeadsPage() {
   
   // Handle URL params to open panel with pre-filled contact/company
   useEffect(() => {
-    const newLead = searchParams.get('newLead');
+    const newDeal = searchParams.get('newDeal');
     const contactId = searchParams.get('contactId');
     const companyId = searchParams.get('companyId');
     const name = searchParams.get('name');
     
-    if (newLead === 'true') {
+    if (newDeal === 'true') {
       // Get company/contact info
       let defaultCompanyId: string | undefined;
       let defaultCompanyName: string | undefined;
@@ -220,7 +226,7 @@ export function LeadsPage() {
       }
       
       // Open the form
-      openAddLead({
+      openAddDeal({
         defaultName: name || undefined,
         defaultCompanyId,
         defaultCompanyName,
@@ -231,210 +237,146 @@ export function LeadsPage() {
       // Clear URL params
       setSearchParams({}, { replace: true });
     }
-  }, [searchParams, companies, contacts, openAddLead, setSearchParams]);
+  }, [searchParams, companies, contacts, openAddDeal, setSearchParams]);
 
   // Check if any filters are active
-  const hasActiveFilters = search || stageFilter || labelFilter || ownerFilter || sourceFilter;
+  const hasActiveFilters = search || stageFilter || statusFilter || ownerFilter;
 
   // Clear all filters
   const clearFilters = useCallback(() => {
     setSearch('');
     setStageFilter('');
-    setLabelFilter('');
+    setStatusFilter('');
     setOwnerFilter('');
-    setSourceFilter('');
   }, []);
 
-  // ============================================================================
-  // Filtering
-  // ============================================================================
 
-  const filteredLeads = useMemo(() => {
-    let result = leads.filter(lead => {
-      // Search filter
-      const searchLower = search.toLowerCase();
-      const matchesSearch = !search || 
-        lead.name.toLowerCase().includes(searchLower) ||
-        lead.companyName?.toLowerCase().includes(searchLower) ||
-        lead.contactName?.toLowerCase().includes(searchLower);
-
-      // Stage filter
-      const matchesStage = !stageFilter || lead.stage === stageFilter;
-
-      // Label filter
-      const matchesLabel = !labelFilter || lead.label === labelFilter;
-
-      // Owner filter
-      const matchesOwner = !ownerFilter || lead.ownerId === ownerFilter;
-
-      // Source filter
-      const matchesSource = !sourceFilter || lead.source === sourceFilter;
-
-      return matchesSearch && matchesStage && matchesLabel && matchesOwner && matchesSource;
-    });
-
-    // Sort (for list view)
-    if (viewMode === 'list') {
-      result = [...result].sort((a, b) => {
-        let aVal: string | number = '';
-        let bVal: string | number = '';
-
-        switch (sortField) {
-          case 'name':
-            aVal = a.name.toLowerCase();
-            bVal = b.name.toLowerCase();
-            break;
-          case 'company':
-            aVal = (a.companyName || '').toLowerCase();
-            bVal = (b.companyName || '').toLowerCase();
-            break;
-          case 'value':
-            aVal = a.value || 0;
-            bVal = b.value || 0;
-            break;
-          case 'owner':
-            aVal = a.ownerName.toLowerCase();
-            bVal = b.ownerName.toLowerCase();
-            break;
-          case 'createdAt':
-            aVal = a.createdAt;
-            bVal = b.createdAt;
-            break;
-        }
-
-        if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
-        if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
-        return 0;
-      });
-    }
-
-    return result;
-  }, [leads, search, stageFilter, labelFilter, ownerFilter, sourceFilter, viewMode, sortField, sortDirection]);
 
   // ============================================================================
   // Filter Options with Counts
   // ============================================================================
 
-  const getLeadsMatchingOtherFilters = useCallback((excludeFilter: 'stage' | 'label' | 'owner' | 'source') => {
-    return leads.filter(lead => {
+  const getDealsMatchingOtherFilters = useCallback((excludeFilter: 'stage' | 'status' | 'owner') => {
+    return deals.filter(deal => !deal.deletedAt).filter(deal => {
       const searchLower = search.toLowerCase();
       const matchesSearch = !search || 
-        lead.name.toLowerCase().includes(searchLower) ||
-        lead.companyName?.toLowerCase().includes(searchLower) ||
-        lead.contactName?.toLowerCase().includes(searchLower);
+        deal.name.toLowerCase().includes(searchLower) ||
+        deal.companyName?.toLowerCase().includes(searchLower) ||
+        deal.contactName?.toLowerCase().includes(searchLower);
 
-      const matchesStage = excludeFilter === 'stage' || !stageFilter || lead.stage === stageFilter;
-      const matchesLabel = excludeFilter === 'label' || !labelFilter || lead.label === labelFilter;
-      const matchesOwner = excludeFilter === 'owner' || !ownerFilter || lead.ownerId === ownerFilter;
-      const matchesSource = excludeFilter === 'source' || !sourceFilter || lead.source === sourceFilter;
+      const matchesStage = excludeFilter === 'stage' || !stageFilter || deal.stage === stageFilter;
+      const matchesStatus = excludeFilter === 'status' || !statusFilter || deal.status === statusFilter;
+      const matchesOwner = excludeFilter === 'owner' || !ownerFilter || deal.ownerId === ownerFilter;
 
-      return matchesSearch && matchesStage && matchesLabel && matchesOwner && matchesSource;
+      return matchesSearch && matchesStage && matchesStatus && matchesOwner;
     });
-  }, [leads, search, stageFilter, labelFilter, ownerFilter, sourceFilter]);
+  }, [deals, search, stageFilter, statusFilter, ownerFilter]);
 
-  // Stage filter options with counts
   const stageOptions = useMemo(() => {
-    const matchingLeads = getLeadsMatchingOtherFilters('stage');
-    
-    return leadStages
+    const matchingDeals = getDealsMatchingOtherFilters('stage');
+    return dealStages
       .map(stage => ({
         value: stage.name,
         label: stage.name,
-        count: matchingLeads.filter(l => l.stage === stage.name).length,
+        count: matchingDeals.filter(d => d.stage === stage.name).length,
       }))
       .filter(option => option.count > 0);
-  }, [leadStages, getLeadsMatchingOtherFilters]);
+  }, [dealStages, getDealsMatchingOtherFilters]);
 
-  // Label filter options with counts
-  const labelOptions = useMemo(() => {
-    const matchingLeads = getLeadsMatchingOtherFilters('label');
-    
-    return leadLabels
-      .map(label => ({
-        value: label.name,
-        label: label.name,
-        count: matchingLeads.filter(l => l.label === label.name).length,
+  const statusOptions = useMemo(() => {
+    const matchingDeals = getDealsMatchingOtherFilters('status');
+    const statuses = [
+      { value: 'active', label: 'Active' },
+      { value: 'won', label: 'Won' },
+      { value: 'lost', label: 'Lost' },
+    ];
+    return statuses
+      .map(status => ({
+        ...status,
+        count: matchingDeals.filter(d => d.status === status.value).length,
       }))
       .filter(option => option.count > 0);
-  }, [leadLabels, getLeadsMatchingOtherFilters]);
+  }, [getDealsMatchingOtherFilters]);
 
-  // Owner filter options with counts
   const ownerOptions = useMemo(() => {
-    const matchingLeads = getLeadsMatchingOtherFilters('owner');
+    const matchingDeals = getDealsMatchingOtherFilters('owner');
     const activeUsers = users.filter(u => u.isActive);
-    
     return activeUsers
       .map(user => ({
         value: user.id,
         label: user.name,
-        count: matchingLeads.filter(l => l.ownerId === user.id).length,
+        count: matchingDeals.filter(d => d.ownerId === user.id).length,
       }))
       .filter(option => option.count > 0)
       .sort((a, b) => a.label.localeCompare(b.label));
-  }, [users, getLeadsMatchingOtherFilters]);
+  }, [users, getDealsMatchingOtherFilters]);
 
-  // Source filter options with counts
-  const sourceOptions = useMemo(() => {
-    const matchingLeads = getLeadsMatchingOtherFilters('source');
-    
-    return leadSources
-      .map(source => ({
-        value: source.name,
-        label: source.name,
-        count: matchingLeads.filter(l => l.source === source.name).length,
-      }))
-      .filter(option => option.count > 0);
-  }, [leadSources, getLeadsMatchingOtherFilters]);
+  // ============================================================================
+  // Filtered Deals
+  // ============================================================================
+
+  const filteredDeals = useMemo(() => {
+    return deals.filter(deal => !deal.deletedAt).filter(deal => {
+      const searchLower = search.toLowerCase();
+      const matchesSearch = !search || 
+        deal.name.toLowerCase().includes(searchLower) ||
+        deal.companyName?.toLowerCase().includes(searchLower) ||
+        deal.contactName?.toLowerCase().includes(searchLower);
+
+      const matchesStage = !stageFilter || deal.stage === stageFilter;
+      const matchesStatus = !statusFilter || deal.status === statusFilter;
+      const matchesOwner = !ownerFilter || deal.ownerId === ownerFilter;
+
+      return matchesSearch && matchesStage && matchesStatus && matchesOwner;
+    });
+  }, [deals, search, stageFilter, statusFilter, ownerFilter]);
 
   // ============================================================================
   // Kanban Data
   // ============================================================================
 
-  const getLabelColor = useCallback((labelName?: string) => {
-    if (!labelName) return null;
-    const label = leadLabels.find(l => l.name === labelName);
-    if (!label) return null;
-    
-    const colorMap: Record<string, string> = {
-      red: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
-      orange: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
-      yellow: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
-      green: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
-      blue: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-      purple: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
-      gray: 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300',
-    };
-    
-    return colorMap[label.color] || colorMap.gray;
-  }, [leadLabels]);
-
-  const kanbanColumns: KanbanColumn<LeadCardData>[] = useMemo(() => {
-    return leadStages.map(stage => {
-      const stageLeads = filteredLeads
-        .filter(lead => lead.stage === stage.name)
-        .map(lead => ({
-          id: lead.id,
-          title: lead.name,
-          companyName: lead.companyName,
-          contactName: lead.contactName,
-          value: lead.value,
-          label: lead.label ? {
-            text: lead.label,
-            color: getLabelColor(lead.label) || '',
-          } : undefined,
-          owner: lead.ownerName ? { name: lead.ownerName } : undefined,
-          source: lead.source,
-          createdAt: lead.createdAt,
+  const kanbanColumns: KanbanColumn<DealCardData>[] = useMemo(() => {
+    return dealStages.map(stage => {
+      const stageDeals = filteredDeals
+        .filter(deal => deal.stage === stage.name)
+        .map(deal => ({
+          id: deal.id,
+          title: deal.name,
+          companyName: deal.companyName,
+          contactName: deal.contactName,
+          value: deal.value,
+          status: deal.status,
+          owner: deal.ownerName ? { name: deal.ownerName } : undefined,
+          createdAt: deal.createdAt,
         }));
 
       return {
         id: stage.id,
         title: stage.name,
         color: stage.color,
-        items: stageLeads,
+        items: stageDeals,
       };
     });
-  }, [leadStages, filteredLeads, getLabelColor]);
+  }, [dealStages, filteredDeals]);
+
+  // ============================================================================
+  // Stats
+  // ============================================================================
+
+  const stats = useMemo(() => {
+    const activeDeals = filteredDeals.filter(d => d.status === 'active');
+    const wonDeals = filteredDeals.filter(d => d.status === 'won');
+    const lostDeals = filteredDeals.filter(d => d.status === 'lost');
+    
+    return {
+      total: filteredDeals.length,
+      active: activeDeals.length,
+      won: wonDeals.length,
+      lost: lostDeals.length,
+      totalValue: activeDeals.reduce((sum, d) => sum + (d.value || 0), 0),
+      wonValue: wonDeals.reduce((sum, d) => sum + (d.value || 0), 0),
+    };
+  }, [filteredDeals]);
 
   // ============================================================================
   // Handlers
@@ -449,52 +391,65 @@ export function LeadsPage() {
     }
   }, [sortField]);
 
-  const handleAddLead = useCallback(() => {
-    openAddLead({});
-  }, [openAddLead]);
+  const handleAddDeal = useCallback(() => {
+    openAddDeal({});
+  }, [openAddDeal]);
 
-  const handleViewLead = useCallback((leadOrCard: Lead | LeadCardData) => {
-    const lead = 'slug' in leadOrCard 
-      ? leadOrCard as Lead 
-      : leads.find(l => l.id === leadOrCard.id);
-    if (lead) {
-      navigate(`/sales/leads/${lead.slug || lead.id}`);
+  const handleViewDeal = useCallback((dealOrCard: Deal | DealCardData) => {
+    const deal = 'slug' in dealOrCard 
+      ? dealOrCard as Deal 
+      : deals.find(d => d.id === dealOrCard.id);
+    if (deal) {
+      navigate(`/sales/deals/${deal.slug || deal.id}`);
     }
-  }, [leads, navigate]);
+  }, [deals, navigate]);
 
   const handleKanbanMove = useCallback((itemId: string, _fromColumnId: string, toColumnId: string) => {
-    const stage = leadStages.find(s => s.id === toColumnId);
-    if (stage) {
-      updateLead(itemId, { stage: stage.name });
-      toast.success('Lead Moved', `Moved to ${stage.name}`);
+    const stage = dealStages.find(s => s.id === toColumnId);
+    const deal = deals.find(d => d.id === itemId);
+    
+    if (stage && deal && deal.status === 'active') {
+      updateDeal(itemId, { stage: stage.name });
+      toast.success('Deal Moved', `Moved to ${stage.name}`);
     }
-  }, [leadStages, updateLead, toast]);
+  }, [dealStages, deals, updateDeal, toast]);
 
-  const handleRowClick = useCallback((lead: Lead) => {
-    handleViewLead(lead);
-  }, [handleViewLead]);
+  const handleRowClick = useCallback((deal: Deal) => {
+    handleViewDeal(deal);
+  }, [handleViewDeal]);
 
   // ============================================================================
   // Table Columns
   // ============================================================================
 
-  const columns: DataTableColumn<Lead>[] = useMemo(() => [
+  const columns: DataTableColumn<Deal>[] = useMemo(() => [
     {
       key: 'name',
-      header: 'Lead Name',
+      header: 'Deal Name',
       sortable: true,
-      render: (lead) => (
+      render: (deal) => (
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-teal-100 dark:bg-teal-900/30 flex items-center justify-center flex-shrink-0">
-            <Target className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+          <div className={clsx(
+            'w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0',
+            deal.status === 'won' ? 'bg-green-100 dark:bg-green-900/30' :
+            deal.status === 'lost' ? 'bg-red-100 dark:bg-red-900/30' :
+            'bg-blue-100 dark:bg-blue-900/30'
+          )}>
+            {deal.status === 'won' ? (
+              <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
+            ) : deal.status === 'lost' ? (
+              <XCircle className="w-4 h-4 text-red-600 dark:text-red-400" />
+            ) : (
+              <TrendingUp className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+            )}
           </div>
           <div>
-            <span className="font-medium text-slate-900 dark:text-white">{lead.name}</span>
-            {lead.label && (
-              <span className={clsx('ml-2 px-1.5 py-0.5 rounded text-xs font-medium', getLabelColor(lead.label))}>
-                {lead.label}
-              </span>
-            )}
+            <span className={clsx(
+              'font-medium',
+              deal.status === 'lost' ? 'text-slate-400 line-through' : 'text-slate-900 dark:text-white'
+            )}>
+              {deal.name}
+            </span>
           </div>
         </div>
       ),
@@ -502,26 +457,40 @@ export function LeadsPage() {
     {
       key: 'stage',
       header: 'Stage',
-      render: (lead) => {
-        const stageConfig = leadStages.find(s => s.name === lead.stage);
+      render: (deal) => {
+        const stageConfig = dealStages.find(s => s.name === deal.stage);
         return (
           <div className="flex items-center gap-2">
             <div
               className="w-2.5 h-2.5 rounded-full"
               style={{ backgroundColor: stageConfig?.color || '#64748b' }}
             />
-            <span className="text-slate-600 dark:text-slate-400">{lead.stage}</span>
+            <span className="text-slate-600 dark:text-slate-400">{deal.stage}</span>
           </div>
         );
       },
     },
     {
+      key: 'status',
+      header: 'Status',
+      render: (deal) => (
+        <span className={clsx(
+          'px-2 py-1 rounded-full text-xs font-medium',
+          deal.status === 'won' && 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+          deal.status === 'lost' && 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+          deal.status === 'active' && 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+        )}>
+          {deal.status.charAt(0).toUpperCase() + deal.status.slice(1)}
+        </span>
+      ),
+    },
+    {
       key: 'company',
       header: 'Company',
       sortable: true,
-      render: (lead) => (
+      render: (deal) => (
         <span className="text-slate-600 dark:text-slate-400">
-          {lead.companyName || '—'}
+          {deal.companyName || '—'}
         </span>
       ),
       hideOnMobile: true,
@@ -531,12 +500,13 @@ export function LeadsPage() {
       header: 'Value',
       sortable: true,
       align: 'right',
-      render: (lead) => (
+      render: (deal) => (
         <span className={clsx(
           'font-medium',
-          lead.value && lead.value > 0 ? 'text-green-600 dark:text-green-400' : 'text-slate-400'
+          deal.status === 'lost' ? 'text-slate-400 line-through' :
+          deal.value && deal.value > 0 ? 'text-green-600 dark:text-green-400' : 'text-slate-400'
         )}>
-          {lead.value ? `$${lead.value.toLocaleString()}` : '—'}
+          {deal.value ? `$${deal.value.toLocaleString()}` : '—'}
         </span>
       ),
       hideOnMobile: true,
@@ -545,9 +515,9 @@ export function LeadsPage() {
       key: 'owner',
       header: 'Owner',
       sortable: true,
-      render: (lead) => (
+      render: (deal) => (
         <span className="text-slate-600 dark:text-slate-400">
-          {lead.ownerName || '—'}
+          {deal.ownerName || '—'}
         </span>
       ),
       hideOnMobile: true,
@@ -556,14 +526,14 @@ export function LeadsPage() {
       key: 'createdAt',
       header: 'Created',
       sortable: true,
-      render: (lead) => (
+      render: (deal) => (
         <span className="text-slate-500 dark:text-slate-400 text-sm">
-          {formatDate(lead.createdAt)}
+          {formatDate(deal.createdAt)}
         </span>
       ),
       hideOnMobile: true,
     },
-  ], [leadStages, getLabelColor]);
+  ], [dealStages]);
 
   // ============================================================================
   // Render
@@ -571,20 +541,45 @@ export function LeadsPage() {
 
   return (
     <Page
-      title="Leads"
-      description="Track and manage your sales leads"
+      title="Deals"
+      description="Track and manage your sales opportunities"
       actions={
-        <Button variant="primary" onClick={handleAddLead}>
+        <Button variant="primary" onClick={handleAddDeal}>
           <Plus className="w-4 h-4 mr-1.5" />
-          New Lead
+          New Deal
         </Button>
       }
     >
+      {/* Stats Bar */}
+      <div className="flex items-center gap-6 mb-4 text-sm">
+        <div className="flex items-center gap-2">
+          <span className="text-slate-500 dark:text-slate-400">Pipeline:</span>
+          <span className="font-semibold text-green-600 dark:text-green-400">
+            ${stats.totalValue.toLocaleString()}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-slate-500 dark:text-slate-400">Won:</span>
+          <span className="font-semibold text-green-600 dark:text-green-400">
+            ${stats.wonValue.toLocaleString()}
+          </span>
+          <span className="text-slate-400">({stats.won})</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-slate-500 dark:text-slate-400">Active:</span>
+          <span className="font-medium text-blue-600 dark:text-blue-400">{stats.active}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-slate-500 dark:text-slate-400">Lost:</span>
+          <span className="font-medium text-red-600 dark:text-red-400">{stats.lost}</span>
+        </div>
+      </div>
+
       {/* Filter Bar */}
       <FilterBar
         rightContent={
           <div className="flex items-center gap-3">
-            <FilterCount count={filteredLeads.length} singular="lead" />
+            <FilterCount count={filteredDeals.length} singular="deal" />
             <FilterToggle
               options={[
                 { value: 'kanban', label: 'Kanban', icon: <LayoutGrid className="w-4 h-4" /> },
@@ -599,26 +594,25 @@ export function LeadsPage() {
         <SearchInput
           value={search}
           onChange={setSearch}
-          placeholder="Search leads..."
+          placeholder="Search deals..."
           className="w-48 [&_input]:h-[34px] [&_input]:text-sm"
         />
-        {/* Only show Stage filter in List view */}
         {viewMode === 'list' && (
           <SelectFilter
             label="Stage"
             value={stageFilter}
             onChange={setStageFilter}
             options={stageOptions}
-            icon={Target}
+            icon={TrendingUp}
             size="sm"
             className="w-36"
           />
         )}
         <SelectFilter
-          label="Label"
-          value={labelFilter}
-          onChange={setLabelFilter}
-          options={labelOptions}
+          label="Status"
+          value={statusFilter}
+          onChange={(val) => setStatusFilter(val as StatusFilter)}
+          options={statusOptions}
           icon={Tag}
           size="sm"
           className="w-36"
@@ -629,15 +623,6 @@ export function LeadsPage() {
           onChange={setOwnerFilter}
           options={ownerOptions}
           icon={User}
-          size="sm"
-          className="w-36"
-        />
-        <SelectFilter
-          label="Source"
-          value={sourceFilter}
-          onChange={setSourceFilter}
-          options={sourceOptions}
-          icon={Megaphone}
           size="sm"
           className="w-36"
         />
@@ -652,32 +637,32 @@ export function LeadsPage() {
       {viewMode === 'kanban' ? (
         <KanbanBoard
           columns={kanbanColumns}
-          renderCard={(props) => <LeadCard {...props} />}
+          renderCard={(props) => <DealCard {...props} />}
           getItemId={(item) => item.id}
-          getItemValue={(item) => item.value || 0}
+          getItemValue={(item) => item.status === 'active' ? (item.value || 0) : 0}
           formatValue={(val) => `$${val.toLocaleString()}`}
           onItemMove={handleKanbanMove}
-          onCardClick={handleViewLead}
-          onAddClick={handleAddLead}
+          onCardClick={handleViewDeal}
+          onAddClick={handleAddDeal}
           showTotals
         />
       ) : (
         <DataTable
-          data={filteredLeads}
+          data={filteredDeals}
           columns={columns}
-          rowKey={(lead) => lead.id}
+          rowKey={(deal) => deal.id}
           onRowClick={handleRowClick}
           onSort={handleSort}
           sortField={sortField}
           sortDirection={sortDirection}
           emptyState={
             <div className="text-center py-12">
-              <Target className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-slate-900 dark:text-white mb-2">No leads yet</h3>
-              <p className="text-slate-500 dark:text-slate-400 mb-4">Create your first lead to start tracking your sales pipeline.</p>
-              <Button variant="primary" onClick={handleAddLead}>
+              <TrendingUp className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-slate-900 dark:text-white mb-2">No deals yet</h3>
+              <p className="text-slate-500 dark:text-slate-400 mb-4">Create your first deal to start tracking your sales pipeline.</p>
+              <Button variant="primary" onClick={handleAddDeal}>
                 <Plus className="w-4 h-4 mr-1.5" />
-                New Lead
+                New Deal
               </Button>
             </div>
           }
@@ -687,4 +672,4 @@ export function LeadsPage() {
   );
 }
 
-export default LeadsPage;
+export default DealsPage;

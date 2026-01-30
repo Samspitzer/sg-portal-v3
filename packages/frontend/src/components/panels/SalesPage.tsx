@@ -11,8 +11,8 @@ import { PanelDashboard } from '@/components/layout';
 import { useDocumentTitle } from '@/hooks';
 // Sub-pages
 import { LeadsPage } from './sales/LeadsPage';
+import { DealsPage } from './sales/DealsPage';
 // Future sub-pages:
-// import { DealsPage } from './sales/DealsPage';
 // import { ActivitiesPage } from './sales/ActivitiesPage';
 
 // Placeholder component for pages not yet built
@@ -105,11 +105,8 @@ export function SalesPage() {
         element={<PlaceholderPage title="Lead Details" description="Lead detail page coming soon." />} 
       />
       
-      {/* Deals - placeholder for now */}
-      <Route 
-        path="deals" 
-        element={<PlaceholderPage title="Deals" description="Deal tracking with pipeline management coming soon." />} 
-      />
+      {/* Deals */}
+      <Route path="deals" element={<DealsPage />} />
       <Route 
         path="deals/:id" 
         element={<PlaceholderPage title="Deal Details" description="Deal detail page coming soon." />} 

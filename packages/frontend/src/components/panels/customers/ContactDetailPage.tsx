@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { clsx } from 'clsx';
 import {
-  User,
+  User as UserIcon,
   ArrowLeft,
   Phone,
   Smartphone,
@@ -19,18 +19,202 @@ import {
   MapPin,
   Info,
   Check,
+  Target,
+  TrendingUp,
+  Clock,
+  Calendar as CalendarIcon,
 } from 'lucide-react';
 import { Page } from '@/components/layout';
 import { 
   Card, CardContent, Button, ConfirmModal, Modal, Input,
   SectionHeader, InlineEditField, InlineSelectField, CollapsibleSection, 
-  CompanySearchField, EntityTasksSection
+  CompanySearchField, EntityTasksSection, EntitySalesSection, QuickViewModal, type QuickViewField
 } from '@/components/common';
 import { TaskDetailPanel } from '@/components/panels/TasksPage';
-import { useClientsStore, useUsersStore, useToast, useNavigationGuardStore, useFieldsStore, type Contact } from '@/contexts';
+import { useFormStack } from '@/components/panels/add-forms';
+import { useClientsStore, useUsersStore, useToast, useNavigationGuardStore, useFieldsStore, type Contact, type Company, type User } from '@/contexts';
 import { useTaskStore, type Task, type TaskInput } from '@/contexts/taskStore';
+import { useTaskTypesStore, type TaskTypeConfig } from '@/contexts/taskTypesStore';
 import { useDocumentTitle, useContactBySlug, getCompanyUrl } from '@/hooks';
 import { validateEmail, validatePhone } from '@/utils/validation';
+import { formatDate } from '@/utils/dateUtils';
+import { TaskTypeIcon } from '@/components/common';
+
+// Priority colors for task quick view
+const TASK_PRIORITIES: { value: string; label: string; color: string }[] = [
+  { value: 'low', label: 'Low', color: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300' },
+  { value: 'medium', label: 'Medium', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' },
+  { value: 'high', label: 'High', color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' },
+  { value: 'urgent', label: 'Urgent', color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' },
+];
+
+// Task Quick View Component using generic QuickViewModal
+function TaskQuickViewComponent({
+  task,
+  isOpen,
+  taskTypes,
+  users,
+  contacts,
+  companies,
+  onClose,
+  onEdit,
+  onMarkDone,
+  onDelete,
+}: {
+  task: Task | null;
+  isOpen: boolean;
+  taskTypes: TaskTypeConfig[];
+  users: User[];
+  contacts: Contact[];
+  companies: Company[];
+  onClose: () => void;
+  onEdit: () => void;
+  onMarkDone: () => void;
+  onDelete: () => void;
+}) {
+  const navigate = useNavigate();
+  
+  if (!task) return null;
+  
+  const taskType = taskTypes.find(t => t.value === task.type);
+  const assignedUser = users.find(u => u.id === task.assignedUserId);
+  const priority = TASK_PRIORITIES.find(p => p.value === task.priority);
+  
+  // Get linked entities
+  const linkedContact = task.linkedContact?.type === 'contact'
+    ? contacts.find(c => c.id === task.linkedContact!.id)
+    : null;
+  const linkedCompany = task.linkedContact?.type === 'company'
+    ? companies.find(c => c.id === task.linkedContact!.id)
+    : linkedContact
+      ? companies.find(c => c.id === linkedContact.companyId)
+      : null;
+  
+  // Build badges
+  const badges: { label: string; className?: string }[] = [
+    {
+      label: task.status === 'completed' ? 'Completed' : task.status === 'in_progress' ? 'In Progress' : 'Pending',
+      className: task.status === 'completed'
+        ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+        : task.status === 'in_progress'
+          ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+          : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
+    }
+  ];
+  if (priority) {
+    badges.push({ label: `${priority.label} Priority`, className: priority.color });
+  }
+  
+  // Build fields
+  const fields: QuickViewField[] = [];
+  
+  if (assignedUser) {
+    fields.push({
+      label: 'Assigned To',
+      value: assignedUser.name,
+      icon: <UserIcon className="w-4 h-4" />,
+    });
+  }
+  
+  if (taskType) {
+    fields.push({
+      label: 'Type',
+      value: taskType.label,
+      icon: <TaskTypeIcon icon={taskType.icon} className="w-4 h-4" />,
+    });
+  }
+  
+  if (linkedCompany) {
+    fields.push({
+      label: 'Company',
+      value: linkedCompany.name,
+      icon: <Building2 className="w-4 h-4" />,
+      onClick: () => { onClose(); navigate(`/clients/companies/${linkedCompany.id}`); },
+    });
+  }
+  
+  if (linkedContact) {
+    fields.push({
+      label: 'Contact',
+      value: `${linkedContact.firstName} ${linkedContact.lastName}`,
+      icon: <UserIcon className="w-4 h-4" />,
+      onClick: () => { onClose(); navigate(`/clients/contacts/${linkedContact.id}`); },
+    });
+  }
+  
+  if (task.linkedItem) {
+    const Icon = task.linkedItem.type === 'lead' ? Target
+      : task.linkedItem.type === 'deal' ? TrendingUp
+      : FileText;
+    fields.push({
+      label: `Linked ${task.linkedItem.type}`,
+      value: task.linkedItem.name,
+      icon: <Icon className="w-4 h-4" />,
+      onClick: () => {
+        onClose();
+        if (task.linkedItem!.type === 'lead') navigate(`/sales/leads/${task.linkedItem!.id}`);
+        else if (task.linkedItem!.type === 'deal') navigate(`/sales/deals/${task.linkedItem!.id}`);
+        else navigate(`/projects/${task.linkedItem!.id}`);
+      },
+      fullWidth: true,
+    });
+  }
+  
+  return (
+    <QuickViewModal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={task.title}
+      subtitle={
+        <>
+          {task.dueDate && (
+            <span className="flex items-center gap-1">
+              <CalendarIcon className="w-3.5 h-3.5" />
+              {formatDate(task.dueDate, 'long')}
+            </span>
+          )}
+          {task.dueTime && (
+            <span className="flex items-center gap-1">
+              <Clock className="w-3.5 h-3.5" />
+              {task.dueTime}
+            </span>
+          )}
+        </>
+      }
+      icon={taskType ? (
+        <TaskTypeIcon icon={taskType.icon} className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+      ) : (
+        <Clock className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+      )}
+      badges={badges}
+      fields={fields}
+      notes={task.notes}
+      footerMeta={
+        <>
+          Created {new Date(task.createdAt).toLocaleString()}
+          {task.createdByName && ` by ${task.createdByName}`}
+        </>
+      }
+      leftActions={[
+        {
+          label: 'Delete',
+          icon: <Trash2 className="w-4 h-4" />,
+          onClick: onDelete,
+          variant: 'danger',
+        },
+        ...(task.status !== 'completed' ? [{
+          label: 'Mark as done',
+          icon: <Check className="w-4 h-4" />,
+          onClick: onMarkDone,
+        }] : []),
+      ]}
+      primaryAction={{
+        label: 'Edit Task',
+        onClick: onEdit,
+      }}
+    />
+  );
+}
 
 // Company Change Warning Modal
 function CompanyChangeWarningModal({
@@ -78,9 +262,10 @@ export function ContactDetailPage() {
   const navigate = useNavigate();
   const toast = useToast();
   const { contactRoles } = useFieldsStore();
-  const { companies, updateContact, deleteContact, addContactMethod, updateContactMethod, deleteContactMethod } = useClientsStore();
+  const { companies, contacts, updateContact, deleteContact, addContactMethod, updateContactMethod, deleteContactMethod } = useClientsStore();
   const { tasks, createTask, updateTask, deleteTask } = useTaskStore();
   const { users } = useUsersStore();
+  const { openAddLead, openAddDeal } = useFormStack();
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [editingFields, setEditingFields] = useState<Map<string, boolean>>(new Map());
@@ -100,6 +285,12 @@ export function ContactDetailPage() {
   // Task panel state
   const [isTaskPanelOpen, setIsTaskPanelOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  
+  // Quick view modal state
+  const [quickViewTask, setQuickViewTask] = useState<Task | null>(null);
+  
+  // Get task types for quick view
+  const { taskTypes } = useTaskTypesStore();
 
   useDocumentTitle(contact ? `${contact.firstName} ${contact.lastName}` : 'Contact');
 
@@ -256,7 +447,7 @@ export function ContactDetailPage() {
       <Page title="Contact Not Found" description="The requested contact could not be found.">
         <Card>
           <CardContent className="p-12 text-center">
-            <User className="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600" />
+            <UserIcon className="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600" />
             <h3 className="mt-4 text-lg font-medium text-slate-900 dark:text-white">Contact not found</h3>
             <p className="mt-2 text-slate-500 dark:text-slate-400">This contact may have been deleted.</p>
             <Button variant="primary" className="mt-4" onClick={() => navigate('/clients/contacts')}>
@@ -441,7 +632,7 @@ export function ContactDetailPage() {
           {/* Contact Details - Non-collapsible but matching header style */}
           <div className="border border-slate-200 dark:border-slate-700 rounded-lg">
             <div className="flex items-center gap-2 px-4 py-3 bg-slate-50 dark:bg-slate-800/50 rounded-t-lg">
-              <User className="w-4 h-4 text-slate-500" />
+              <UserIcon className="w-4 h-4 text-slate-500" />
               <span className="text-sm font-semibold text-slate-900 dark:text-white">Contact Details</span>
             </div>
             <div className="p-4 bg-white dark:bg-slate-900 rounded-b-lg">
@@ -760,19 +951,78 @@ export function ContactDetailPage() {
             entityType="contact"
             entityId={contact.id}
             entityName={fullName}
+            defaultCollapsed={true}
             onAddTask={() => {
               setSelectedTask(null);
               setIsTaskPanelOpen(true);
             }}
             onTaskClick={(task) => {
-              setSelectedTask(task);
-              setIsTaskPanelOpen(true);
+              setQuickViewTask(task);
+            }}
+          />
+          
+          {/* Leads & Deals Section */}
+          <EntitySalesSection
+            entityType="contact"
+            entityId={contact.id}
+            defaultCollapsed={true}
+            onAddLead={() => {
+              openAddLead({
+                defaultCompanyId: company?.id,
+                defaultCompanyName: company?.name,
+                defaultContactId: contact.id,
+                defaultContactName: fullName,
+              });
+            }}
+            onAddDeal={() => {
+              openAddDeal({
+                defaultCompanyId: company?.id,
+                defaultCompanyName: company?.name,
+                defaultContactId: contact.id,
+                defaultContactName: fullName,
+              });
+            }}
+            onLeadClick={(lead) => {
+              navigate(`/sales/leads/${lead.id}`);
+            }}
+            onDealClick={(deal) => {
+              navigate(`/sales/deals/${deal.id}`);
             }}
           />
         </div>
       </div>
 
-      {/* Task Detail Panel */}
+      {/* Task Quick View Modal */}
+      <TaskQuickViewComponent
+        task={quickViewTask}
+        isOpen={!!quickViewTask}
+        taskTypes={taskTypes}
+        users={users}
+        contacts={contacts}
+        companies={companies}
+        onClose={() => setQuickViewTask(null)}
+        onEdit={() => {
+          if (quickViewTask) {
+            setSelectedTask(quickViewTask);
+            setIsTaskPanelOpen(true);
+            setQuickViewTask(null);
+          }
+        }}
+        onMarkDone={async () => {
+          if (quickViewTask) {
+            await updateTask(quickViewTask.id, { status: 'completed' } as Partial<TaskInput>);
+            toast.success('Task Completed', 'Task has been marked as done');
+            setQuickViewTask(null);
+          }
+        }}
+        onDelete={async () => {
+          if (quickViewTask) {
+            await deleteTask(quickViewTask.id);
+            toast.success('Task Deleted', 'The task has been removed');
+            setQuickViewTask(null);
+          }
+        }}
+      />
       <TaskDetailPanel
         task={selectedTask}
         isOpen={isTaskPanelOpen}
@@ -811,6 +1061,11 @@ export function ContactDetailPage() {
           id: contact.id,
           name: fullName,
         }}
+        defaultCompany={company ? {
+          type: 'company',
+          id: company.id,
+          name: company.name,
+        } : undefined}
       />
 
       {/* Delete Confirmation Modal */}

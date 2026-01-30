@@ -17,6 +17,8 @@ interface EntityTasksSectionProps {
   onAddTask: () => void;
   /** Called when user clicks a task row - should open task in edit panel */
   onTaskClick: (task: Task) => void;
+  /** Default collapsed state */
+  defaultCollapsed?: boolean;
 }
 
 // Parse date string to Date object (local timezone)
@@ -56,11 +58,13 @@ export function EntityTasksSection({
   entityName,
   onAddTask,
   onTaskClick,
+  defaultCollapsed = true,
 }: EntityTasksSectionProps) {
   const { tasks, completeTask, reopenTask } = useTaskStore();
   const { taskTypes } = useTaskTypesStore();
   const toast = useToast();
   
+  const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
   const [showCompleted, setShowCompleted] = useState(false);
   
   // Filter tasks linked to this entity
@@ -122,19 +126,36 @@ export function EntityTasksSection({
     if (!typeValue) return null;
     return taskTypes.find(t => t.value === typeValue);
   };
+  
+  const totalCount = openTasks.length + completedTasks.length;
 
   return (
     <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden bg-white dark:bg-slate-900">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
-        <span className="text-sm font-semibold text-slate-900 dark:text-white">Tasks</span>
-        <div className="flex items-center gap-2">
-          {openTasks.length > 0 && (
-            <span className="text-xs text-slate-500 dark:text-slate-400">{openTasks.length} open</span>
+      {/* Header - Clickable to collapse */}
+      <div
+        className="w-full flex items-center justify-between px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors cursor-pointer"
+      >
+        <div 
+          className="flex items-center gap-2 flex-1"
+          onClick={() => setIsCollapsed(!isCollapsed)}
+        >
+          {isCollapsed ? (
+            <ChevronRight className="w-4 h-4 text-slate-400" />
+          ) : (
+            <ChevronDown className="w-4 h-4 text-slate-400" />
           )}
+          <span className="text-sm font-semibold text-slate-900 dark:text-white">Tasks</span>
+          <span className="text-xs text-slate-500 dark:text-slate-400 bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded">
+            {totalCount}
+          </span>
+          {openTasks.length > 0 && (
+            <span className="text-xs text-slate-500 dark:text-slate-400">({openTasks.length} open)</span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
           <button 
             onClick={onAddTask}
-            className="w-6 h-6 flex items-center justify-center hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors"
+            className="w-6 h-6 flex items-center justify-center hover:bg-slate-200 dark:hover:bg-slate-600 rounded transition-colors"
             title={`Add task for ${entityName}`}
           >
             <Plus className="w-4 h-4 text-slate-500 dark:text-slate-400" />
@@ -142,18 +163,21 @@ export function EntityTasksSection({
         </div>
       </div>
       
-      {/* Open Tasks List */}
-      {openTasks.length > 0 ? (
-        <div className="divide-y divide-slate-100 dark:divide-slate-800">
-          {openTasks.map(task => {
-            const taskType = getTaskType(task.type);
-            const overdue = isOverdue(task);
-            return (
-              <div 
-                key={task.id} 
-                onClick={() => onTaskClick(task)}
-                className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer group"
-              >
+      {/* Content - Collapsible */}
+      {!isCollapsed && (
+        <>
+          {/* Open Tasks List */}
+          {openTasks.length > 0 ? (
+            <div className="divide-y divide-slate-100 dark:divide-slate-800">
+              {openTasks.map(task => {
+                const taskType = getTaskType(task.type);
+                const overdue = isOverdue(task);
+                return (
+                  <div 
+                    key={task.id} 
+                    onClick={() => onTaskClick(task)}
+                    className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer group"
+                  >
                 {/* Complete checkbox */}
                 <button
                   onClick={(e) => handleComplete(e, task)}
@@ -267,6 +291,8 @@ export function EntityTasksSection({
             </div>
           )}
         </>
+      )}
+      </>
       )}
     </div>
   );

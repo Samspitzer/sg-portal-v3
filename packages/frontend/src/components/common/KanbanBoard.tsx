@@ -243,6 +243,7 @@ function KanbanColumnComponent<T>({
         'flex flex-col w-72 flex-shrink-0',
         'bg-slate-50 dark:bg-slate-900/50 rounded-xl',
         'border border-slate-200 dark:border-slate-700',
+        'overflow-hidden',
         isDragOver && 'ring-2 ring-brand-500 ring-opacity-50'
       )}
       onDragOver={handleDragOver}

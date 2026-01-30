@@ -4,6 +4,7 @@ export { Header } from './Header';
 export { PanelHeader } from './PanelHeader';
 export { AuthGuard } from './AuthGuard';
 export { SideRibbon } from './SideRibbon';
+export { SlidePanel, type SlidePanelSize, type SlidePanelProps } from './SlidePanel';
 export { 
   PanelLayout, 
   AccountingLayout, 

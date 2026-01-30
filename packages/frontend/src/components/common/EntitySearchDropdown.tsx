@@ -8,7 +8,7 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { clsx } from 'clsx';
-import { Search, X } from 'lucide-react';
+import { Search, X, Plus } from 'lucide-react';
 import { Input } from './Input';
 import { useDropdownKeyboard } from '@/hooks';
 
@@ -42,6 +42,12 @@ export interface EntitySearchDropdownProps {
   disabled?: boolean;
   /** Additional class names */
   className?: string;
+  /** Allow creating new items */
+  allowCreate?: boolean;
+  /** Callback when creating new item */
+  onCreateNew?: (name: string) => void;
+  /** Label for create button (default: "Add new") */
+  createLabel?: string;
 }
 
 export function EntitySearchDropdown({
@@ -56,6 +62,9 @@ export function EntitySearchDropdown({
   emptyMessage = 'No results found',
   disabled = false,
   className,
+  allowCreate = false,
+  onCreateNew,
+  createLabel = 'Add new',
 }: EntitySearchDropdownProps) {
   const [search, setSearch] = useState('');
   const [isOpen, setIsOpen] = useState(false);
@@ -68,6 +77,10 @@ export function EntitySearchDropdown({
       .filter(item => item.name.toLowerCase().includes(search.toLowerCase()))
       .slice(0, maxResults);
   }, [search, items, maxResults]);
+
+  // Check if we should show create option
+  const showCreateOption = allowCreate && onCreateNew && search.trim().length > 0 && 
+    !items.some(item => item.name.toLowerCase() === search.toLowerCase());
 
   // Keyboard navigation
   const { highlightedIndex, handleKeyDown, resetHighlight } = useDropdownKeyboard({
@@ -187,6 +200,23 @@ export function EntitySearchDropdown({
           
           {isOpen && (
             <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-50 max-h-48 overflow-y-auto">
+              {/* Create new option */}
+              {showCreateOption && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onCreateNew!(search.trim());
+                    setSearch('');
+                    setIsOpen(false);
+                    resetHighlight();
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-blue-50 dark:hover:bg-blue-900/20 text-blue-600 dark:text-blue-400 border-b border-slate-200 dark:border-slate-700"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span className="text-sm">{createLabel}: "{search.trim()}"</span>
+                </button>
+              )}
+              
               {filteredItems.length > 0 ? (
                 filteredItems.map((item, index) => (
                   <button 
@@ -220,7 +250,7 @@ export function EntitySearchDropdown({
                 ))
               ) : search ? (
                 <div className="p-3 text-center text-sm text-slate-500">
-                  {emptyMessage}
+                  {showCreateOption ? null : emptyMessage}
                 </div>
               ) : (
                 <div className="p-3 text-center text-sm text-slate-400">

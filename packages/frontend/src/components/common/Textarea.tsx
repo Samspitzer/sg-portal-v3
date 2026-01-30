@@ -5,6 +5,8 @@ interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   label?: string;
   error?: string;
   hint?: string;
+  /** Control resize behavior: 'none', 'vertical', 'horizontal', 'both' (default: 'none') */
+  resize?: 'none' | 'vertical' | 'horizontal' | 'both';
 }
 
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
@@ -16,11 +18,19 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
       hint,
       id,
       rows = 3,
+      resize = 'none',
       ...props
     },
     ref
   ) => {
     const textareaId = id ?? label?.toLowerCase().replace(/\s+/g, '-');
+
+    const resizeClasses = {
+      none: 'resize-none',
+      vertical: 'resize-y',
+      horizontal: 'resize-x',
+      both: 'resize',
+    };
 
     return (
       <div className="w-full">
@@ -49,7 +59,8 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
             'transition-colors duration-200',
             'focus:outline-none focus:ring-2 focus:border-transparent',
             'disabled:opacity-50 disabled:bg-slate-100 dark:disabled:bg-slate-900',
-            'resize-y',
+            'overflow-y-auto',
+            resizeClasses[resize],
             // Error state
             error
               ? 'border-danger-500 focus:ring-danger-500'
