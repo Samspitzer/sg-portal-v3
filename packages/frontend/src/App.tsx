@@ -211,37 +211,33 @@ function AppRoutes() {
         }
       />
 
-       {/* Sales Panel */}
-        <Route
-          path="/sales/*"
-          element={
-            <AuthGuard>
-              <Layout>
-                <SalesLayout>
-                  <SalesPage />
-                </SalesLayout>
-              </Layout>
-            </AuthGuard>
-          }
-        />
+      {/* Sales Panel */}
+      <Route
+        path="/sales/*"
+        element={
+          <AuthGuard>
+            <Layout>
+              <SalesLayout>
+                <SalesPage />
+              </SalesLayout>
+            </Layout>
+          </AuthGuard>
+        }
+      />
 
-        {/* Tasks Panel */}
-        <Route
-          path="/tasks/*"
-          element={
-            <AuthGuard>
-              <Layout>
-                <TasksLayout>
-                  <Routes>
-                    <Route index element={<TasksPage />} />
-                    <Route path="calendar" element={<TasksPage />} />
-                    <Route path="list" element={<TasksPage />} />
-                  </Routes>
-                </TasksLayout>
-              </Layout>
-            </AuthGuard>
-          }
-        />
+      {/* Tasks Panel */}
+      <Route
+        path="/tasks/*"
+        element={
+          <AuthGuard>
+            <Layout>
+              <TasksLayout>
+                <TasksPage />
+              </TasksLayout>
+            </Layout>
+          </AuthGuard>
+        }
+      />
       
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

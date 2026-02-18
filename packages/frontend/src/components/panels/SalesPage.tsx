@@ -12,8 +12,10 @@ import { useDocumentTitle } from '@/hooks';
 // Sub-pages
 import { LeadsPage } from './sales/LeadsPage';
 import { DealsPage } from './sales/DealsPage';
+import { ActivitiesPage } from './sales/ActivitiesPage';
+import { LeadDetailPage } from './sales/LeadDetailPage';
+import { DealDetailPage } from './sales/DealDetailPage';
 // Future sub-pages:
-// import { ActivitiesPage } from './sales/ActivitiesPage';
 
 // Placeholder component for pages not yet built
 function PlaceholderPage({ title, description }: { title: string; description: string }) {
@@ -100,23 +102,14 @@ export function SalesPage() {
       
       {/* Leads */}
       <Route path="leads" element={<LeadsPage />} />
-      <Route 
-        path="leads/:id" 
-        element={<PlaceholderPage title="Lead Details" description="Lead detail page coming soon." />} 
-      />
+      <Route path="leads/:id" element={<LeadDetailPage />} />
       
       {/* Deals */}
       <Route path="deals" element={<DealsPage />} />
-      <Route 
-        path="deals/:id" 
-        element={<PlaceholderPage title="Deal Details" description="Deal detail page coming soon." />} 
-      />
+      <Route path="deals/:id" element={<DealDetailPage />} />
       
-      {/* Activities - placeholder for now */}
-      <Route 
-        path="activities" 
-        element={<PlaceholderPage title="Activities" description="Sales activities and task tracking coming soon." />} 
-      />
+      {/* Activities */}
+      <Route path="activities" element={<ActivitiesPage />} />
       
       {/* Routes - Coming Soon */}
       <Route 
