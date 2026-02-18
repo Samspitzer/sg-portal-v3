@@ -12,6 +12,7 @@ import { AddContactForm } from './AddContactForm';
 import { AddLeadForm } from './AddLeadForm';
 import { AddDealForm } from './AddDealForm';
 import { AddTaskForm } from './AddTaskForm';
+import { EditTaskForm } from './EditTaskForm';
 import type { Company, Contact, Lead, Deal, Task } from '@/contexts';
 
 // ============================================================================
@@ -61,6 +62,12 @@ interface TaskFormOptions {
   onCreated?: (task: Task) => void;
 }
 
+interface EditTaskFormOptions {
+  task: Task;
+  onUpdated?: (task: Task) => void;
+  onDeleted?: (taskId: string) => void;
+}
+
 interface FormStackContextValue {
   // Open form methods
   openAddCompany: (options?: CompanyFormOptions) => void;
@@ -68,16 +75,17 @@ interface FormStackContextValue {
   openAddLead: (options?: LeadFormOptions) => void;
   openAddDeal: (options?: DealFormOptions) => void;
   openAddTask: (options?: TaskFormOptions) => void;
+  openEditTask: (options: EditTaskFormOptions) => void;
   
   // Current stack info
   stackDepth: number;
 }
 
-type FormType = 'company' | 'contact' | 'lead' | 'deal' | 'task';
+type FormType = 'company' | 'contact' | 'lead' | 'deal' | 'task' | 'edit-task';
 
 interface FormStackItem {
   type: FormType;
-  options: CompanyFormOptions | ContactFormOptions | LeadFormOptions | DealFormOptions | TaskFormOptions;
+  options: CompanyFormOptions | ContactFormOptions | LeadFormOptions | DealFormOptions | TaskFormOptions | EditTaskFormOptions;
 }
 
 // ============================================================================
@@ -137,6 +145,10 @@ export function FormStackProvider({ children }: FormStackProviderProps) {
     pushForm('task', options);
   }, [pushForm]);
 
+  const openEditTask = useCallback((options: EditTaskFormOptions) => {
+    pushForm('edit-task', options);
+  }, [pushForm]);
+
   // Context value
   const contextValue: FormStackContextValue = {
     openAddCompany,
@@ -144,6 +156,7 @@ export function FormStackProvider({ children }: FormStackProviderProps) {
     openAddLead,
     openAddDeal,
     openAddTask,
+    openEditTask,
     stackDepth: formStack.length,
   };
 
@@ -332,6 +345,28 @@ export function FormStackProvider({ children }: FormStackProviderProps) {
               onAddDeal={handleAddDealFromChild}
               onCreated={(task) => {
                 opts.onCreated?.(task);
+                popForm();
+              }}
+            />
+          );
+        }
+
+        case 'edit-task': {
+          const opts = item.options as EditTaskFormOptions;
+          return (
+            <EditTaskForm
+              key={`edit-task-${index}`}
+              task={opts.task}
+              isOpen={isOpen}
+              onClose={handleClose}
+              onAddCompany={handleAddCompanyFromChild}
+              onAddContact={handleAddContactFromChild}
+              onUpdated={(task) => {
+                opts.onUpdated?.(task);
+                popForm();
+              }}
+              onDeleted={(taskId) => {
+                opts.onDeleted?.(taskId);
                 popForm();
               }}
             />

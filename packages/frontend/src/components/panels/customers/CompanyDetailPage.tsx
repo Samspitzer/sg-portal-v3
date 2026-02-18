@@ -28,7 +28,7 @@ import {
   SectionHeader, InlineEditField, CollapsibleSection, MultiSelectUsers, EntityTasksSection,
   EntitySalesSection, QuickViewModal, type QuickViewField, TaskTypeIcon
 } from '@/components/common';
-import { TaskDetailPanel } from '@/components/panels/TasksPage';
+import { useFormStack } from '@/components/panels/add-forms';
 import { useClientsStore, useUsersStore, useToast, useNavigationGuardStore, useFieldsStore, type Company, type ContactRole, type CompanyAddress, isDuplicateAddress, type Contact, type User } from '@/contexts';
 import { useTaskStore, type Task, type TaskInput } from '@/contexts/taskStore';
 import { useTaskTypesStore, type TaskTypeConfig } from '@/contexts/taskTypesStore';
@@ -313,8 +313,9 @@ export function CompanyDetailPage() {
   const toast = useToast();
   const { contactRoles } = useFieldsStore();
   const { contacts, companies, updateCompany, deleteCompany, addContact, addCompanyAddress, updateCompanyAddress, deleteCompanyAddress } = useClientsStore();
-  const { tasks, createTask, updateTask, deleteTask } = useTaskStore();
+  const { tasks, updateTask, deleteTask } = useTaskStore();
   const { users } = useUsersStore();
+  const { openAddContact, openAddLead, openAddDeal, openAddTask, openEditTask } = useFormStack();
 
   // Role options for contact form - using dynamic contactRoles from store
   const roleOptions = useMemo(() => 
@@ -358,10 +359,6 @@ export function CompanyDetailPage() {
   // Sales rep mode change modal (when toggling between company/location mode)
   const [showModeChangeModal, setShowModeChangeModal] = useState(false);
   const [modeChangeMessage, setModeChangeMessage] = useState('');
-
-  // Task panel state
-  const [isTaskPanelOpen, setIsTaskPanelOpen] = useState(false);
-  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   
   // Quick view modal state
   const [quickViewTask, setQuickViewTask] = useState<Task | null>(null);
@@ -578,11 +575,16 @@ export function CompanyDetailPage() {
     toast.success('Updated', `Sales reps updated for ${addr?.label || 'location'}`);
   };
 
-  // Add Contact Modal handlers
-  const openAddContactModal = () => {
-    setContactFormData(initialContactFormData);
-    setShowAddContactModal(true);
+  // Add Contact handler - now uses FormStack
+  const handleOpenAddContact = () => {
+    openAddContact({
+      defaultCompanyId: company.id,
+      defaultCompanyName: company.name,
+    });
   };
+
+  // Keep these for legacy references (will be removed later)
+  const openAddContactModal = handleOpenAddContact;
 
   const closeAddContactModal = () => {
     setShowAddContactModal(false);
@@ -1144,8 +1146,10 @@ export function CompanyDetailPage() {
             entityName={company.name}
             defaultCollapsed={true}
             onAddTask={() => {
-              setSelectedTask(null);
-              setIsTaskPanelOpen(true);
+              openAddTask({
+                defaultCompanyId: company.id,
+                defaultCompanyName: company.name,
+              });
             }}
             onTaskClick={(task) => {
               setQuickViewTask(task);
@@ -1158,12 +1162,16 @@ export function CompanyDetailPage() {
             entityId={company.id}
             defaultCollapsed={true}
             onAddLead={() => {
-              // Navigate to leads page with company pre-selected
-              navigate(`/sales/leads?newLead=true&companyId=${company.id}`);
+              openAddLead({
+                defaultCompanyId: company.id,
+                defaultCompanyName: company.name,
+              });
             }}
             onAddDeal={() => {
-              // Navigate to deals page with company pre-selected
-              navigate(`/sales/deals?newDeal=true&companyId=${company.id}`);
+              openAddDeal({
+                defaultCompanyId: company.id,
+                defaultCompanyName: company.name,
+              });
             }}
             onLeadClick={(lead) => {
               navigate(`/sales/leads/${lead.id}`);
@@ -1186,8 +1194,7 @@ export function CompanyDetailPage() {
         onClose={() => setQuickViewTask(null)}
         onEdit={() => {
           if (quickViewTask) {
-            setSelectedTask(quickViewTask);
-            setIsTaskPanelOpen(true);
+            openEditTask({ task: quickViewTask });
             setQuickViewTask(null);
           }
         }}
@@ -1204,47 +1211,6 @@ export function CompanyDetailPage() {
             toast.success('Task Deleted', 'The task has been removed');
             setQuickViewTask(null);
           }
-        }}
-      />
-
-      {/* Task Detail Panel */}
-      <TaskDetailPanel
-        task={selectedTask}
-        isOpen={isTaskPanelOpen}
-        onClose={() => {
-          setIsTaskPanelOpen(false);
-          setSelectedTask(null);
-        }}
-        onSave={async (data, markDone) => {
-          const user = users.find(u => u.id === data.assignedUserId);
-          const taskData = { ...data, assignedUserName: user?.name || '' };
-          
-          if (selectedTask) {
-            if (markDone && selectedTask.status !== 'completed') {
-              await updateTask(selectedTask.id, { ...taskData, status: 'completed' } as TaskInput);
-              toast.success('Task Completed', 'Task has been marked as done');
-            } else if (!markDone && selectedTask.status === 'completed') {
-              await updateTask(selectedTask.id, { ...taskData, status: 'todo' } as TaskInput);
-              toast.success('Task Updated', 'Task has been reopened');
-            } else {
-              await updateTask(selectedTask.id, taskData);
-              toast.success('Task Updated', 'Your changes have been saved');
-            }
-          } else {
-            await createTask(taskData);
-            toast.success('Task Created', 'New task has been added');
-          }
-          setIsTaskPanelOpen(false);
-          setSelectedTask(null);
-        }}
-        onDelete={async (taskId) => {
-          await deleteTask(taskId);
-          toast.success('Task Deleted', 'The task has been removed');
-        }}
-        defaultLinkedContact={{
-          type: 'company',
-          id: company.id,
-          name: company.name,
         }}
       />
 

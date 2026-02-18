@@ -30,7 +30,6 @@ import {
   SectionHeader, InlineEditField, InlineSelectField, CollapsibleSection, 
   CompanySearchField, EntityTasksSection, EntitySalesSection, QuickViewModal, type QuickViewField
 } from '@/components/common';
-import { TaskDetailPanel } from '@/components/panels/TasksPage';
 import { useFormStack } from '@/components/panels/add-forms';
 import { useClientsStore, useUsersStore, useToast, useNavigationGuardStore, useFieldsStore, type Contact, type Company, type User } from '@/contexts';
 import { useTaskStore, type Task, type TaskInput } from '@/contexts/taskStore';
@@ -263,9 +262,9 @@ export function ContactDetailPage() {
   const toast = useToast();
   const { contactRoles } = useFieldsStore();
   const { companies, contacts, updateContact, deleteContact, addContactMethod, updateContactMethod, deleteContactMethod } = useClientsStore();
-  const { tasks, createTask, updateTask, deleteTask } = useTaskStore();
+  const { tasks, updateTask, deleteTask } = useTaskStore();
   const { users } = useUsersStore();
-  const { openAddLead, openAddDeal } = useFormStack();
+  const { openAddLead, openAddDeal, openAddTask, openEditTask } = useFormStack();
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [editingFields, setEditingFields] = useState<Map<string, boolean>>(new Map());
@@ -281,10 +280,6 @@ export function ContactDetailPage() {
   const [newMethodValue, setNewMethodValue] = useState('');
   const [newMethodLabel, setNewMethodLabel] = useState('');
   const [methodValidationError, setMethodValidationError] = useState<string | null>(null);
-
-  // Task panel state
-  const [isTaskPanelOpen, setIsTaskPanelOpen] = useState(false);
-  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   
   // Quick view modal state
   const [quickViewTask, setQuickViewTask] = useState<Task | null>(null);
@@ -953,8 +948,12 @@ export function ContactDetailPage() {
             entityName={fullName}
             defaultCollapsed={true}
             onAddTask={() => {
-              setSelectedTask(null);
-              setIsTaskPanelOpen(true);
+              openAddTask({
+                defaultContactId: contact.id,
+                defaultContactName: fullName,
+                defaultCompanyId: company?.id,
+                defaultCompanyName: company?.name,
+              });
             }}
             onTaskClick={(task) => {
               setQuickViewTask(task);
@@ -1003,8 +1002,7 @@ export function ContactDetailPage() {
         onClose={() => setQuickViewTask(null)}
         onEdit={() => {
           if (quickViewTask) {
-            setSelectedTask(quickViewTask);
-            setIsTaskPanelOpen(true);
+            openEditTask({ task: quickViewTask });
             setQuickViewTask(null);
           }
         }}
@@ -1022,50 +1020,6 @@ export function ContactDetailPage() {
             setQuickViewTask(null);
           }
         }}
-      />
-      <TaskDetailPanel
-        task={selectedTask}
-        isOpen={isTaskPanelOpen}
-        onClose={() => {
-          setIsTaskPanelOpen(false);
-          setSelectedTask(null);
-        }}
-        onSave={async (data, markDone) => {
-          const user = users.find(u => u.id === data.assignedUserId);
-          const taskData = { ...data, assignedUserName: user?.name || '' };
-          
-          if (selectedTask) {
-            if (markDone && selectedTask.status !== 'completed') {
-              await updateTask(selectedTask.id, { ...taskData, status: 'completed' } as TaskInput);
-              toast.success('Task Completed', 'Task has been marked as done');
-            } else if (!markDone && selectedTask.status === 'completed') {
-              await updateTask(selectedTask.id, { ...taskData, status: 'todo' } as TaskInput);
-              toast.success('Task Updated', 'Task has been reopened');
-            } else {
-              await updateTask(selectedTask.id, taskData);
-              toast.success('Task Updated', 'Your changes have been saved');
-            }
-          } else {
-            await createTask(taskData);
-            toast.success('Task Created', 'New task has been added');
-          }
-          setIsTaskPanelOpen(false);
-          setSelectedTask(null);
-        }}
-        onDelete={async (taskId) => {
-          await deleteTask(taskId);
-          toast.success('Task Deleted', 'The task has been removed');
-        }}
-        defaultLinkedContact={{
-          type: 'contact',
-          id: contact.id,
-          name: fullName,
-        }}
-        defaultCompany={company ? {
-          type: 'company',
-          id: company.id,
-          name: company.name,
-        } : undefined}
       />
 
       {/* Delete Confirmation Modal */}
