@@ -100,3 +100,44 @@ export function isPast(dateStr: string): boolean {
 export function isTomorrow(dateStr: string): boolean {
   return dateStr === addDays(getTodayISO(), 1);
 }
+
+/**
+ * Check whether a task due date matches a given TimeFilter.
+ * Extracted from TasksPage/ActivitiesPage — use this instead of inline logic.
+ *
+ * @param dueDate - ISO date string (YYYY-MM-DD), or undefined
+ * @param filter  - TimeFilter value
+ */
+export function taskMatchesTimeFilter(
+  dueDate: string | undefined,
+  filter: 'all' | 'overdue' | 'today' | 'tomorrow' | 'this-week' | 'next-week'
+): boolean {
+  if (!dueDate || filter === 'all') return true;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const taskDate = parseLocalDate(dueDate);
+  taskDate.setHours(0, 0, 0, 0);
+
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  const endOfWeek = new Date(today);
+  endOfWeek.setDate(endOfWeek.getDate() + (7 - today.getDay()));
+
+  const startNextWeek = new Date(endOfWeek);
+  startNextWeek.setDate(startNextWeek.getDate() + 1);
+
+  const endNextWeek = new Date(startNextWeek);
+  endNextWeek.setDate(endNextWeek.getDate() + 6);
+
+  switch (filter) {
+    case 'overdue':   return taskDate < today;
+    case 'today':     return taskDate.getTime() === today.getTime();
+    case 'tomorrow':  return taskDate.getTime() === tomorrow.getTime();
+    case 'this-week': return taskDate >= today && taskDate <= endOfWeek;
+    case 'next-week': return taskDate >= startNextWeek && taskDate <= endNextWeek;
+    default:          return true;
+  }
+}

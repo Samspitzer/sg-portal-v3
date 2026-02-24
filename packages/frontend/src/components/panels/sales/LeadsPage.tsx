@@ -5,15 +5,14 @@
 // UPDATED: Now uses AddLeadForm from add-forms via useFormStack
 // ============================================================================
 
-import { useState, useMemo, useCallback, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useState, useMemo, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { clsx } from 'clsx';
 import {
   Plus,
   Target,
   LayoutGrid,
   List,
-  Building2,
   User,
   Tag,
   Megaphone,
@@ -28,127 +27,26 @@ import {
   FilterToggle,
   DataTable,
   type DataTableColumn,
+  EmptyTableState,
 } from '@/components/common';
-import { KanbanBoard, type KanbanColumn, type KanbanCardProps } from '@/components/common/KanbanBoard';
+import { KanbanBoard, type KanbanColumn } from '@/components/common/KanbanBoard';
+import { SalesKanbanCard, type SalesCardData } from './SalesKanbanCard';
 import { useFormStack } from '@/components/panels/add-forms';
 import {
   useSalesStore,
   useFieldsStore,
   useUsersStore,
-  useClientsStore,
   useToast,
   type Lead,
 } from '@/contexts';
-import { useDocumentTitle } from '@/hooks';
+import { useDocumentTitle, useTableSort, usePersistedViewMode, useEntityFormFromUrlParams } from '@/hooks';
 import { formatDate } from '@/utils/dateUtils';
 
 // ============================================================================
 // Types
 // ============================================================================
 
-type ViewMode = 'list' | 'kanban';
 type SortField = 'name' | 'company' | 'value' | 'owner' | 'createdAt';
-type SortDirection = 'asc' | 'desc';
-
-// ============================================================================
-// Lead Card for Kanban
-// ============================================================================
-
-interface LeadCardData {
-  id: string;
-  title: string;
-  subtitle?: string;
-  value?: number;
-  label?: { text: string; color: string };
-  owner?: { name: string };
-  companyName?: string;
-  contactName?: string;
-  source?: string;
-  createdAt: string;
-}
-
-function LeadCard({
-  item,
-  onClick,
-  onDragStart,
-  isDragging,
-}: KanbanCardProps<LeadCardData>) {
-  return (
-    <div
-      draggable
-      onDragStart={(e) => onDragStart(e, item)}
-      onClick={() => onClick(item)}
-      className={clsx(
-        'bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700',
-        'p-3 cursor-pointer transition-all duration-150',
-        'hover:shadow-md hover:border-slate-300 dark:hover:border-slate-600',
-        'group',
-        isDragging && 'opacity-50 shadow-lg scale-105'
-      )}
-    >
-      {/* Title Row */}
-      <div className="flex items-start justify-between gap-2 mb-2">
-        <h4 className="font-medium text-slate-900 dark:text-white text-sm line-clamp-2">
-          {item.title}
-        </h4>
-        {item.label && (
-          <span className={clsx('px-1.5 py-0.5 rounded text-xs font-medium flex-shrink-0', item.label.color)}>
-            {item.label.text}
-          </span>
-        )}
-      </div>
-
-      {/* Company/Contact */}
-      {(item.companyName || item.contactName) && (
-        <div className="text-xs text-slate-500 dark:text-slate-400 mb-2 space-y-0.5">
-          {item.companyName && (
-            <div className="flex items-center gap-1">
-              <Building2 className="w-3 h-3" />
-              <span className="truncate">{item.companyName}</span>
-            </div>
-          )}
-          {item.contactName && (
-            <div className="flex items-center gap-1">
-              <User className="w-3 h-3" />
-              <span className="truncate">{item.contactName}</span>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Value and Owner Row */}
-      <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-700">
-        {item.value !== undefined && item.value > 0 ? (
-          <span className="text-sm font-semibold text-green-600 dark:text-green-400">
-            ${item.value.toLocaleString()}
-          </span>
-        ) : (
-          <span className="text-xs text-slate-400">No value</span>
-        )}
-
-        {item.owner && (
-          <div className="flex items-center gap-1.5">
-            <div className="w-5 h-5 rounded-full bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center">
-              <span className="text-xs font-medium text-brand-600 dark:text-brand-400">
-                {item.owner.name.charAt(0).toUpperCase()}
-              </span>
-            </div>
-            <span className="text-xs text-slate-500 dark:text-slate-400 truncate max-w-[80px]">
-              {item.owner.name}
-            </span>
-          </div>
-        )}
-      </div>
-
-      {/* Source */}
-      {item.source && (
-        <div className="mt-2 text-xs text-slate-400 dark:text-slate-500">
-          Source: {item.source}
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ============================================================================
 // Main Component
@@ -163,11 +61,10 @@ export function LeadsPage() {
   const { leads, updateLead } = useSalesStore();
   const { leadStages, leadLabels, leadSources } = useFieldsStore();
   const { users } = useUsersStore();
-  const { companies, contacts } = useClientsStore();
   const { openAddLead } = useFormStack();
 
-  // View state
-  const [viewMode, setViewMode] = useState<ViewMode>('kanban');
+  // View state - persisted
+  const [viewMode, setViewMode] = usePersistedViewMode('leads-view-mode', 'kanban', ['list', 'kanban'] as const);
   const [search, setSearch] = useState('');
   const [stageFilter, setStageFilter] = useState('');
   const [labelFilter, setLabelFilter] = useState('');
@@ -175,63 +72,10 @@ export function LeadsPage() {
   const [sourceFilter, setSourceFilter] = useState('');
 
   // Sort state (for list view)
-  const [sortField, setSortField] = useState<SortField>('createdAt');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const { sortField, sortDirection, handleSort } = useTableSort<SortField>('createdAt', 'desc');
 
-  // URL params for opening panel with pre-filled data
-  const [searchParams, setSearchParams] = useSearchParams();
-  
-  // Handle URL params to open panel with pre-filled contact/company
-  useEffect(() => {
-    const newLead = searchParams.get('newLead');
-    const contactId = searchParams.get('contactId');
-    const companyId = searchParams.get('companyId');
-    const name = searchParams.get('name');
-    
-    if (newLead === 'true') {
-      // Get company/contact info
-      let defaultCompanyId: string | undefined;
-      let defaultCompanyName: string | undefined;
-      let defaultContactId: string | undefined;
-      let defaultContactName: string | undefined;
-      
-      if (companyId) {
-        const company = companies.find(c => c.id === companyId);
-        if (company) {
-          defaultCompanyId = company.id;
-          defaultCompanyName = company.name;
-        }
-      }
-      
-      if (contactId) {
-        const contact = contacts.find(c => c.id === contactId);
-        if (contact) {
-          defaultContactId = contact.id;
-          defaultContactName = `${contact.firstName} ${contact.lastName}`.trim();
-          // Also set company from contact if not already set
-          if (!defaultCompanyId && contact.companyId) {
-            const company = companies.find(c => c.id === contact.companyId);
-            if (company) {
-              defaultCompanyId = company.id;
-              defaultCompanyName = company.name;
-            }
-          }
-        }
-      }
-      
-      // Open the form
-      openAddLead({
-        defaultName: name || undefined,
-        defaultCompanyId,
-        defaultCompanyName,
-        defaultContactId,
-        defaultContactName,
-      });
-      
-      // Clear URL params
-      setSearchParams({}, { replace: true });
-    }
-  }, [searchParams, companies, contacts, openAddLead, setSearchParams]);
+  // Open add form if URL params present
+  useEntityFormFromUrlParams('newLead', openAddLead);
 
   // Check if any filters are active
   const hasActiveFilters = search || stageFilter || labelFilter || ownerFilter || sourceFilter;
@@ -408,7 +252,7 @@ export function LeadsPage() {
     return colorMap[label.color] || colorMap.gray;
   }, [leadLabels]);
 
-  const kanbanColumns: KanbanColumn<LeadCardData>[] = useMemo(() => {
+  const kanbanColumns: KanbanColumn<SalesCardData>[] = useMemo(() => {
     return leadStages.map(stage => {
       const stageLeads = filteredLeads
         .filter(lead => lead.stage === stage.name)
@@ -440,22 +284,13 @@ export function LeadsPage() {
   // Handlers
   // ============================================================================
 
-  const handleSort = useCallback((field: string) => {
-    if (sortField === field) {
-      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortField(field as SortField);
-      setSortDirection('asc');
-    }
-  }, [sortField]);
-
   const handleAddLead = useCallback(() => {
     openAddLead({});
   }, [openAddLead]);
 
-  const handleViewLead = useCallback((leadOrCard: Lead | LeadCardData) => {
-    const lead = 'slug' in leadOrCard 
-      ? leadOrCard as Lead 
+  const handleViewLead = useCallback((leadOrCard: Lead | SalesCardData) => {
+    const lead = 'slug' in leadOrCard
+      ? leadOrCard as Lead
       : leads.find(l => l.id === leadOrCard.id);
     if (lead) {
       navigate(`/sales/leads/${lead.slug || lead.id}`);
@@ -573,6 +408,7 @@ export function LeadsPage() {
     <Page
       title="Leads"
       description="Track and manage your sales leads"
+      fillHeight
       actions={
         <Button variant="primary" onClick={handleAddLead}>
           <Plus className="w-4 h-4 mr-1.5" />
@@ -580,6 +416,7 @@ export function LeadsPage() {
         </Button>
       }
     >
+      <div className="flex flex-col h-full min-h-0">
       {/* Filter Bar */}
       <FilterBar
         rightContent={
@@ -650,39 +487,42 @@ export function LeadsPage() {
 
       {/* Content */}
       {viewMode === 'kanban' ? (
-        <KanbanBoard
-          columns={kanbanColumns}
-          renderCard={(props) => <LeadCard {...props} />}
-          getItemId={(item) => item.id}
-          getItemValue={(item) => item.value || 0}
-          formatValue={(val) => `$${val.toLocaleString()}`}
-          onItemMove={handleKanbanMove}
-          onCardClick={handleViewLead}
-          onAddClick={handleAddLead}
-          showTotals
-        />
+        <div className="flex-1 min-h-0">
+          <KanbanBoard
+            columns={kanbanColumns}
+            renderCard={(props) => <SalesKanbanCard {...props} />}
+            getItemId={(item) => item.id}
+            getItemValue={(item) => item.value || 0}
+            formatValue={(val) => `$${val.toLocaleString()}`}
+            onItemMove={handleKanbanMove}
+            onCardClick={handleViewLead}
+            onAddClick={handleAddLead}
+            showTotals
+          />
+        </div>
       ) : (
-        <DataTable
-          data={filteredLeads}
-          columns={columns}
-          rowKey={(lead) => lead.id}
-          onRowClick={handleRowClick}
-          onSort={handleSort}
-          sortField={sortField}
-          sortDirection={sortDirection}
-          emptyState={
-            <div className="text-center py-12">
-              <Target className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-slate-900 dark:text-white mb-2">No leads yet</h3>
-              <p className="text-slate-500 dark:text-slate-400 mb-4">Create your first lead to start tracking your sales pipeline.</p>
-              <Button variant="primary" onClick={handleAddLead}>
-                <Plus className="w-4 h-4 mr-1.5" />
-                New Lead
-              </Button>
-            </div>
-          }
-        />
+        <div className="flex-1 min-h-0">
+          <DataTable
+            data={filteredLeads}
+            columns={columns}
+            rowKey={(lead) => lead.id}
+            onRowClick={handleRowClick}
+            onSort={handleSort}
+            sortField={sortField}
+            sortDirection={sortDirection}
+            emptyState={
+              <EmptyTableState
+                icon={Target}
+                hasFilters={!!hasActiveFilters}
+                entityName="lead"
+                onAdd={handleAddLead}
+                addLabel="New Lead"
+              />
+            }
+          />
+        </div>
       )}
+      </div>
     </Page>
   );
 }

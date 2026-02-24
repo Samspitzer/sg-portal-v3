@@ -21,7 +21,7 @@ import {
   UserDeactivationModal 
 } from '@/components/common';
 import { useToast, useFieldsStore, useUsersStore, useCompanyStore, type User } from '@/contexts';
-import { useFormChanges, useDocumentTitle, getUserUrl, useSafeNavigate } from '@/hooks';
+import { useFormChanges, useDocumentTitle, getUserUrl, useSafeNavigate, useTableSort } from '@/hooks';
 import { validateEmail, validatePhone } from '@/utils/validation';
 import { generateUserSlug } from '@/utils/slugUtils';
 
@@ -44,7 +44,6 @@ const initialFormData: UserFormData = {
 };
 
 type SortField = 'name' | 'department';
-type SortDirection = 'asc' | 'desc';
 
 // Add User Modal Component (Add only - editing happens on UserDetailPage)
 function AddUserModal({
@@ -278,8 +277,7 @@ export function ManageUsersPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
   const [userToToggle, setUserToToggle] = useState<User | null>(null);
-  const [sortField, setSortField] = useState<SortField>('name');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const { sortField, sortDirection, handleSort } = useTableSort<SortField>('name');
   const toast = useToast();
   useDocumentTitle('Manage Users');
 
@@ -515,15 +513,6 @@ export function ManageUsersPage() {
 
     return filtered;
   }, [users, search, statusFilter, departmentFilter, officeFilter, sortField, sortDirection, getDepartmentName]);
-
-  const handleSort = (field: string) => {
-    if (sortField === field) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortField(field as SortField);
-      setSortDirection('asc');
-    }
-  };
 
   const handleSave = async (formData: UserFormData) => {
     setIsLoading(true);

@@ -1,10 +1,12 @@
 // ============================================================================
 // ActivitiesPage - Sales Activities & Tasks
 // Location: src/components/panels/sales/ActivitiesPage.tsx
+//
+// Mirrors TasksPage exactly, but only shows tasks linked to leads or deals.
+// Cascading filters, show/hide closed tasks, QuickFilters for time.
 // ============================================================================
 
 import { useState, useMemo, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { clsx } from 'clsx';
 import {
   Activity,
@@ -12,27 +14,28 @@ import {
   Target,
   TrendingUp,
   User,
+  Building2,
   Calendar as CalendarIcon,
   Clock,
   Check,
   Trash2,
-  LayoutList,
-  LayoutGrid,
 } from 'lucide-react';
 import { Page } from '@/components/layout';
 import {
   Button,
-  Card,
-  CardContent,
   SearchInput,
   SelectFilter,
   FilterBar,
   FilterCount,
+  FilterToggle,
+  QuickFilters,
+  type QuickFilterOption,
   DataTable,
-  QuickViewModal,
-  type QuickViewField,
   type DataTableColumn,
   TaskTypeIcon,
+  QuickViewModal,
+  type QuickViewField,
+  type QuickViewAction,
 } from '@/components/common';
 import { useFormStack } from '@/components/panels/add-forms';
 import {
@@ -41,284 +44,122 @@ import {
   useToast,
 } from '@/contexts';
 import { useTaskStore, type Task, type TaskInput } from '@/contexts/taskStore';
-import { useTaskTypesStore, type TaskTypeConfig } from '@/contexts/taskTypesStore';
-import { useDocumentTitle } from '@/hooks';
-import { formatDate } from '@/utils/dateUtils';
+import { useTaskTypesStore } from '@/contexts/taskTypesStore';
+import { useDocumentTitle, useTableSort } from '@/hooks';
+import { parseLocalDate, formatDate, taskMatchesTimeFilter } from '@/utils/dateUtils';
+import { TASK_PRIORITY_CONFIG, type TimeFilter } from '@/utils/taskConstants';
 
 // ============================================================================
-// Constants
+// Types
 // ============================================================================
 
-const TASK_PRIORITIES: { value: string; label: string; color: string }[] = [
-  { value: 'low', label: 'Low', color: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300' },
-  { value: 'medium', label: 'Medium', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' },
-  { value: 'high', label: 'High', color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' },
-  { value: 'urgent', label: 'Urgent', color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' },
-];
-
-const TASK_STATUSES = [
-  { value: 'todo', label: 'To Do' },
-  { value: 'in_progress', label: 'In Progress' },
-  { value: 'completed', label: 'Completed' },
-  { value: 'cancelled', label: 'Cancelled' },
-];
-
-const LINKED_TYPES = [
-  { value: 'all', label: 'All Activities' },
-  { value: 'lead', label: 'Lead Activities' },
-  { value: 'deal', label: 'Deal Activities' },
-];
+type LinkedTypeFilter = 'all' | 'lead' | 'deal';
 
 // ============================================================================
-// Task Quick View Component
+// Task Quick View
 // ============================================================================
 
-function TaskQuickViewComponent({
+function TaskQuickView({
   task,
   isOpen,
-  taskTypes,
-  users,
   onClose,
   onEdit,
   onMarkDone,
   onDelete,
+  users,
 }: {
   task: Task | null;
   isOpen: boolean;
-  taskTypes: TaskTypeConfig[];
-  users: { id: string; name: string }[];
   onClose: () => void;
   onEdit: () => void;
   onMarkDone: () => void;
   onDelete: () => void;
+  users: { id: string; name: string }[];
 }) {
-  const navigate = useNavigate();
-  
   if (!task) return null;
 
-  const taskType = taskTypes.find(t => t.value === task.type);
   const assignedUser = users.find(u => u.id === task.assignedUserId);
-  const priority = TASK_PRIORITIES.find(p => p.value === task.priority);
+  const priority = TASK_PRIORITY_CONFIG.find(p => p.value === task.priority);
+  const isCompleted = task.status === 'completed';
 
-  const badges: { label: string; className?: string }[] = [
+  const badges: { label: string; className?: string }[] = [];
+  if (priority) badges.push({ label: priority.label, className: priority.color });
+  if (isCompleted) badges.push({ label: 'Completed', className: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' });
+
+  const fields: QuickViewField[] = [
     {
-      label: task.status === 'completed' ? 'Completed' : task.status === 'in_progress' ? 'In Progress' : 'Pending',
-      className: task.status === 'completed'
-        ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-        : task.status === 'in_progress'
-          ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
-          : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
+      label: 'Assigned To',
+      value: assignedUser?.name,
+      icon: <User className="w-4 h-4" />,
+      hideIfEmpty: true,
+    },
+    {
+      label: 'Due Date',
+      value: task.dueDate ? formatDate(task.dueDate, 'short') : undefined,
+      icon: <CalendarIcon className="w-4 h-4" />,
+      hideIfEmpty: true,
+    },
+    {
+      label: 'Linked Lead/Deal',
+      value: task.linkedItem?.name,
+      icon: task.linkedItem?.type === 'deal'
+        ? <TrendingUp className="w-4 h-4" />
+        : <Target className="w-4 h-4" />,
+      onClick: task.linkedItem
+        ? () => { window.location.href = `/sales/${task.linkedItem!.type}s/${task.linkedItem!.id}`; onClose(); }
+        : undefined,
+      hideIfEmpty: true,
+    },
+    {
+      label: 'Company',
+      value: task.linkedContact?.type === 'company' ? task.linkedContact.name : undefined,
+      icon: <Building2 className="w-4 h-4" />,
+      hideIfEmpty: true,
+    },
+    {
+      label: 'Notes',
+      value: task.notes,
+      icon: <Activity className="w-4 h-4" />,
+      hideIfEmpty: true,
+      fullWidth: true,
     },
   ];
 
-  if (priority) {
-    badges.push({ label: priority.label, className: priority.color });
-  }
+  const leftActions: QuickViewAction[] = !isCompleted ? [
+    {
+      label: 'Mark Done',
+      icon: <Check className="w-4 h-4" />,
+      onClick: onMarkDone,
+      variant: 'secondary',
+    },
+  ] : [];
 
-  const fields: QuickViewField[] = [];
-
-  if (taskType) {
-    fields.push({
-      label: 'Type',
-      value: taskType.label,
-    });
-  }
-
-  if (assignedUser) {
-    fields.push({
-      label: 'Assigned To',
-      value: assignedUser.name,
-    });
-  }
-
-  if (task.linkedItem) {
-    fields.push({
-      label: task.linkedItem.type === 'lead' ? 'Lead' : 'Deal',
-      value: task.linkedItem.name,
-      onClick: () => {
-        onClose();
-        navigate(`/sales/${task.linkedItem!.type}s/${task.linkedItem!.id}`);
-      },
-    });
-  }
-
-  if (task.description) {
-    fields.push({ label: 'Description', value: task.description });
-  }
+  const rightActions: QuickViewAction[] = [
+    {
+      label: 'Edit',
+      onClick: onEdit,
+      variant: 'secondary',
+    },
+    {
+      label: 'Delete',
+      icon: <Trash2 className="w-4 h-4" />,
+      onClick: onDelete,
+      variant: 'danger',
+    },
+  ];
 
   return (
     <QuickViewModal
       isOpen={isOpen}
       onClose={onClose}
       title={task.title}
-      subtitle={
-        <>
-          {task.dueDate && (
-            <span className="flex items-center gap-1">
-              <CalendarIcon className="w-3.5 h-3.5" />
-              {formatDate(task.dueDate, 'long')}
-            </span>
-          )}
-          {task.dueTime && (
-            <span className="flex items-center gap-1">
-              <Clock className="w-3.5 h-3.5" />
-              {task.dueTime}
-            </span>
-          )}
-        </>
-      }
-      icon={
-        taskType ? (
-          <TaskTypeIcon icon={taskType.icon} className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-        ) : (
-          <Clock className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-        )
-      }
+      icon={<Clock className="w-5 h-5 text-blue-600 dark:text-blue-400" />}
+      iconBgClass="bg-blue-100 dark:bg-blue-900/30"
       badges={badges}
       fields={fields}
-      notes={task.notes}
-      footerMeta={<>Created {new Date(task.createdAt).toLocaleString()}</>}
-      leftActions={[
-        {
-          label: 'Delete',
-          icon: <Trash2 className="w-4 h-4" />,
-          onClick: onDelete,
-          variant: 'danger',
-        },
-        ...(task.status !== 'completed'
-          ? [{ label: 'Mark as done', icon: <Check className="w-4 h-4" />, onClick: onMarkDone }]
-          : []),
-      ]}
-      primaryAction={{ label: 'Edit Task', onClick: onEdit }}
+      leftActions={leftActions}
+      rightActions={rightActions}
     />
-  );
-}
-
-// ============================================================================
-// Activity Card Component
-// ============================================================================
-
-function ActivityCard({
-  task,
-  taskType,
-  assignedUser,
-  onClick,
-  onMarkDone,
-}: {
-  task: Task;
-  taskType?: TaskTypeConfig;
-  assignedUser?: { name: string };
-  onClick: () => void;
-  onMarkDone: () => void;
-}) {
-  const navigate = useNavigate();
-  const priority = TASK_PRIORITIES.find(p => p.value === task.priority);
-  const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && task.status !== 'completed';
-
-  return (
-    <Card 
-      className="hover:shadow-md transition-shadow cursor-pointer"
-      onClick={onClick}
-    >
-      <CardContent className="p-4">
-        <div className="flex items-start gap-3">
-          {/* Task Type Icon */}
-          <div className={clsx(
-            'w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0',
-            task.status === 'completed'
-              ? 'bg-green-100 dark:bg-green-900/30'
-              : 'bg-blue-100 dark:bg-blue-900/30'
-          )}>
-            {taskType ? (
-              <TaskTypeIcon 
-                icon={taskType.icon} 
-                className={clsx(
-                  'w-5 h-5',
-                  task.status === 'completed'
-                    ? 'text-green-600 dark:text-green-400'
-                    : 'text-blue-600 dark:text-blue-400'
-                )}
-              />
-            ) : (
-              <Activity className={clsx(
-                'w-5 h-5',
-                task.status === 'completed'
-                  ? 'text-green-600 dark:text-green-400'
-                  : 'text-blue-600 dark:text-blue-400'
-              )} />
-            )}
-          </div>
-
-          {/* Content */}
-          <div className="flex-1 min-w-0">
-            <div className="flex items-start justify-between gap-2">
-              <h3 className={clsx(
-                'font-medium text-slate-900 dark:text-white truncate',
-                task.status === 'completed' && 'line-through text-slate-500'
-              )}>
-                {task.title}
-              </h3>
-              {priority && (
-                <span className={clsx('px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0', priority.color)}>
-                  {priority.label}
-                </span>
-              )}
-            </div>
-
-            {/* Linked Entity */}
-            {task.linkedItem && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  navigate(`/sales/${task.linkedItem!.type}s/${task.linkedItem!.id}`);
-                }}
-                className="flex items-center gap-1.5 mt-1 text-sm text-brand-600 dark:text-brand-400 hover:underline"
-              >
-                {task.linkedItem.type === 'lead' ? (
-                  <Target className="w-3.5 h-3.5" />
-                ) : (
-                  <TrendingUp className="w-3.5 h-3.5" />
-                )}
-                {task.linkedItem.name}
-              </button>
-            )}
-
-            {/* Meta info */}
-            <div className="flex items-center gap-3 mt-2 text-xs text-slate-500 dark:text-slate-400">
-              {task.dueDate && (
-                <span className={clsx(
-                  'flex items-center gap-1',
-                  isOverdue && 'text-red-600 dark:text-red-400 font-medium'
-                )}>
-                  <CalendarIcon className="w-3.5 h-3.5" />
-                  {formatDate(task.dueDate, 'short')}
-                </span>
-              )}
-              {assignedUser && (
-                <span className="flex items-center gap-1">
-                  <User className="w-3.5 h-3.5" />
-                  {assignedUser.name}
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Quick Action */}
-          {task.status !== 'completed' && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onMarkDone();
-              }}
-              className="p-2 text-slate-400 hover:text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg transition-colors"
-              title="Mark as done"
-            >
-              <Check className="w-4 h-4" />
-            </button>
-          )}
-        </div>
-      </CardContent>
-    </Card>
   );
 }
 
@@ -328,119 +169,190 @@ function ActivityCard({
 
 export function ActivitiesPage() {
   useDocumentTitle('Sales Activities');
-  const navigate = useNavigate();
   const toast = useToast();
 
-  // Stores
   const { leads, deals } = useSalesStore();
   const { users } = useUsersStore();
   const { tasks, updateTask, deleteTask } = useTaskStore();
-  const { taskTypes } = useTaskTypesStore();
-  const { openAddTask } = useFormStack();
+  const { taskTypes, getActiveTaskTypes } = useTaskTypesStore();
+  const { openAddTask, openEditTask } = useFormStack();
 
   // State
-  const [searchQuery, setSearchQuery] = useState('');
-  const [linkedTypeFilter, setLinkedTypeFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState('');
-  const [priorityFilter, setPriorityFilter] = useState('');
-  const [ownerFilter, setOwnerFilter] = useState('');
-  const [viewMode, setViewMode] = useState<'list' | 'cards'>('cards');
+  const [search, setSearch] = useState('');
+  const [selectedUser, setSelectedUser] = useState('');
+  const [selectedType, setSelectedType] = useState('');
+  const [linkedTypeFilter, setLinkedTypeFilter] = useState<LinkedTypeFilter>('all');
+  const [timeFilter, setTimeFilter] = useState<TimeFilter>('all');
+  const [showClosed, setShowClosed] = useState(false);
+  const { sortField, sortDirection, handleSort } = useTableSort<string>('dueDate');
   const [quickViewTask, setQuickViewTask] = useState<Task | null>(null);
 
-  // Filter to only sales-related tasks (linked to leads or deals)
-  const salesTasks = useMemo(() => {
-    return tasks.filter(task => 
-      task.linkedItem?.type === 'lead' || task.linkedItem?.type === 'deal'
-    );
-  }, [tasks]);
+  void leads;
+  void deals;
 
-  // Apply filters
+  // Only sales-linked tasks (lead or deal)
+  const salesTasks = useMemo(() =>
+    tasks.filter(task =>
+      task.linkedItem?.type === 'lead' || task.linkedItem?.type === 'deal'
+    ),
+    [tasks]
+  );
+
+  // Cascading task type options (based on user + time + linkedType filters)
+  const taskTypeOptions = useMemo(() => {
+    const activeTypes = getActiveTaskTypes();
+    const allTypeCounts = new Map<string, number>();
+    const filteredTypeCounts = new Map<string, number>();
+
+    salesTasks.forEach(t => {
+      if (!t.type) return;
+      const isClosed = t.status === 'completed' || t.status === 'cancelled';
+      if (isClosed && !showClosed) return;
+
+      allTypeCounts.set(t.type, (allTypeCounts.get(t.type) || 0) + 1);
+
+      let matches = true;
+      if (selectedUser) matches = t.assignedUserId === selectedUser;
+      if (timeFilter !== 'all' && matches) matches = taskMatchesTimeFilter(t.dueDate, timeFilter);
+      if (linkedTypeFilter !== 'all' && matches) matches = t.linkedItem?.type === linkedTypeFilter;
+
+      if (matches) filteredTypeCounts.set(t.type, (filteredTypeCounts.get(t.type) || 0) + 1);
+    });
+
+    const hasActive = !!(selectedUser || timeFilter !== 'all' || linkedTypeFilter !== 'all');
+    return activeTypes
+      .map(tt => ({
+        value: tt.value,
+        label: tt.label,
+        count: hasActive ? (filteredTypeCounts.get(tt.value) || 0) : (allTypeCounts.get(tt.value) || 0),
+        disabled: hasActive ? (filteredTypeCounts.get(tt.value) || 0) === 0 : false,
+      }))
+      .filter(tt => (allTypeCounts.get(tt.value) || 0) > 0)
+      .sort((a, b) => {
+        if (a.disabled !== b.disabled) return a.disabled ? 1 : -1;
+        return a.label.localeCompare(b.label);
+      });
+  }, [salesTasks, selectedUser, timeFilter, linkedTypeFilter, getActiveTaskTypes, showClosed]);
+
+  // Cascading user options
+  const userOptions = useMemo(() => {
+    const allCounts = new Map<string, number>();
+    const filtCounts = new Map<string, number>();
+
+    salesTasks.forEach(t => {
+      if (!t.assignedUserId) return;
+      const isClosed = t.status === 'completed' || t.status === 'cancelled';
+      if (isClosed && !showClosed) return;
+
+      allCounts.set(t.assignedUserId, (allCounts.get(t.assignedUserId) || 0) + 1);
+
+      let matches = true;
+      if (selectedType) matches = t.type === selectedType;
+      if (timeFilter !== 'all' && matches) matches = taskMatchesTimeFilter(t.dueDate, timeFilter);
+      if (linkedTypeFilter !== 'all' && matches) matches = t.linkedItem?.type === linkedTypeFilter;
+
+      if (matches) filtCounts.set(t.assignedUserId, (filtCounts.get(t.assignedUserId) || 0) + 1);
+    });
+
+    const hasActive = !!(selectedType || timeFilter !== 'all' || linkedTypeFilter !== 'all');
+    return users
+      .filter(u => u.isActive && (allCounts.get(u.id) || 0) > 0)
+      .map(u => ({
+        value: u.id,
+        label: u.name,
+        count: hasActive ? (filtCounts.get(u.id) || 0) : (allCounts.get(u.id) || 0),
+        disabled: hasActive ? (filtCounts.get(u.id) || 0) === 0 : false,
+      }))
+      .sort((a, b) => {
+        if (a.disabled !== b.disabled) return a.disabled ? 1 : -1;
+        return a.label.localeCompare(b.label);
+      });
+  }, [salesTasks, users, selectedType, timeFilter, linkedTypeFilter, showClosed]);
+
+  // Overdue count for QuickFilters warning
+  const overdueCount = useMemo(() =>
+    salesTasks.filter(t => {
+      if (!t.dueDate || t.status === 'completed' || t.status === 'cancelled') return false;
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const d = parseLocalDate(t.dueDate); d.setHours(0, 0, 0, 0);
+      return d < today;
+    }).length,
+    [salesTasks]
+  );
+
+  const timeFilterOptions: QuickFilterOption<TimeFilter>[] = useMemo(() => [
+    { value: 'all', label: 'All' },
+    { value: 'overdue', label: 'Overdue', count: overdueCount, isWarning: true },
+    { value: 'today', label: 'Today' },
+    { value: 'tomorrow', label: 'Tomorrow' },
+    { value: 'this-week', label: 'This Week' },
+    { value: 'next-week', label: 'Next Week' },
+  ], [overdueCount]);
+
+  // Linked type options (lead/deal toggle)
+  const linkedTypeOptions = [
+    { value: 'all', label: 'All' },
+    { value: 'lead', label: 'Leads' },
+    { value: 'deal', label: 'Deals' },
+  ];
+
+  // Filter tasks
   const filteredTasks = useMemo(() => {
     return salesTasks.filter(task => {
-      // Search
-      if (searchQuery) {
-        const query = searchQuery.toLowerCase();
-        const matchesTitle = task.title.toLowerCase().includes(query);
-        const matchesLinkedItem = task.linkedItem?.name.toLowerCase().includes(query);
-        if (!matchesTitle && !matchesLinkedItem) return false;
-      }
+      const isClosed = task.status === 'completed' || task.status === 'cancelled';
+      if (isClosed && !showClosed) return false;
 
-      // Linked type filter
-      if (linkedTypeFilter !== 'all' && task.linkedItem?.type !== linkedTypeFilter) {
-        return false;
-      }
+      const searchLower = search.toLowerCase();
+      const matchesSearch = !search ||
+        task.title.toLowerCase().includes(searchLower) ||
+        task.linkedItem?.name.toLowerCase().includes(searchLower) ||
+        task.linkedContact?.name.toLowerCase().includes(searchLower);
 
-      // Status filter
-      if (statusFilter && task.status !== statusFilter) {
-        return false;
-      }
+      const matchesUser = !selectedUser || task.assignedUserId === selectedUser;
+      const matchesType = !selectedType || task.type === selectedType;
+      const matchesLinkedType = linkedTypeFilter === 'all' || task.linkedItem?.type === linkedTypeFilter;
+      const matchesTimeFilter = showClosed && isClosed ? true : taskMatchesTimeFilter(task.dueDate, timeFilter);
 
-      // Priority filter
-      if (priorityFilter && task.priority !== priorityFilter) {
-        return false;
-      }
-
-      // Owner filter
-      if (ownerFilter && task.assignedUserId !== ownerFilter) {
-        return false;
-      }
-
-      return true;
+      return matchesSearch && matchesUser && matchesType && matchesLinkedType && matchesTimeFilter;
     });
-  }, [salesTasks, searchQuery, linkedTypeFilter, statusFilter, priorityFilter, ownerFilter]);
+  }, [salesTasks, search, selectedUser, selectedType, linkedTypeFilter, timeFilter, showClosed]);
 
-  // Sort by due date (overdue first, then upcoming)
+  // Sort tasks
   const sortedTasks = useMemo(() => {
-    return [...filteredTasks].sort((a, b) => {
-      // Completed tasks at the end
-      if (a.status === 'completed' && b.status !== 'completed') return 1;
-      if (a.status !== 'completed' && b.status === 'completed') return -1;
-      
-      // Then by due date
-      if (a.dueDate && b.dueDate) {
-        return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+    const sorted = [...filteredTasks];
+    sorted.sort((a, b) => {
+      let aVal: string | number | undefined;
+      let bVal: string | number | undefined;
+
+      switch (sortField) {
+        case 'dueDate':
+          aVal = a.dueDate ?? '';
+          bVal = b.dueDate ?? '';
+          break;
+        case 'title':
+          aVal = a.title.toLowerCase();
+          bVal = b.title.toLowerCase();
+          break;
+        case 'priority': {
+          const order = { urgent: 0, high: 1, medium: 2, low: 3, undefined: 4 };
+          aVal = order[a.priority as keyof typeof order] ?? 4;
+          bVal = order[b.priority as keyof typeof order] ?? 4;
+          break;
+        }
+        default:
+          return 0;
       }
-      if (a.dueDate) return -1;
-      if (b.dueDate) return 1;
-      
-      return 0;
+
+      if (aVal === bVal) return 0;
+      const dir = sortDirection === 'asc' ? 1 : -1;
+      return (aVal ?? '') < (bVal ?? '') ? -dir : dir;
     });
-  }, [filteredTasks]);
-
-  // Stats
-  const stats = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    return {
-      total: salesTasks.length,
-      pending: salesTasks.filter(t => t.status !== 'completed' && t.status !== 'cancelled').length,
-      overdue: salesTasks.filter(t => 
-        t.dueDate && 
-        new Date(t.dueDate) < today && 
-        t.status !== 'completed' && 
-        t.status !== 'cancelled'
-      ).length,
-      dueToday: salesTasks.filter(t => {
-        if (!t.dueDate || t.status === 'completed') return false;
-        const dueDate = new Date(t.dueDate);
-        dueDate.setHours(0, 0, 0, 0);
-        return dueDate.getTime() === today.getTime();
-      }).length,
-    };
-  }, [salesTasks]);
-
-  // Owner options
-  const ownerOptions = useMemo(() => 
-    users.filter(u => u.isActive).map(u => ({ value: u.id, label: u.name })),
-    [users]
-  );
+    return sorted;
+  }, [filteredTasks, sortField, sortDirection]);
 
   // Handlers
   const handleAddActivity = useCallback(() => {
-    openAddTask({
-      defaultLinkedItemType: 'lead',
-    });
+    openAddTask({});
   }, [openAddTask]);
 
   const handleMarkDone = useCallback(async (task: Task) => {
@@ -463,12 +375,12 @@ export function ActivitiesPage() {
     }
   }, [quickViewTask, deleteTask, toast]);
 
-  const handleEditTask = useCallback(() => {
-    navigate('/tasks');
+  const handleEditTask = useCallback((task: Task) => {
+    openEditTask({ task });
     setQuickViewTask(null);
-  }, [navigate]);
+  }, [openEditTask]);
 
-  // Table columns for list view
+  // Table columns
   const columns: DataTableColumn<Task>[] = useMemo(() => [
     {
       key: 'title',
@@ -476,45 +388,48 @@ export function ActivitiesPage() {
       sortable: true,
       render: (task: Task) => {
         const type = taskTypes.find(t => t.value === task.type);
+        const isOverdue = task.dueDate
+          ? parseLocalDate(task.dueDate) < new Date() && task.status !== 'completed'
+          : false;
         return (
           <div className="flex items-center gap-3">
-            <div className={clsx(
-              'w-8 h-8 rounded-lg flex items-center justify-center',
-              task.status === 'completed'
-                ? 'bg-green-100 dark:bg-green-900/30'
-                : 'bg-blue-100 dark:bg-blue-900/30'
-            )}>
-              {type ? (
-                <TaskTypeIcon 
-                  icon={type.icon} 
-                  className={clsx(
-                    'w-4 h-4',
-                    task.status === 'completed'
-                      ? 'text-green-600 dark:text-green-400'
-                      : 'text-blue-600 dark:text-blue-400'
-                  )}
-                />
-              ) : (
-                <Activity className={clsx(
-                  'w-4 h-4',
-                  task.status === 'completed'
-                    ? 'text-green-600 dark:text-green-400'
-                    : 'text-blue-600 dark:text-blue-400'
-                )} />
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                updateTask(task.id, {
+                  status: task.status === 'completed' ? 'todo' : 'completed',
+                } as Partial<TaskInput>);
+              }}
+              className={clsx(
+                'w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors',
+                task.status === 'completed'
+                  ? 'bg-green-500 border-green-500 text-white'
+                  : isOverdue
+                    ? 'border-red-400 hover:border-red-500 hover:bg-red-50 dark:hover:bg-red-900/20'
+                    : 'border-slate-300 dark:border-slate-600 hover:border-brand-400'
               )}
-            </div>
-            <div>
-              <p className={clsx(
-                'font-medium text-slate-900 dark:text-white',
-                task.status === 'completed' && 'line-through text-slate-500'
-              )}>
-                {task.title}
-              </p>
-              {task.linkedItem && (
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  {task.linkedItem.type === 'lead' ? 'Lead' : 'Deal'}: {task.linkedItem.name}
+            >
+              {task.status === 'completed' && <Check className="w-3 h-3" />}
+            </button>
+            <div className="flex items-center gap-2 min-w-0">
+              {type && <TaskTypeIcon icon={type.icon} className="w-4 h-4 text-slate-400 flex-shrink-0" />}
+              <div className="min-w-0">
+                <p className={clsx(
+                  'font-medium text-slate-900 dark:text-white truncate',
+                  task.status === 'completed' && 'line-through text-slate-400 dark:text-slate-500'
+                )}>
+                  {task.title}
                 </p>
-              )}
+                {task.linkedItem && (
+                  <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                    {task.linkedItem.type === 'lead'
+                      ? <Target className="w-3 h-3" />
+                      : <TrendingUp className="w-3 h-3" />}
+                    {task.linkedItem.name}
+                  </p>
+                )}
+              </div>
             </div>
           </div>
         );
@@ -526,10 +441,21 @@ export function ActivitiesPage() {
       sortable: true,
       render: (task: Task) => {
         if (!task.dueDate) return <span className="text-slate-400">—</span>;
-        const isOverdue = new Date(task.dueDate) < new Date() && task.status !== 'completed';
+        const taskDate = parseLocalDate(task.dueDate); taskDate.setHours(0, 0, 0, 0);
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        const isOverdue = taskDate < today && task.status !== 'completed';
         return (
-          <span className={clsx(isOverdue && 'text-red-600 dark:text-red-400 font-medium')}>
+          <span className={clsx(
+            'flex items-center gap-1 text-sm',
+            isOverdue ? 'text-red-600 dark:text-red-400 font-medium' : 'text-slate-600 dark:text-slate-300'
+          )}>
+            <CalendarIcon className="w-3.5 h-3.5" />
             {formatDate(task.dueDate, 'short')}
+            {task.dueTime && (
+              <span className="text-slate-400 flex items-center gap-0.5">
+                <Clock className="w-3 h-3" />{task.dueTime}
+              </span>
+            )}
           </span>
         );
       },
@@ -537,12 +463,13 @@ export function ActivitiesPage() {
     {
       key: 'priority',
       header: 'Priority',
+      sortable: true,
       render: (task: Task) => {
-        const priority = TASK_PRIORITIES.find(p => p.value === task.priority);
-        if (!priority) return null;
+        const p = TASK_PRIORITY_CONFIG.find(p => p.value === task.priority);
+        if (!p) return <span className="text-slate-400">—</span>;
         return (
-          <span className={clsx('px-2 py-0.5 rounded-full text-xs font-medium', priority.color)}>
-            {priority.label}
+          <span className={clsx('px-2 py-0.5 rounded-full text-xs font-medium', p.color)}>
+            {p.label}
           </span>
         );
       },
@@ -551,39 +478,42 @@ export function ActivitiesPage() {
       key: 'assignedUserId',
       header: 'Assigned To',
       render: (task: Task) => {
-        const user = users.find(u => u.id === task.assignedUserId);
-        return user ? user.name : <span className="text-slate-400">—</span>;
+        const u = users.find(u => u.id === task.assignedUserId);
+        return u ? (
+          <span className="flex items-center gap-1.5 text-sm text-slate-600 dark:text-slate-300">
+            <User className="w-3.5 h-3.5 text-slate-400" />{u.name}
+          </span>
+        ) : <span className="text-slate-400">—</span>;
       },
     },
     {
       key: 'status',
       header: 'Status',
-      render: (task: Task) => {
-        const status = TASK_STATUSES.find(s => s.value === task.status);
-        return (
-          <span className={clsx(
-            'px-2 py-0.5 rounded-full text-xs font-medium',
-            task.status === 'completed'
-              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-              : task.status === 'in_progress'
-                ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+      render: (task: Task) => (
+        <span className={clsx(
+          'px-2 py-0.5 rounded-full text-xs font-medium',
+          task.status === 'completed'
+            ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+            : task.status === 'in_progress'
+              ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+              : task.status === 'cancelled'
+                ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
                 : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
-          )}>
-            {status?.label || task.status}
-          </span>
-        );
-      },
+        )}>
+          {task.status === 'todo' ? 'To Do'
+            : task.status === 'in_progress' ? 'In Progress'
+            : task.status === 'completed' ? 'Completed'
+            : 'Cancelled'}
+        </span>
+      ),
     },
-  ], [taskTypes, users]);
-
-  // Suppress unused variable warnings
-  void leads;
-  void deals;
+  ], [taskTypes, users, updateTask]);
 
   return (
     <Page
       title="Activities"
-      description="Sales tasks and follow-ups"
+      description="Sales tasks linked to leads and deals"
+      fillHeight
       actions={
         <Button variant="primary" onClick={handleAddActivity}>
           <Plus className="w-4 h-4 mr-1.5" />
@@ -591,149 +521,128 @@ export function ActivitiesPage() {
         </Button>
       }
     >
-      {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-        <Card>
-          <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-slate-900 dark:text-white">{stats.total}</p>
-            <p className="text-sm text-slate-500 dark:text-slate-400">Total Activities</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">{stats.pending}</p>
-            <p className="text-sm text-slate-500 dark:text-slate-400">Pending</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-red-600 dark:text-red-400">{stats.overdue}</p>
-            <p className="text-sm text-slate-500 dark:text-slate-400">Overdue</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{stats.dueToday}</p>
-            <p className="text-sm text-slate-500 dark:text-slate-400">Due Today</p>
-          </CardContent>
-        </Card>
-      </div>
+      <div className="flex flex-col h-full min-h-0">
+        {/* Filter Bar */}
+        <FilterBar rightContent={
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setShowClosed(v => !v)}
+              className={clsx(
+                'flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all border',
+                showClosed
+                  ? 'bg-slate-700 text-white border-slate-700 dark:bg-slate-200 dark:text-slate-900 dark:border-slate-200'
+                  : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
+              )}
+            >
+              <Check className="w-3 h-3" />
+              Show closed
+            </button>
+            <FilterCount count={filteredTasks.length} singular="activity" plural="activities" />
+          </div>
+        }>
+          {/* Linked Type Toggle (All / Leads / Deals) */}
+          <FilterToggle
+            options={linkedTypeOptions}
+            value={linkedTypeFilter}
+            onChange={(v) => setLinkedTypeFilter(v as LinkedTypeFilter)}
+          />
 
-      {/* Filters */}
-      <FilterBar className="mb-4">
-        <SearchInput
-          value={searchQuery}
-          onChange={setSearchQuery}
-          placeholder="Search activities..."
-          className="w-64"
-        />
-        
-        <SelectFilter
-          label="Type"
-          value={linkedTypeFilter}
-          onChange={setLinkedTypeFilter}
-          options={LINKED_TYPES}
-        />
-        
-        <SelectFilter
-          label="Status"
-          value={statusFilter}
-          onChange={setStatusFilter}
-          options={TASK_STATUSES}
-        />
-        
-        <SelectFilter
-          label="Priority"
-          value={priorityFilter}
-          onChange={setPriorityFilter}
-          options={TASK_PRIORITIES.map(p => ({ value: p.value, label: p.label }))}
-        />
-        
-        <SelectFilter
-          label="Owner"
-          value={ownerFilter}
-          onChange={setOwnerFilter}
-          options={ownerOptions}
-        />
+          {/* Search */}
+          <SearchInput
+            value={search}
+            onChange={setSearch}
+            placeholder="Search activities..."
+            className="w-48"
+          />
 
-        <FilterCount count={sortedTasks.length} singular="activity" plural="activities" />
+          {/* Time Filter */}
+          <QuickFilters
+            options={timeFilterOptions}
+            value={timeFilter}
+            onChange={(v) => setTimeFilter(v as TimeFilter)}
+          />
 
-        <div className="ml-auto flex items-center gap-2">
-          <Button
-            variant={viewMode === 'cards' ? 'primary' : 'secondary'}
-            size="sm"
-            onClick={() => setViewMode('cards')}
-          >
-            <LayoutGrid className="w-4 h-4" />
-          </Button>
-          <Button
-            variant={viewMode === 'list' ? 'primary' : 'secondary'}
-            size="sm"
-            onClick={() => setViewMode('list')}
-          >
-            <LayoutList className="w-4 h-4" />
-          </Button>
-        </div>
-      </FilterBar>
-
-      {/* Results */}
-      {sortedTasks.length === 0 ? (
-        <Card>
-          <CardContent className="p-12 text-center">
-            <Activity className="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600" />
-            <h3 className="mt-4 text-lg font-medium text-slate-900 dark:text-white">
-              No activities found
-            </h3>
-            <p className="mt-2 text-slate-500 dark:text-slate-400">
-              {searchQuery
-                ? 'Try adjusting your search'
-                : 'Create tasks linked to leads or deals to see them here'}
-            </p>
-            <Button variant="primary" className="mt-4" onClick={handleAddActivity}>
-              <Plus className="w-4 h-4 mr-1.5" />
-              Add Activity
-            </Button>
-          </CardContent>
-        </Card>
-      ) : viewMode === 'cards' ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {sortedTasks.map(task => (
-            <ActivityCard
-              key={task.id}
-              task={task}
-              taskType={taskTypes.find(t => t.value === task.type)}
-              assignedUser={users.find(u => u.id === task.assignedUserId)}
-              onClick={() => setQuickViewTask(task)}
-              onMarkDone={() => handleMarkDone(task)}
+          {/* Cascading Type Filter */}
+          {taskTypeOptions.length > 0 && (
+            <SelectFilter
+              label="Type"
+              value={selectedType}
+              onChange={setSelectedType}
+              options={taskTypeOptions}
+              size="sm"
+              className="w-36"
             />
-          ))}
-        </div>
-      ) : (
-        <Card>
+          )}
+
+          {/* Cascading User Filter */}
+          {userOptions.length > 0 && (
+            <SelectFilter
+              label="Assigned To"
+              value={selectedUser}
+              onChange={setSelectedUser}
+              options={userOptions}
+              icon={User}
+              size="sm"
+              className="w-36"
+            />
+          )}
+
+          {(search || selectedUser || selectedType || linkedTypeFilter !== 'all' || timeFilter !== 'all') && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setSearch('');
+                setSelectedUser('');
+                setSelectedType('');
+                setLinkedTypeFilter('all');
+                setTimeFilter('all');
+              }}
+            >
+              Clear filters
+            </Button>
+          )}
+        </FilterBar>
+
+        {/* Data Table */}
+        <div className="flex-1 min-h-0">
           <DataTable
-            data={sortedTasks}
             columns={columns}
+            data={sortedTasks}
             rowKey={(task) => task.id}
             onRowClick={(task) => setQuickViewTask(task)}
+            sortField={sortField}
+            sortDirection={sortDirection}
+            onSort={handleSort}
             emptyState={
               <div className="text-center py-12">
                 <Activity className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-slate-900 dark:text-white mb-2">No activities found</h3>
-                <p className="text-slate-500 dark:text-slate-400">Try adjusting your filters</p>
+                <h3 className="text-lg font-medium text-slate-900 dark:text-white mb-2">
+                  No activities found
+                </h3>
+                <p className="text-slate-500 dark:text-slate-400 mb-4">
+                  {search || selectedUser || selectedType || linkedTypeFilter !== 'all' || timeFilter !== 'all'
+                    ? 'Try adjusting your filters'
+                    : 'Create tasks linked to leads or deals to see them here'}
+                </p>
+                <Button variant="primary" onClick={handleAddActivity}>
+                  <Plus className="w-4 h-4 mr-1.5" />
+                  Add Activity
+                </Button>
               </div>
             }
           />
-        </Card>
-      )}
+        </div>
+      </div>
 
-      {/* Task Quick View Modal */}
-      <TaskQuickViewComponent
+      {/* Quick View */}
+      <TaskQuickView
         task={quickViewTask}
         isOpen={!!quickViewTask}
-        taskTypes={taskTypes}
         users={users}
         onClose={() => setQuickViewTask(null)}
-        onEdit={handleEditTask}
+        onEdit={() => quickViewTask && handleEditTask(quickViewTask)}
         onMarkDone={async () => {
           if (quickViewTask) {
             await handleMarkDone(quickViewTask);

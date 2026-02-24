@@ -5,20 +5,19 @@
 // UPDATED: Now uses AddDealForm from add-forms via useFormStack
 // ============================================================================
 
-import { useState, useMemo, useCallback, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useState, useMemo, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { clsx } from 'clsx';
 import {
   Plus,
   TrendingUp,
   LayoutGrid,
   List,
-  Building2,
   User,
   Tag,
+  Megaphone,
   CheckCircle,
   XCircle,
-  Clock,
 } from 'lucide-react';
 import { Page } from '@/components/layout';
 import {
@@ -30,133 +29,30 @@ import {
   FilterToggle,
   DataTable,
   type DataTableColumn,
+  EmptyTableState,
 } from '@/components/common';
-import { KanbanBoard, type KanbanColumn, type KanbanCardProps } from '@/components/common/KanbanBoard';
+import { KanbanBoard, type KanbanColumn } from '@/components/common/KanbanBoard';
+import { SalesKanbanCard, type SalesCardData } from './SalesKanbanCard';
 import { useFormStack } from '@/components/panels/add-forms';
 import {
   useSalesStore,
   useFieldsStore,
   useUsersStore,
-  useClientsStore,
   useToast,
   type Deal,
 } from '@/contexts';
-import { useDocumentTitle } from '@/hooks';
+import { useDocumentTitle, useTableSort, usePersistedViewMode, useEntityFormFromUrlParams } from '@/hooks';
 import { formatDate } from '@/utils/dateUtils';
 
 // ============================================================================
 // Types
 // ============================================================================
 
-type ViewMode = 'list' | 'kanban';
 type SortField = 'name' | 'company' | 'value' | 'owner' | 'createdAt';
-type SortDirection = 'asc' | 'desc';
 type StatusFilter = '' | 'active' | 'won' | 'lost';
 
 // ============================================================================
 // Deal Card for Kanban
-// ============================================================================
-
-interface DealCardData {
-  id: string;
-  title: string;
-  subtitle?: string;
-  value?: number;
-  label?: { text: string; color: string };
-  owner?: { name: string };
-  companyName?: string;
-  contactName?: string;
-  status: 'active' | 'won' | 'lost';
-  createdAt: string;
-}
-
-function DealCard({
-  item,
-  onClick,
-  onDragStart,
-  isDragging,
-}: KanbanCardProps<DealCardData>) {
-  const statusColors = {
-    active: 'text-blue-600 dark:text-blue-400',
-    won: 'text-green-600 dark:text-green-400',
-    lost: 'text-red-600 dark:text-red-400',
-  };
-
-  const StatusIcon = item.status === 'won' ? CheckCircle : item.status === 'lost' ? XCircle : Clock;
-
-  return (
-    <div
-      draggable={item.status === 'active'}
-      onDragStart={(e) => item.status === 'active' && onDragStart(e, item)}
-      onClick={() => onClick(item)}
-      className={clsx(
-        'bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700',
-        'p-3 cursor-pointer transition-all duration-150',
-        'hover:shadow-md hover:border-slate-300 dark:hover:border-slate-600',
-        'group',
-        isDragging && 'opacity-50 shadow-lg scale-105',
-        item.status === 'won' && 'border-l-4 border-l-green-500',
-        item.status === 'lost' && 'border-l-4 border-l-red-500 opacity-60'
-      )}
-    >
-      {/* Title Row */}
-      <div className="flex items-start justify-between gap-2 mb-2">
-        <h4 className="font-medium text-slate-900 dark:text-white text-sm line-clamp-2">
-          {item.title}
-        </h4>
-        <StatusIcon className={clsx('w-4 h-4 flex-shrink-0', statusColors[item.status])} />
-      </div>
-
-      {/* Company/Contact */}
-      {(item.companyName || item.contactName) && (
-        <div className="text-xs text-slate-500 dark:text-slate-400 mb-2 space-y-0.5">
-          {item.companyName && (
-            <div className="flex items-center gap-1">
-              <Building2 className="w-3 h-3" />
-              <span className="truncate">{item.companyName}</span>
-            </div>
-          )}
-          {item.contactName && (
-            <div className="flex items-center gap-1">
-              <User className="w-3 h-3" />
-              <span className="truncate">{item.contactName}</span>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Value and Owner Row */}
-      <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-700">
-        {item.value !== undefined && item.value > 0 ? (
-          <span className={clsx(
-            'text-sm font-semibold',
-            item.status === 'won' ? 'text-green-600 dark:text-green-400' :
-            item.status === 'lost' ? 'text-slate-400 line-through' :
-            'text-green-600 dark:text-green-400'
-          )}>
-            ${item.value.toLocaleString()}
-          </span>
-        ) : (
-          <span className="text-xs text-slate-400">No value</span>
-        )}
-
-        {item.owner && (
-          <div className="flex items-center gap-1.5">
-            <div className="w-5 h-5 rounded-full bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center">
-              <span className="text-xs font-medium text-brand-600 dark:text-brand-400">
-                {item.owner.name.charAt(0).toUpperCase()}
-              </span>
-            </div>
-            <span className="text-xs text-slate-500 dark:text-slate-400 truncate max-w-[80px]">
-              {item.owner.name}
-            </span>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 // ============================================================================
 // Main Component
 // ============================================================================
@@ -168,85 +64,34 @@ export function DealsPage() {
 
   // Stores
   const { deals, updateDeal } = useSalesStore();
-  const { dealStages } = useFieldsStore();
+  const { dealStages, leadLabels, leadSources } = useFieldsStore();
   const { users } = useUsersStore();
-  const { companies, contacts } = useClientsStore();
   const { openAddDeal } = useFormStack();
 
-  // View state
-  const [viewMode, setViewMode] = useState<ViewMode>('kanban');
+  // View state - persisted
+  const [viewMode, setViewMode] = usePersistedViewMode('deals-view-mode', 'kanban', ['list', 'kanban'] as const);
   const [search, setSearch] = useState('');
   const [stageFilter, setStageFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('');
+  const [labelFilter, setLabelFilter] = useState('');
+  const [sourceFilter, setSourceFilter] = useState('');
   const [ownerFilter, setOwnerFilter] = useState('');
 
   // Sort state (for list view)
-  const [sortField, setSortField] = useState<SortField>('createdAt');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const { sortField, sortDirection, handleSort } = useTableSort<SortField>('createdAt', 'desc');
 
-  // URL params for opening panel with pre-filled data
-  const [searchParams, setSearchParams] = useSearchParams();
-  
-  // Handle URL params to open panel with pre-filled contact/company
-  useEffect(() => {
-    const newDeal = searchParams.get('newDeal');
-    const contactId = searchParams.get('contactId');
-    const companyId = searchParams.get('companyId');
-    const name = searchParams.get('name');
-    
-    if (newDeal === 'true') {
-      // Get company/contact info
-      let defaultCompanyId: string | undefined;
-      let defaultCompanyName: string | undefined;
-      let defaultContactId: string | undefined;
-      let defaultContactName: string | undefined;
-      
-      if (companyId) {
-        const company = companies.find(c => c.id === companyId);
-        if (company) {
-          defaultCompanyId = company.id;
-          defaultCompanyName = company.name;
-        }
-      }
-      
-      if (contactId) {
-        const contact = contacts.find(c => c.id === contactId);
-        if (contact) {
-          defaultContactId = contact.id;
-          defaultContactName = `${contact.firstName} ${contact.lastName}`.trim();
-          // Also set company from contact if not already set
-          if (!defaultCompanyId && contact.companyId) {
-            const company = companies.find(c => c.id === contact.companyId);
-            if (company) {
-              defaultCompanyId = company.id;
-              defaultCompanyName = company.name;
-            }
-          }
-        }
-      }
-      
-      // Open the form
-      openAddDeal({
-        defaultName: name || undefined,
-        defaultCompanyId,
-        defaultCompanyName,
-        defaultContactId,
-        defaultContactName,
-      });
-      
-      // Clear URL params
-      setSearchParams({}, { replace: true });
-    }
-  }, [searchParams, companies, contacts, openAddDeal, setSearchParams]);
+  // Open add form if URL params present
+  useEntityFormFromUrlParams('newDeal', openAddDeal);
 
   // Check if any filters are active
-  const hasActiveFilters = search || stageFilter || statusFilter || ownerFilter;
+  const hasActiveFilters = search || stageFilter || statusFilter || labelFilter || sourceFilter || ownerFilter;
 
-  // Clear all filters
   const clearFilters = useCallback(() => {
     setSearch('');
     setStageFilter('');
     setStatusFilter('');
+    setLabelFilter('');
+    setSourceFilter('');
     setOwnerFilter('');
   }, []);
 
@@ -256,7 +101,7 @@ export function DealsPage() {
   // Filter Options with Counts
   // ============================================================================
 
-  const getDealsMatchingOtherFilters = useCallback((excludeFilter: 'stage' | 'status' | 'owner') => {
+  const getDealsMatchingOtherFilters = useCallback((excludeFilter: 'stage' | 'status' | 'label' | 'source' | 'owner') => {
     return deals.filter(deal => !deal.deletedAt).filter(deal => {
       const searchLower = search.toLowerCase();
       const matchesSearch = !search || 
@@ -266,11 +111,13 @@ export function DealsPage() {
 
       const matchesStage = excludeFilter === 'stage' || !stageFilter || deal.stage === stageFilter;
       const matchesStatus = excludeFilter === 'status' || !statusFilter || deal.status === statusFilter;
+      const matchesLabel = excludeFilter === 'label' || !labelFilter || deal.label === labelFilter;
+      const matchesSource = excludeFilter === 'source' || !sourceFilter || deal.source === sourceFilter;
       const matchesOwner = excludeFilter === 'owner' || !ownerFilter || deal.ownerId === ownerFilter;
 
-      return matchesSearch && matchesStage && matchesStatus && matchesOwner;
+      return matchesSearch && matchesStage && matchesStatus && matchesLabel && matchesSource && matchesOwner;
     });
-  }, [deals, search, stageFilter, statusFilter, ownerFilter]);
+  }, [deals, search, stageFilter, statusFilter, labelFilter, sourceFilter, ownerFilter]);
 
   const stageOptions = useMemo(() => {
     const matchingDeals = getDealsMatchingOtherFilters('stage');
@@ -311,6 +158,44 @@ export function DealsPage() {
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [users, getDealsMatchingOtherFilters]);
 
+  const labelOptions = useMemo(() => {
+    const matchingDeals = getDealsMatchingOtherFilters('label');
+    return leadLabels
+      .map(lbl => ({
+        value: lbl.name,
+        label: lbl.name,
+        count: matchingDeals.filter(d => d.label === lbl.name).length,
+      }))
+      .filter(option => option.count > 0);
+  }, [leadLabels, getDealsMatchingOtherFilters]);
+
+  const sourceOptions = useMemo(() => {
+    const matchingDeals = getDealsMatchingOtherFilters('source');
+    return leadSources
+      .map(src => ({
+        value: src.name,
+        label: src.name,
+        count: matchingDeals.filter(d => d.source === src.name).length,
+      }))
+      .filter(option => option.count > 0);
+  }, [leadSources, getDealsMatchingOtherFilters]);
+
+  const getLabelColor = useCallback((labelName?: string) => {
+    if (!labelName) return '';
+    const lbl = leadLabels.find(l => l.name === labelName);
+    if (!lbl) return 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300';
+    const colorMap: Record<string, string> = {
+      red:    'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+      orange: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
+      yellow: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
+      green:  'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+      blue:   'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+      purple: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
+      gray:   'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300',
+    };
+    return colorMap[lbl.color] || colorMap.gray;
+  }, [leadLabels]);
+
   // ============================================================================
   // Filtered Deals
   // ============================================================================
@@ -325,17 +210,19 @@ export function DealsPage() {
 
       const matchesStage = !stageFilter || deal.stage === stageFilter;
       const matchesStatus = !statusFilter || deal.status === statusFilter;
+      const matchesLabel = !labelFilter || deal.label === labelFilter;
+      const matchesSource = !sourceFilter || deal.source === sourceFilter;
       const matchesOwner = !ownerFilter || deal.ownerId === ownerFilter;
 
-      return matchesSearch && matchesStage && matchesStatus && matchesOwner;
+      return matchesSearch && matchesStage && matchesStatus && matchesLabel && matchesSource && matchesOwner;
     });
-  }, [deals, search, stageFilter, statusFilter, ownerFilter]);
+  }, [deals, search, stageFilter, statusFilter, labelFilter, sourceFilter, ownerFilter]);
 
   // ============================================================================
   // Kanban Data
   // ============================================================================
 
-  const kanbanColumns: KanbanColumn<DealCardData>[] = useMemo(() => {
+  const kanbanColumns: KanbanColumn<SalesCardData>[] = useMemo(() => {
     return dealStages.map(stage => {
       const stageDeals = filteredDeals
         .filter(deal => deal.stage === stage.name)
@@ -346,6 +233,8 @@ export function DealsPage() {
           contactName: deal.contactName,
           value: deal.value,
           status: deal.status,
+          label: deal.label ? { text: deal.label, color: getLabelColor(deal.label) } : undefined,
+          source: deal.source,
           owner: deal.ownerName ? { name: deal.ownerName } : undefined,
           createdAt: deal.createdAt,
         }));
@@ -357,7 +246,7 @@ export function DealsPage() {
         items: stageDeals,
       };
     });
-  }, [dealStages, filteredDeals]);
+  }, [dealStages, filteredDeals, getLabelColor]);
 
   // ============================================================================
   // Stats
@@ -382,22 +271,13 @@ export function DealsPage() {
   // Handlers
   // ============================================================================
 
-  const handleSort = useCallback((field: string) => {
-    if (sortField === field) {
-      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortField(field as SortField);
-      setSortDirection('asc');
-    }
-  }, [sortField]);
-
   const handleAddDeal = useCallback(() => {
     openAddDeal({});
   }, [openAddDeal]);
 
-  const handleViewDeal = useCallback((dealOrCard: Deal | DealCardData) => {
-    const deal = 'slug' in dealOrCard 
-      ? dealOrCard as Deal 
+  const handleViewDeal = useCallback((dealOrCard: Deal | SalesCardData) => {
+    const deal = 'slug' in dealOrCard
+      ? dealOrCard as Deal
       : deals.find(d => d.id === dealOrCard.id);
     if (deal) {
       navigate(`/sales/deals/${deal.slug || deal.id}`);
@@ -496,6 +376,19 @@ export function DealsPage() {
       hideOnMobile: true,
     },
     {
+      key: 'label',
+      header: 'Label',
+      render: (deal) => {
+        if (!deal.label) return <span className="text-slate-400">—</span>;
+        return (
+          <span className={clsx('px-2 py-0.5 rounded text-xs font-medium', getLabelColor(deal.label))}>
+            {deal.label}
+          </span>
+        );
+      },
+      hideOnMobile: true,
+    },
+    {
       key: 'value',
       header: 'Value',
       sortable: true,
@@ -533,7 +426,7 @@ export function DealsPage() {
       ),
       hideOnMobile: true,
     },
-  ], [dealStages]);
+  ], [dealStages, getLabelColor]);
 
   // ============================================================================
   // Render
@@ -543,6 +436,7 @@ export function DealsPage() {
     <Page
       title="Deals"
       description="Track and manage your sales opportunities"
+      fillHeight
       actions={
         <Button variant="primary" onClick={handleAddDeal}>
           <Plus className="w-4 h-4 mr-1.5" />
@@ -551,7 +445,9 @@ export function DealsPage() {
       }
     >
       {/* Stats Bar */}
-      <div className="flex items-center gap-6 mb-4 text-sm">
+      <div className="flex flex-col h-full min-h-0">
+        {/* Stats Bar */}
+        <div className="flex items-center gap-6 mb-4 text-sm flex-shrink-0">
         <div className="flex items-center gap-2">
           <span className="text-slate-500 dark:text-slate-400">Pipeline:</span>
           <span className="font-semibold text-green-600 dark:text-green-400">
@@ -573,7 +469,7 @@ export function DealsPage() {
           <span className="text-slate-500 dark:text-slate-400">Lost:</span>
           <span className="font-medium text-red-600 dark:text-red-400">{stats.lost}</span>
         </div>
-      </div>
+        </div>
 
       {/* Filter Bar */}
       <FilterBar
@@ -618,6 +514,24 @@ export function DealsPage() {
           className="w-36"
         />
         <SelectFilter
+          label="Label"
+          value={labelFilter}
+          onChange={setLabelFilter}
+          options={labelOptions}
+          icon={Tag}
+          size="sm"
+          className="w-36"
+        />
+        <SelectFilter
+          label="Source"
+          value={sourceFilter}
+          onChange={setSourceFilter}
+          options={sourceOptions}
+          icon={Megaphone}
+          size="sm"
+          className="w-36"
+        />
+        <SelectFilter
           label="Owner"
           value={ownerFilter}
           onChange={setOwnerFilter}
@@ -635,9 +549,10 @@ export function DealsPage() {
 
       {/* Content */}
       {viewMode === 'kanban' ? (
-        <KanbanBoard
+          <div className="flex-1 min-h-0">
+            <KanbanBoard
           columns={kanbanColumns}
-          renderCard={(props) => <DealCard {...props} />}
+          renderCard={(props) => <SalesKanbanCard {...props} />}
           getItemId={(item) => item.id}
           getItemValue={(item) => item.status === 'active' ? (item.value || 0) : 0}
           formatValue={(val) => `$${val.toLocaleString()}`}
@@ -646,28 +561,30 @@ export function DealsPage() {
           onAddClick={handleAddDeal}
           showTotals
         />
+          </div>
       ) : (
-        <DataTable
-          data={filteredDeals}
-          columns={columns}
-          rowKey={(deal) => deal.id}
-          onRowClick={handleRowClick}
-          onSort={handleSort}
-          sortField={sortField}
-          sortDirection={sortDirection}
-          emptyState={
-            <div className="text-center py-12">
-              <TrendingUp className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-slate-900 dark:text-white mb-2">No deals yet</h3>
-              <p className="text-slate-500 dark:text-slate-400 mb-4">Create your first deal to start tracking your sales pipeline.</p>
-              <Button variant="primary" onClick={handleAddDeal}>
-                <Plus className="w-4 h-4 mr-1.5" />
-                New Deal
-              </Button>
-            </div>
-          }
-        />
+        <div className="flex-1 min-h-0">
+          <DataTable
+            data={filteredDeals}
+            columns={columns}
+            rowKey={(deal) => deal.id}
+            onRowClick={handleRowClick}
+            onSort={handleSort}
+            sortField={sortField}
+            sortDirection={sortDirection}
+            emptyState={
+              <EmptyTableState
+                icon={TrendingUp}
+                hasFilters={!!hasActiveFilters}
+                entityName="deal"
+                onAdd={handleAddDeal}
+                addLabel="New Deal"
+              />
+            }
+          />
+        </div>
       )}
+      </div>
     </Page>
   );
 }

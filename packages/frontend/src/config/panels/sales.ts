@@ -1,5 +1,6 @@
 import { 
   Handshake, 
+  LayoutDashboard,
   Target, 
   TrendingUp, 
   Activity, 
@@ -14,6 +15,13 @@ export const SALES_PANEL = {
   basePath: '/sales',
   icon: Handshake,
   tiles: [
+    {
+      id: 'dashboard',
+      name: 'Dashboard',
+      path: '/sales/dashboard',
+      icon: LayoutDashboard,
+      description: 'Sales insights & analytics',
+    },
     {
       id: 'leads',
       name: 'Leads',
@@ -41,7 +49,6 @@ export const SALES_PANEL = {
       path: '/sales/routes',
       icon: Map,
       description: 'Plan sales rep routes',
-      badge: 'Coming Soon',
     },
     {
       id: 'inbox',

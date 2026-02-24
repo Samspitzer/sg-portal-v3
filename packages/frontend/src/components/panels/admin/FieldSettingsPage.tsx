@@ -15,10 +15,12 @@ import {
   Handshake,
   Target,
   TrendingUp,
+  Tag,
+  Megaphone,
 } from 'lucide-react';
 import { Page } from '@/components/layout';
 import { Button, Input, Modal, Select, Toggle, TaskTypeIcon, CollapsibleSection } from '@/components/common';
-import { useFieldsStore, useUsersStore, useToast, type Department, type Position } from '@/contexts';
+import { useFieldsStore, useUsersStore, useToast, type Department, type Position, type SalesStage, type SalesLabel, type SalesSource } from '@/contexts';
 import { useTaskTypesStore, TASK_TYPE_ICONS, type TaskTypeConfig, type TaskTypeIconName } from '@/contexts/taskTypesStore';
 import { useDocumentTitle } from '@/hooks';
 
@@ -314,21 +316,109 @@ function DepartmentCard({
   );
 }
 
+// ============================================================================
+// Color Picker Constants & Components
+// ============================================================================
+
+// For stages: hex color swatches
+const STAGE_COLOR_OPTIONS = [
+  { hex: '#64748b', label: 'Slate' },
+  { hex: '#3b82f6', label: 'Blue' },
+  { hex: '#8b5cf6', label: 'Purple' },
+  { hex: '#06b6d4', label: 'Cyan' },
+  { hex: '#10b981', label: 'Green' },
+  { hex: '#f59e0b', label: 'Amber' },
+  { hex: '#f97316', label: 'Orange' },
+  { hex: '#ef4444', label: 'Red' },
+  { hex: '#ec4899', label: 'Pink' },
+  { hex: '#6366f1', label: 'Indigo' },
+];
+
+// For labels: named Tailwind colors (used as `bg-${name}-100 text-${name}-700`)
+const LABEL_COLOR_OPTIONS: { name: string; label: string; preview: string }[] = [
+  { name: 'slate',  label: 'Gray',   preview: 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300' },
+  { name: 'blue',   label: 'Blue',   preview: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' },
+  { name: 'cyan',   label: 'Cyan',   preview: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400' },
+  { name: 'green',  label: 'Green',  preview: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' },
+  { name: 'yellow', label: 'Yellow', preview: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' },
+  { name: 'orange', label: 'Orange', preview: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' },
+  { name: 'red',    label: 'Red',    preview: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' },
+  { name: 'pink',   label: 'Pink',   preview: 'bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400' },
+  { name: 'purple', label: 'Purple', preview: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400' },
+  { name: 'violet', label: 'Violet', preview: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400' },
+];
+
+function getLabelPreviewClass(colorName?: string) {
+  return LABEL_COLOR_OPTIONS.find(c => c.name === colorName)?.preview
+    ?? 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300';
+}
+
+// Stage hex color swatch row
+function StageColorPicker({ value, onChange }: { value: string; onChange: (hex: string) => void }) {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Color</label>
+      <div className="flex flex-wrap gap-2">
+        {STAGE_COLOR_OPTIONS.map(opt => (
+          <button
+            key={opt.hex}
+            type="button"
+            title={opt.label}
+            onClick={() => onChange(opt.hex)}
+            className={clsx(
+              'w-7 h-7 rounded-full border-2 transition-all',
+              value === opt.hex
+                ? 'border-slate-900 dark:border-white scale-110 shadow-md'
+                : 'border-transparent hover:scale-110'
+            )}
+            style={{ backgroundColor: opt.hex }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Label named color picker
+function LabelColorPicker({ value, onChange }: { value: string; onChange: (name: string) => void }) {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Color</label>
+      <div className="flex flex-wrap gap-1.5">
+        {LABEL_COLOR_OPTIONS.map(opt => (
+          <button
+            key={opt.name}
+            type="button"
+            onClick={() => onChange(opt.name)}
+            className={clsx(
+              'px-2.5 py-1 rounded-full text-xs font-medium transition-all border-2',
+              opt.preview,
+              value === opt.name
+                ? 'border-slate-900 dark:border-white scale-105'
+                : 'border-transparent'
+            )}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function FieldSettingsPage() {
   const {
     departments,
     contactRoles,
-    addDepartment,
-    updateDepartment,
-    deleteDepartment,
-    addPosition,
-    updatePosition,
-    deletePosition,
-    addContactRole,
-    updateContactRole,
-    deleteContactRole,
-    getDepartmentsByParent,
-    getParentDepartment,
+    leadStages, dealStages, leadLabels, leadSources,
+    addDepartment, updateDepartment, deleteDepartment,
+    addPosition, updatePosition, deletePosition,
+    addContactRole, updateContactRole, deleteContactRole,
+    getDepartmentsByParent, getParentDepartment,
+    addLeadStage, updateLeadStage, deleteLeadStage,
+    addDealStage, updateDealStage, deleteDealStage,
+    addLeadLabel, updateLeadLabel, deleteLeadLabel,
+    addLeadSource, updateLeadSource, deleteLeadSource,
   } = useFieldsStore();
   const { users } = useUsersStore();
   const { taskTypes, createTaskType, updateTaskType, deleteTaskType } = useTaskTypesStore();
@@ -364,10 +454,33 @@ export function FieldSettingsPage() {
 
   // Delete confirmation
   const [deleteTarget, setDeleteTarget] = useState<{
-    type: 'department' | 'position' | 'role' | 'taskType';
+    type: 'department' | 'position' | 'role' | 'taskType' | 'leadStage' | 'dealStage' | 'label' | 'source';
     id: string;
     name: string;
   } | null>(null);
+
+  // Lead stage modal state
+  const [showLeadStageModal, setShowLeadStageModal] = useState(false);
+  const [editingLeadStage, setEditingLeadStage] = useState<SalesStage | null>(null);
+  const [leadStageName, setLeadStageName] = useState('');
+  const [leadStageColor, setLeadStageColor] = useState(STAGE_COLOR_OPTIONS[0]!.hex);
+
+  // Deal stage modal state
+  const [showDealStageModal, setShowDealStageModal] = useState(false);
+  const [editingDealStage, setEditingDealStage] = useState<SalesStage | null>(null);
+  const [dealStageName, setDealStageName] = useState('');
+  const [dealStageColor, setDealStageColor] = useState(STAGE_COLOR_OPTIONS[2]!.hex);
+
+  // Label modal state
+  const [showLabelModal, setShowLabelModal] = useState(false);
+  const [editingLabel, setEditingLabel] = useState<SalesLabel | null>(null);
+  const [labelName, setLabelName] = useState('');
+  const [labelColor, setLabelColor] = useState('blue');
+
+  // Source modal state
+  const [showSourceModal, setShowSourceModal] = useState(false);
+  const [editingSource, setEditingSource] = useState<SalesSource | null>(null);
+  const [sourceName, setSourceName] = useState('');
   
   // Helper to check position dependencies
   const getPositionDependencies = (positionId: string) => {
@@ -694,6 +807,116 @@ export function FieldSettingsPage() {
     );
   };
 
+  // ============ LEAD STAGE HANDLERS ============
+
+  const openAddLeadStageModal = () => {
+    setEditingLeadStage(null);
+    setLeadStageName('');
+    setLeadStageColor(STAGE_COLOR_OPTIONS[0]!.hex);
+    setShowLeadStageModal(true);
+  };
+
+  const openEditLeadStageModal = (stage: SalesStage) => {
+    setEditingLeadStage(stage);
+    setLeadStageName(stage.name);
+    setLeadStageColor(stage.color);
+    setShowLeadStageModal(true);
+  };
+
+  const handleSaveLeadStage = () => {
+    if (!leadStageName.trim()) { toast.error('Error', 'Stage name is required'); return; }
+    if (editingLeadStage) {
+      updateLeadStage(editingLeadStage.id, { name: leadStageName.trim(), color: leadStageColor });
+      toast.success('Updated', 'Lead stage updated');
+    } else {
+      addLeadStage(leadStageName.trim(), leadStageColor);
+      toast.success('Added', 'Lead stage created');
+    }
+    setShowLeadStageModal(false);
+  };
+
+  // ============ DEAL STAGE HANDLERS ============
+
+  const openAddDealStageModal = () => {
+    setEditingDealStage(null);
+    setDealStageName('');
+    setDealStageColor(STAGE_COLOR_OPTIONS[2]!.hex);
+    setShowDealStageModal(true);
+  };
+
+  const openEditDealStageModal = (stage: SalesStage) => {
+    setEditingDealStage(stage);
+    setDealStageName(stage.name);
+    setDealStageColor(stage.color);
+    setShowDealStageModal(true);
+  };
+
+  const handleSaveDealStage = () => {
+    if (!dealStageName.trim()) { toast.error('Error', 'Stage name is required'); return; }
+    if (editingDealStage) {
+      updateDealStage(editingDealStage.id, { name: dealStageName.trim(), color: dealStageColor });
+      toast.success('Updated', 'Deal stage updated');
+    } else {
+      addDealStage(dealStageName.trim(), dealStageColor);
+      toast.success('Added', 'Deal stage created');
+    }
+    setShowDealStageModal(false);
+  };
+
+  // ============ LABEL HANDLERS ============
+
+  const openAddLabelModal = () => {
+    setEditingLabel(null);
+    setLabelName('');
+    setLabelColor('blue');
+    setShowLabelModal(true);
+  };
+
+  const openEditLabelModal = (lbl: SalesLabel) => {
+    setEditingLabel(lbl);
+    setLabelName(lbl.name);
+    setLabelColor(lbl.color);
+    setShowLabelModal(true);
+  };
+
+  const handleSaveLabel = () => {
+    if (!labelName.trim()) { toast.error('Error', 'Label name is required'); return; }
+    if (editingLabel) {
+      updateLeadLabel(editingLabel.id, { name: labelName.trim(), color: labelColor });
+      toast.success('Updated', 'Label updated');
+    } else {
+      addLeadLabel(labelName.trim(), labelColor);
+      toast.success('Added', 'Label created');
+    }
+    setShowLabelModal(false);
+  };
+
+  // ============ SOURCE HANDLERS ============
+
+  const openAddSourceModal = () => {
+    setEditingSource(null);
+    setSourceName('');
+    setShowSourceModal(true);
+  };
+
+  const openEditSourceModal = (src: SalesSource) => {
+    setEditingSource(src);
+    setSourceName(src.name);
+    setShowSourceModal(true);
+  };
+
+  const handleSaveSource = () => {
+    if (!sourceName.trim()) { toast.error('Error', 'Source name is required'); return; }
+    if (editingSource) {
+      updateLeadSource(editingSource.id, sourceName.trim());
+      toast.success('Updated', 'Source updated');
+    } else {
+      addLeadSource(sourceName.trim());
+      toast.success('Added', 'Source created');
+    }
+    setShowSourceModal(false);
+  };
+
   // ============ DELETE HANDLER ============
 
   const handleConfirmDelete = (options?: { newDeptHeadId?: string; inheritExecSupervisor?: boolean }) => {
@@ -726,6 +949,18 @@ export function FieldSettingsPage() {
       toast.success('Deleted', `${deleteTarget.name} removed`);
     } else if (deleteTarget.type === 'taskType') {
       deleteTaskType(deleteTarget.id);
+      toast.success('Deleted', `${deleteTarget.name} removed`);
+    } else if (deleteTarget.type === 'leadStage') {
+      deleteLeadStage(deleteTarget.id);
+      toast.success('Deleted', `${deleteTarget.name} removed`);
+    } else if (deleteTarget.type === 'dealStage') {
+      deleteDealStage(deleteTarget.id);
+      toast.success('Deleted', `${deleteTarget.name} removed`);
+    } else if (deleteTarget.type === 'label') {
+      deleteLeadLabel(deleteTarget.id);
+      toast.success('Deleted', `${deleteTarget.name} removed`);
+    } else if (deleteTarget.type === 'source') {
+      deleteLeadSource(deleteTarget.id);
       toast.success('Deleted', `${deleteTarget.name} removed`);
     }
     
@@ -965,36 +1200,185 @@ export function FieldSettingsPage() {
         <PanelSectionHeader
           title="Sales Panel"
           icon={<Handshake className="w-5 h-5" />}
-          description="Pipeline stages and deal settings"
+          description="Pipeline stages, labels, and lead sources"
           gradient="from-teal-500 to-teal-600"
         >
+          {/* Lead Stages */}
           <CollapsibleSection
-            title="Pipeline Stages"
-            icon={<TrendingUp className="w-4 h-4 text-teal-500" />}
-            badge="Coming Soon"
+            title="Lead Stages"
+            icon={<Target className="w-4 h-4 text-teal-500" />}
+            badge={leadStages.length > 0 ? `${leadStages.length}` : undefined}
             defaultOpen={false}
+            action={
+              <Button size="sm" variant="secondary" onClick={(e) => { e.stopPropagation(); openAddLeadStageModal(); }}>
+                <Plus className="w-4 h-4 mr-1" />
+                Add Stage
+              </Button>
+            }
           >
-            <div className="p-4">
-              <div className="text-center py-6">
-                <TrendingUp className="w-10 h-10 mx-auto text-slate-300 dark:text-slate-600" />
-                <p className="mt-2 text-sm text-slate-500">Pipeline stages configuration coming soon</p>
-                <p className="text-xs text-slate-400 mt-1">Define stages like Lead, Qualified, Proposal, Negotiation, Closed</p>
-              </div>
+            <div className="p-3">
+              {leadStages.length === 0 ? (
+                <div className="text-center py-4">
+                  <Target className="w-8 h-8 mx-auto text-slate-300 dark:text-slate-600" />
+                  <p className="mt-2 text-sm text-slate-500">No lead stages</p>
+                  <Button variant="primary" size="sm" className="mt-2" onClick={openAddLeadStageModal}>
+                    <Plus className="w-4 h-4 mr-1" />Add Stage
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {[...leadStages].sort((a, b) => a.order - b.order).map(stage => (
+                    <div
+                      key={stage.id}
+                      className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-full group hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                    >
+                      <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: stage.color }} />
+                      <span className="text-sm text-slate-700 dark:text-slate-300">{stage.name}</span>
+                      <button onClick={() => openEditLeadStageModal(stage)} className="p-0.5 opacity-0 group-hover:opacity-100 hover:bg-slate-300 dark:hover:bg-slate-600 rounded transition-all">
+                        <Edit2 className="w-3 h-3 text-slate-500" />
+                      </button>
+                      <button onClick={() => setDeleteTarget({ type: 'leadStage', id: stage.id, name: stage.name })} className="p-0.5 opacity-0 group-hover:opacity-100 hover:bg-danger-100 dark:hover:bg-danger-900/30 rounded transition-all">
+                        <Trash2 className="w-3 h-3 text-slate-500 hover:text-danger-500" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </CollapsibleSection>
 
+          {/* Deal Stages */}
           <CollapsibleSection
-            title="Deal Sources"
-            icon={<Target className="w-4 h-4 text-teal-500" />}
-            badge="Coming Soon"
+            title="Deal Stages"
+            icon={<TrendingUp className="w-4 h-4 text-teal-500" />}
+            badge={dealStages.length > 0 ? `${dealStages.length}` : undefined}
             defaultOpen={false}
+            action={
+              <Button size="sm" variant="secondary" onClick={(e) => { e.stopPropagation(); openAddDealStageModal(); }}>
+                <Plus className="w-4 h-4 mr-1" />
+                Add Stage
+              </Button>
+            }
           >
-            <div className="p-4">
-              <div className="text-center py-6">
-                <Target className="w-10 h-10 mx-auto text-slate-300 dark:text-slate-600" />
-                <p className="mt-2 text-sm text-slate-500">Deal source options coming soon</p>
-                <p className="text-xs text-slate-400 mt-1">Track where deals come from: Referral, Website, Cold Call, etc.</p>
-              </div>
+            <div className="p-3">
+              {dealStages.length === 0 ? (
+                <div className="text-center py-4">
+                  <TrendingUp className="w-8 h-8 mx-auto text-slate-300 dark:text-slate-600" />
+                  <p className="mt-2 text-sm text-slate-500">No deal stages</p>
+                  <Button variant="primary" size="sm" className="mt-2" onClick={openAddDealStageModal}>
+                    <Plus className="w-4 h-4 mr-1" />Add Stage
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {[...dealStages].sort((a, b) => a.order - b.order).map(stage => (
+                    <div
+                      key={stage.id}
+                      className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-full group hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                    >
+                      <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: stage.color }} />
+                      <span className="text-sm text-slate-700 dark:text-slate-300">{stage.name}</span>
+                      <button onClick={() => openEditDealStageModal(stage)} className="p-0.5 opacity-0 group-hover:opacity-100 hover:bg-slate-300 dark:hover:bg-slate-600 rounded transition-all">
+                        <Edit2 className="w-3 h-3 text-slate-500" />
+                      </button>
+                      <button onClick={() => setDeleteTarget({ type: 'dealStage', id: stage.id, name: stage.name })} className="p-0.5 opacity-0 group-hover:opacity-100 hover:bg-danger-100 dark:hover:bg-danger-900/30 rounded transition-all">
+                        <Trash2 className="w-3 h-3 text-slate-500 hover:text-danger-500" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </CollapsibleSection>
+
+          {/* Labels (shared by Leads & Deals) */}
+          <CollapsibleSection
+            title="Labels"
+            icon={<Tag className="w-4 h-4 text-teal-500" />}
+            badge={leadLabels.length > 0 ? `${leadLabels.length}` : undefined}
+            defaultOpen={false}
+            action={
+              <Button size="sm" variant="secondary" onClick={(e) => { e.stopPropagation(); openAddLabelModal(); }}>
+                <Plus className="w-4 h-4 mr-1" />
+                Add Label
+              </Button>
+            }
+          >
+            <div className="p-3">
+              <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">Used on both Leads and Deals.</p>
+              {leadLabels.length === 0 ? (
+                <div className="text-center py-4">
+                  <Tag className="w-8 h-8 mx-auto text-slate-300 dark:text-slate-600" />
+                  <p className="mt-2 text-sm text-slate-500">No labels</p>
+                  <Button variant="primary" size="sm" className="mt-2" onClick={openAddLabelModal}>
+                    <Plus className="w-4 h-4 mr-1" />Add Label
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {[...leadLabels].sort((a, b) => a.order - b.order).map(lbl => (
+                    <div
+                      key={lbl.id}
+                      className={clsx(
+                        'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full group transition-colors',
+                        getLabelPreviewClass(lbl.color)
+                      )}
+                    >
+                      <span className="text-sm font-medium">{lbl.name}</span>
+                      <button onClick={() => openEditLabelModal(lbl)} className="p-0.5 opacity-0 group-hover:opacity-100 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-all">
+                        <Edit2 className="w-3 h-3" />
+                      </button>
+                      <button onClick={() => setDeleteTarget({ type: 'label', id: lbl.id, name: lbl.name })} className="p-0.5 opacity-0 group-hover:opacity-100 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-all">
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </CollapsibleSection>
+
+          {/* Sources (shared by Leads & Deals) */}
+          <CollapsibleSection
+            title="Sources"
+            icon={<Megaphone className="w-4 h-4 text-teal-500" />}
+            badge={leadSources.length > 0 ? `${leadSources.length}` : undefined}
+            defaultOpen={false}
+            action={
+              <Button size="sm" variant="secondary" onClick={(e) => { e.stopPropagation(); openAddSourceModal(); }}>
+                <Plus className="w-4 h-4 mr-1" />
+                Add Source
+              </Button>
+            }
+          >
+            <div className="p-3">
+              <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">Used on both Leads and Deals.</p>
+              {leadSources.length === 0 ? (
+                <div className="text-center py-4">
+                  <Megaphone className="w-8 h-8 mx-auto text-slate-300 dark:text-slate-600" />
+                  <p className="mt-2 text-sm text-slate-500">No sources</p>
+                  <Button variant="primary" size="sm" className="mt-2" onClick={openAddSourceModal}>
+                    <Plus className="w-4 h-4 mr-1" />Add Source
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {[...leadSources].sort((a, b) => a.order - b.order).map(src => (
+                    <div
+                      key={src.id}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-full group hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                    >
+                      <span className="text-sm text-slate-700 dark:text-slate-300">{src.name}</span>
+                      <button onClick={() => openEditSourceModal(src)} className="p-0.5 opacity-0 group-hover:opacity-100 hover:bg-slate-300 dark:hover:bg-slate-600 rounded transition-all">
+                        <Edit2 className="w-3 h-3 text-slate-500" />
+                      </button>
+                      <button onClick={() => setDeleteTarget({ type: 'source', id: src.id, name: src.name })} className="p-0.5 opacity-0 group-hover:opacity-100 hover:bg-danger-100 dark:hover:bg-danger-900/30 rounded transition-all">
+                        <Trash2 className="w-3 h-3 text-slate-500 hover:text-danger-500" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </CollapsibleSection>
         </PanelSectionHeader>
@@ -1237,8 +1621,123 @@ export function FieldSettingsPage() {
         </div>
       </Modal>
 
+      {/* ============ LEAD STAGE MODAL ============ */}
+      <Modal
+        isOpen={showLeadStageModal}
+        onClose={() => setShowLeadStageModal(false)}
+        title={editingLeadStage ? 'Edit Lead Stage' : 'Add Lead Stage'}
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setShowLeadStageModal(false)}>Cancel</Button>
+            <Button variant="primary" onClick={handleSaveLeadStage}>{editingLeadStage ? 'Save' : 'Add'}</Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <Input
+            label="Stage Name"
+            value={leadStageName}
+            onChange={(e) => setLeadStageName(e.target.value)}
+            placeholder="e.g., Job Site Lead"
+            autoFocus
+          />
+          <StageColorPicker value={leadStageColor} onChange={setLeadStageColor} />
+          <div className="p-3 rounded-lg" style={{ backgroundColor: leadStageColor + '20', borderLeft: `3px solid ${leadStageColor}` }}>
+            <span className="text-sm font-medium" style={{ color: leadStageColor }}>
+              {leadStageName || 'Preview'}
+            </span>
+          </div>
+        </div>
+      </Modal>
+
+      {/* ============ DEAL STAGE MODAL ============ */}
+      <Modal
+        isOpen={showDealStageModal}
+        onClose={() => setShowDealStageModal(false)}
+        title={editingDealStage ? 'Edit Deal Stage' : 'Add Deal Stage'}
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setShowDealStageModal(false)}>Cancel</Button>
+            <Button variant="primary" onClick={handleSaveDealStage}>{editingDealStage ? 'Save' : 'Add'}</Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <Input
+            label="Stage Name"
+            value={dealStageName}
+            onChange={(e) => setDealStageName(e.target.value)}
+            placeholder="e.g., Proposal Sent"
+            autoFocus
+          />
+          <StageColorPicker value={dealStageColor} onChange={setDealStageColor} />
+          <div className="p-3 rounded-lg" style={{ backgroundColor: dealStageColor + '20', borderLeft: `3px solid ${dealStageColor}` }}>
+            <span className="text-sm font-medium" style={{ color: dealStageColor }}>
+              {dealStageName || 'Preview'}
+            </span>
+          </div>
+        </div>
+      </Modal>
+
+      {/* ============ LABEL MODAL ============ */}
+      <Modal
+        isOpen={showLabelModal}
+        onClose={() => setShowLabelModal(false)}
+        title={editingLabel ? 'Edit Label' : 'Add Label'}
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setShowLabelModal(false)}>Cancel</Button>
+            <Button variant="primary" onClick={handleSaveLabel}>{editingLabel ? 'Save' : 'Add'}</Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <Input
+            label="Label Name"
+            value={labelName}
+            onChange={(e) => setLabelName(e.target.value)}
+            placeholder="e.g., Hot"
+            autoFocus
+          />
+          <LabelColorPicker value={labelColor} onChange={setLabelColor} />
+          {labelName && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-500">Preview:</span>
+              <span className={clsx('px-2.5 py-1 rounded-full text-xs font-medium', getLabelPreviewClass(labelColor))}>
+                {labelName}
+              </span>
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      {/* ============ SOURCE MODAL ============ */}
+      <Modal
+        isOpen={showSourceModal}
+        onClose={() => setShowSourceModal(false)}
+        title={editingSource ? 'Edit Source' : 'Add Source'}
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setShowSourceModal(false)}>Cancel</Button>
+            <Button variant="primary" onClick={handleSaveSource}>{editingSource ? 'Save' : 'Add'}</Button>
+          </>
+        }
+      >
+        <Input
+          label="Source Name"
+          value={sourceName}
+          onChange={(e) => setSourceName(e.target.value)}
+          placeholder="e.g., Referral"
+          autoFocus
+        />
+      </Modal>
+
       {/* ============ DELETE CONFIRMATION ============ */}
-      {deleteTarget && deleteTarget.type !== 'taskType' && (
+      {deleteTarget && (deleteTarget.type === 'department' || deleteTarget.type === 'position' || deleteTarget.type === 'role') && (
         <DeleteConfirmationModal
           target={deleteTarget}
           onClose={() => setDeleteTarget(null)}
@@ -1249,11 +1748,11 @@ export function FieldSettingsPage() {
       )}
 
       {/* Simple delete confirmation for task types */}
-      {deleteTarget && deleteTarget.type === 'taskType' && (
+      {deleteTarget && deleteTarget.type !== 'department' && deleteTarget.type !== 'position' && deleteTarget.type !== 'role' && (
         <Modal
           isOpen={true}
           onClose={() => setDeleteTarget(null)}
-          title="Delete Task Type"
+          title={`Delete ${deleteTarget.type === 'taskType' ? 'Task Type' : deleteTarget.type === 'leadStage' ? 'Lead Stage' : deleteTarget.type === 'dealStage' ? 'Deal Stage' : deleteTarget.type === 'label' ? 'Label' : 'Source'}`}
           size="sm"
           footer={
             <>
@@ -1263,7 +1762,8 @@ export function FieldSettingsPage() {
           }
         >
           <p className="text-slate-600 dark:text-slate-400">
-            Delete the task type "{deleteTarget.name}"? Tasks with this type will keep their type but it won't be selectable for new tasks.
+            Delete "{deleteTarget.name}"? This action cannot be undone.
+            {deleteTarget.type === 'taskType' && ' Tasks with this type will keep their type but it won\'t be selectable for new tasks.'}
           </p>
         </Modal>
       )}
@@ -1279,7 +1779,7 @@ function DeleteConfirmationModal({
   getPositionDependencies,
   getDepartmentDependencies,
 }: {
-  target: { type: 'department' | 'position' | 'role' | 'taskType'; id: string; name: string };
+  target: { type: 'department' | 'position' | 'role' | 'taskType' | 'leadStage' | 'dealStage' | 'label' | 'source'; id: string; name: string };
   onClose: () => void;
   onConfirm: (options?: { newDeptHeadId?: string; inheritExecSupervisor?: boolean }) => void;
   getPositionDependencies: (id: string) => {

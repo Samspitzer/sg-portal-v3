@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 import { ChevronDown, X, Search } from 'lucide-react';
 import { useDropdownKeyboard } from '@/hooks';
@@ -69,7 +70,7 @@ export function SelectFilter({
 }: SelectFilterProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [dropdownPosition, setDropdownPosition] = useState<'bottom' | 'top'>('bottom');
+  const [fixedPos, setFixedPos] = useState<{ top: number; left: number; width: number } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -131,19 +132,24 @@ export function SelectFilter({
     skipDisabled: true,
   });
 
-  // Close dropdown when focus leaves the container
+  // Close dropdown when focus leaves the container (and not into the portal dropdown)
   const handleContainerBlur = (e: React.FocusEvent) => {
-    // Check if the new focus target is outside our container
-    if (containerRef.current && !containerRef.current.contains(e.relatedTarget as Node)) {
+    const relatedTarget = e.relatedTarget as Node;
+    const inContainer = containerRef.current?.contains(relatedTarget);
+    const inDropdown = dropdownRef.current?.contains(relatedTarget);
+    if (!inContainer && !inDropdown) {
       setIsOpen(false);
       setSearchQuery('');
     }
   };
 
-  // Close dropdown when clicking outside
+  // Close dropdown when clicking outside (container OR portal dropdown)
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      const inContainer = containerRef.current?.contains(target);
+      const inDropdown = dropdownRef.current?.contains(target);
+      if (!inContainer && !inDropdown) {
         setIsOpen(false);
         setSearchQuery('');
       }
@@ -174,23 +180,42 @@ export function SelectFilter({
           const viewportHeight = window.innerHeight;
           const spaceBelow = viewportHeight - buttonRect.bottom;
           const spaceAbove = buttonRect.top;
-          
-          // If not enough space below but enough above, flip to top
-          if (spaceBelow < dropdownHeight && spaceAbove > dropdownHeight) {
-            setDropdownPosition('top');
-          } else {
-            setDropdownPosition('bottom');
-            // If dropdown extends below viewport, scroll to show it
-            if (buttonRect.bottom + dropdownHeight > viewportHeight) {
-              const scrollAmount = buttonRect.bottom + dropdownHeight - viewportHeight + 20;
-              window.scrollBy({ top: scrollAmount, behavior: 'smooth' });
-            }
-          }
+
+          const openAbove = spaceBelow < dropdownHeight && spaceAbove > dropdownHeight;
+          setFixedPos({
+            top: openAbove ? buttonRect.top - dropdownHeight - 4 : buttonRect.bottom + 4,
+            left: buttonRect.left,
+            width: Math.max(buttonRect.width, 200),
+          });
         }
       }, 10);
     } else {
-      setDropdownPosition('bottom');
+      setFixedPos(null);
     }
+  }, [isOpen]);
+
+  // Update position on scroll/resize so portal dropdown follows the button
+  useEffect(() => {
+    if (!isOpen) return;
+    const update = () => {
+      if (buttonRef.current && dropdownRef.current) {
+        const buttonRect = buttonRef.current.getBoundingClientRect();
+        const dropdownHeight = dropdownRef.current.offsetHeight;
+        const viewportHeight = window.innerHeight;
+        const openAbove = viewportHeight - buttonRect.bottom < dropdownHeight && buttonRect.top > dropdownHeight;
+        setFixedPos({
+          top: openAbove ? buttonRect.top - dropdownHeight - 4 : buttonRect.bottom + 4,
+          left: buttonRect.left,
+          width: Math.max(buttonRect.width, 200),
+        });
+      }
+    };
+    window.addEventListener('scroll', update, true);
+    window.addEventListener('resize', update);
+    return () => {
+      window.removeEventListener('scroll', update, true);
+      window.removeEventListener('resize', update);
+    };
   }, [isOpen]);
 
   // Update highlighted index when search changes
@@ -352,15 +377,13 @@ export function SelectFilter({
         )}
       </button>
 
-      {/* Dropdown */}
-      {isOpen && (
+      {/* Dropdown — rendered in document.body via portal to escape stacking contexts */}
+      {isOpen && createPortal(
         <div
-            ref={dropdownRef}
-            className={clsx(
-              'absolute z-50 w-full min-w-[200px] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg overflow-hidden',
-              dropdownPosition === 'top' ? 'bottom-full mb-1' : 'top-full mt-1'
-            )}
-          >
+          ref={dropdownRef}
+          style={fixedPos ? { top: fixedPos.top, left: fixedPos.left, width: fixedPos.width } : { top: -9999, left: -9999, width: 200 }}
+          className="fixed z-[9999] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg overflow-hidden"
+        >
           {/* Search Input */}
           {showSearch && (
             <div className="p-2 border-b border-slate-200 dark:border-slate-700">
@@ -425,7 +448,7 @@ export function SelectFilter({
             )}
           </div>
         </div>
-      )}
+      , document.body)}
     </div>
   );
 }

@@ -6,8 +6,8 @@
 // Can be used in ModalPanel for overlay creation or anywhere in the app.
 // ============================================================================
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Clock, Building2, User, Target, TrendingUp, FileText } from 'lucide-react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { Clock, Building2, User, Target, TrendingUp, FileText, ChevronDown } from 'lucide-react';
 import { clsx } from 'clsx';
 import {
   Input,
@@ -19,6 +19,7 @@ import {
   TaskTypeIcon,
   type EntitySearchItem,
 } from '@/components/common';
+import { useDropdownKeyboard } from '@/hooks';
 import { ModalPanel, ModalPanelFooter } from './ModalPanel';
 import {
   useTaskStore,
@@ -194,11 +195,22 @@ export function AddTaskForm({
   const [isSaving, setIsSaving] = useState(false);
   const [linkedItemSearch, setLinkedItemSearch] = useState('');
   const [linkedItemDropdownOpen, setLinkedItemDropdownOpen] = useState(false);
+  const linkedItemRef = useRef<HTMLDivElement>(null);
+
+  // Click-outside handler for linked item dropdown
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (linkedItemRef.current && !linkedItemRef.current.contains(e.target as Node)) {
+        setLinkedItemDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   // Initialize form when modal opens
   useEffect(() => {
     if (isOpen) {
-      const defaultOwner = users.find(u => u.isActive) || users[0];
       setFormData({
         ...initialFormData,
         companyId: defaultCompanyId || '',
@@ -209,7 +221,7 @@ export function AddTaskForm({
         linkedItemId: defaultLinkedItemId || '',
         linkedItemName: defaultLinkedItemName || '',
         dueDate: defaultDueDate || '',
-        assignedUserId: defaultOwner?.id || '',
+        assignedUserId: '',
       });
       setLinkedItemSearch('');
       setLinkedItemDropdownOpen(false);
@@ -304,6 +316,17 @@ export function AddTaskForm({
       .filter(item => item.name.toLowerCase().includes(linkedItemSearch.toLowerCase()))
       .slice(0, 10);
   }, [linkedItems, linkedItemSearch]);
+
+  // Keyboard navigation for linked item dropdown (must be after filteredLinkedItems)
+  const { highlightedIndex: linkedHighlight, handleKeyDown: linkedKeyDown, resetHighlight: resetLinkedHighlight } = useDropdownKeyboard({
+    items: filteredLinkedItems,
+    isOpen: linkedItemDropdownOpen,
+    onSelect: (item) => {
+      if (item) handleLinkedItemSelect(item);
+    },
+    onClose: () => setLinkedItemDropdownOpen(false),
+    loop: true,
+  });
 
   // Handle company change
   const handleCompanyChange = (item: EntitySearchItem | null) => {
@@ -689,16 +712,30 @@ export function AddTaskForm({
               </button>
             </div>
           ) : (
-            <div className="relative">
+            <div className="relative" ref={linkedItemRef}>
               <Input
                 value={linkedItemSearch}
                 onChange={(e) => {
                   setLinkedItemSearch(e.target.value);
                   setLinkedItemDropdownOpen(true);
+                  resetLinkedHighlight();
                 }}
                 onFocus={() => setLinkedItemDropdownOpen(true)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    e.preventDefault();
+                    if (linkedItemSearch) {
+                      setLinkedItemSearch('');
+                    } else {
+                      setLinkedItemDropdownOpen(false);
+                    }
+                  } else {
+                    linkedKeyDown(e);
+                  }
+                }}
                 placeholder="Search leads, deals..."
                 leftIcon={<Target className="w-4 h-4" />}
+                rightIcon={<ChevronDown className={clsx('w-4 h-4 text-slate-400 transition-transform', linkedItemDropdownOpen && 'rotate-180')} />}
               />
 
               {linkedItemDropdownOpen && (
@@ -730,14 +767,19 @@ export function AddTaskForm({
                   )}
 
                   {filteredLinkedItems.length > 0 ? (
-                    filteredLinkedItems.map((item) => {
+                    filteredLinkedItems.map((item, index) => {
                       const Icon = getEntityIcon(item.type);
                       return (
                         <button
                           key={`${item.type}-${item.id}`}
                           type="button"
                           onClick={() => handleLinkedItemSelect(item)}
-                          className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-slate-50 dark:hover:bg-slate-700"
+                          className={clsx(
+                            'w-full flex items-center gap-2 px-3 py-2 text-left transition-colors',
+                            index === linkedHighlight
+                              ? 'bg-slate-100 dark:bg-slate-700'
+                              : 'hover:bg-slate-50 dark:hover:bg-slate-700'
+                          )}
                         >
                           <Icon className="w-4 h-4 text-slate-400" />
                           <div className="flex-1 min-w-0">

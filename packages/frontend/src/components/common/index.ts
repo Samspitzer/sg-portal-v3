@@ -44,3 +44,4 @@ export {
 } from './Filterbar';
 export { QuickViewModal, type QuickViewModalProps, type QuickViewField, type QuickViewBadge, type QuickViewAction } from './QuickViewModal';
 export { EntitySalesSection } from './EntitySalesSection';
+export { EmptyTableState } from './EmptyTableState';

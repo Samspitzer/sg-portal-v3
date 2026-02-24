@@ -132,7 +132,6 @@ export function AddDealForm({
   // Initialize form when modal opens
   useEffect(() => {
     if (isOpen) {
-      const defaultOwner = users.find(u => u.isActive) || users[0];
       setFormData({
         ...initialFormData,
         name: defaultName || '',
@@ -140,12 +139,12 @@ export function AddDealForm({
         companyName: defaultCompanyName || '',
         contactId: defaultContactId || '',
         contactName: defaultContactName || '',
-        stage: defaultStage || dealStages[0]?.name || '',
-        ownerId: defaultOwner?.id || '',
-        ownerName: defaultOwner?.name || '',
+        stage: defaultStage || '',
+        ownerId: '',
+        ownerName: '',
       });
     }
-  }, [isOpen, defaultName, defaultCompanyId, defaultCompanyName, defaultContactId, defaultContactName, defaultStage, dealStages, users]);
+  }, [isOpen, defaultName, defaultCompanyId, defaultCompanyName, defaultContactId, defaultContactName, defaultStage]);
 
   // Update field helper
   const updateField = useCallback(<K extends keyof AddDealFormData>(field: K, value: AddDealFormData[K]) => {

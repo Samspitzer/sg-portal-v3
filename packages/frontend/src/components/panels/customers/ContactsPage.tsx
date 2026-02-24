@@ -15,20 +15,20 @@ import {
   Building2,
 } from 'lucide-react';
 import { Page } from '@/components/layout';
-import { useClientsStore, useFieldsStore, type Contact, type Company } from '@/contexts';
+import { useClientsStore, useFieldsStore, useUsersStore, getCompanySalesRepIds, type Contact, type Company } from '@/contexts';
 import { CardContent, Button, SearchInput, FilterBar, FilterCount, SelectFilter } from '@/components/common';
 import { AlphabetFilter } from '@/components/common/AlphabetFilter';
 import { DataTable, type DataTableColumn } from '@/components/common/DataTable';
 import { useFormStack } from '@/components/panels/add-forms';
-import { useDocumentTitle, getContactUrl, getCompanyUrl } from '@/hooks';
+import { useDocumentTitle, getContactUrl, getCompanyUrl, useTableSort } from '@/hooks';
 
 type SortField = 'name' | 'company' | 'email' | 'role';
-type SortDirection = 'asc' | 'desc';
 
 export function ContactsPage() {
   const navigate = useNavigate();
   const { contacts, companies } = useClientsStore();
   const { contactRoles } = useFieldsStore();
+  const { users } = useUsersStore();
   const { openAddContact } = useFormStack();
   useDocumentTitle('Contacts');
 
@@ -39,8 +39,7 @@ export function ContactsPage() {
   const [roleFilter, setRoleFilter] = useState('');
 
   // Sorting
-  const [sortField, setSortField] = useState<SortField>('name');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const { sortField, sortDirection, handleSort } = useTableSort<SortField>('name');
 
   // Helper functions
   const getCompanyName = (companyId: string) => {
@@ -50,6 +49,15 @@ export function ContactsPage() {
 
   const getCompanyById = (companyId: string): Company | undefined => {
     return companies.find((c) => c.id === companyId);
+  };
+
+  const getSalesRepNamesForContact = (contact: Contact): string[] => {
+    const company = getCompanyById(contact.companyId);
+    if (!company) return [];
+    const repIds = getCompanySalesRepIds(company);
+    return repIds
+      .map(id => users.find(u => u.id === id)?.name)
+      .filter((n): n is string => !!n);
   };
 
   const getFullName = (contact: Contact) => {
@@ -63,17 +71,6 @@ export function ContactsPage() {
         // Contact created - list auto-updates via store
       }
     });
-  };
-
-  // Sorting handler
-  const handleSort = (field: string) => {
-    const sortableField = field as SortField;
-    if (sortField === sortableField) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortField(sortableField);
-      setSortDirection('asc');
-    }
   };
 
   // Filter logic
@@ -246,12 +243,30 @@ export function ContactsPage() {
         );
       },
     },
+    {
+      key: 'salesRep',
+      header: 'Sales Rep',
+      render: (contact) => {
+        const names = getSalesRepNamesForContact(contact);
+        if (names.length === 0) return <span className="text-slate-400">—</span>;
+        return (
+          <div className="flex items-center gap-1 text-slate-600 dark:text-slate-300">
+            <User className="w-3.5 h-3.5 text-slate-400" />
+            <span>{names[0]}</span>
+            {names.length > 1 && (
+              <span className="text-xs text-slate-400">+{names.length - 1}</span>
+            )}
+          </div>
+        );
+      },
+    },
   ];
 
   return (
     <Page
       title="Contacts"
       description={`${contacts.length} ${contacts.length === 1 ? 'contact' : 'contacts'}`}
+      fillHeight
       actions={
         <Button onClick={handleAddContact}>
           <Plus className="w-4 h-4 mr-2" />
@@ -259,25 +274,23 @@ export function ContactsPage() {
         </Button>
       }
     >
-      <div className="flex flex-col h-full">
-        {/* Alphabet Filter */}
-        <div className="mb-4">
-          <AlphabetFilter
-            selected={letterFilter}
-            onSelect={setLetterFilter}
-            items={contacts.map(c => c.firstName)}
-          />
-        </div>
-
-        {/* Search and Filters */}
-        <FilterBar className="mb-4">
+      <div className="flex flex-col h-full min-h-0">
+        <FilterBar
+          rightContent={<FilterCount count={filteredAndSortedContacts.length} singular="contact" />}
+          secondaryRow={
+            <AlphabetFilter
+              selected={letterFilter}
+              onSelect={setLetterFilter}
+              items={contacts.map(c => c.firstName)}
+            />
+          }
+        >
           <SearchInput
             value={search}
             onChange={setSearch}
             placeholder="Search contacts..."
             className="w-64"
           />
-          <FilterCount count={filteredAndSortedContacts.length} singular="contact" />
           <SelectFilter
             label="Company"
             value={companyFilter}

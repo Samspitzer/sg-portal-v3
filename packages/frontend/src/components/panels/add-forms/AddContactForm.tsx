@@ -11,7 +11,7 @@ import { User, Building2, Mail, Phone, Smartphone, Plus, Trash2, Printer } from 
 import {
   Input,
   Textarea,
-  Select,
+  SelectFilter,
   EntitySearchDropdown,
   type EntitySearchItem,
 } from '@/components/common';
@@ -386,13 +386,21 @@ export function AddContactForm({
         </div>
 
         {/* Role */}
-        <Select
-          label="Role"
-          value={formData.role}
-          onChange={(e) => updateField('role', e.target.value as ContactRole | '')}
-          options={roleOptions}
-          placeholder="Select a role..."
-        />
+        <div>
+          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+            Role
+          </label>
+          <SelectFilter
+            label="Select a role..."
+            value={formData.role}
+            onChange={(value) => updateField('role', value as ContactRole | '')}
+            options={roleOptions}
+            showAllOption={true}
+            allLabel="No role"
+            icon={User}
+            className="w-full"
+          />
+        </div>
 
         {/* Email */}
         <Input

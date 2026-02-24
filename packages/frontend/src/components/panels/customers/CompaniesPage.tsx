@@ -20,10 +20,9 @@ import { CardContent, Button, SearchInput, FilterBar, FilterCount, SelectFilter 
 import { AlphabetFilter } from '@/components/common/AlphabetFilter';
 import { DataTable, type DataTableColumn } from '@/components/common/DataTable';
 import { useFormStack } from '@/components/panels/add-forms';
-import { useDocumentTitle, getCompanyUrl } from '@/hooks';
+import { useDocumentTitle, getCompanyUrl, useTableSort } from '@/hooks';
 
 type SortField = 'name' | 'location' | 'salesRep' | 'contacts';
-type SortDirection = 'asc' | 'desc';
 
 export function CompaniesPage() {
   const navigate = useNavigate();
@@ -39,8 +38,7 @@ export function CompaniesPage() {
   const [salesRepFilter, setSalesRepFilter] = useState('');
 
   // Sorting
-  const [sortField, setSortField] = useState<SortField>('name');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const { sortField, sortDirection, handleSort } = useTableSort<SortField>('name');
 
   // Helper functions
   const getSalesRepName = (salesRepId?: string) => {
@@ -95,17 +93,6 @@ export function CompaniesPage() {
         // Company created - list auto-updates via store
       }
     });
-  };
-
-  // Sorting handler
-  const handleSort = (field: string) => {
-    const sortableField = field as SortField;
-    if (sortField === sortableField) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortField(sortableField);
-      setSortDirection('asc');
-    }
   };
 
   // Filter logic
@@ -291,6 +278,7 @@ export function CompaniesPage() {
     <Page
       title="Companies"
       description={`${companies.length} ${companies.length === 1 ? 'company' : 'companies'}`}
+      fillHeight
       actions={
         <Button onClick={handleAddCompany}>
           <Plus className="w-4 h-4 mr-2" />
@@ -298,25 +286,24 @@ export function CompaniesPage() {
         </Button>
       }
     >
-      <div className="flex flex-col h-full">
-        {/* Alphabet Filter */}
-        <div className="mb-4">
-          <AlphabetFilter
-            selected={letterFilter}
-            onSelect={setLetterFilter}
-            items={companies.map(c => c.name)}
-          />
-        </div>
-
-        {/* Search and Filters */}
-        <FilterBar className="mb-4">
+      <div className="flex flex-col h-full min-h-0">
+        {/* Filter Bar with AlphabetFilter in secondaryRow */}
+        <FilterBar
+          rightContent={<FilterCount count={filteredAndSortedCompanies.length} singular="company" plural="companies" />}
+          secondaryRow={
+            <AlphabetFilter
+              selected={letterFilter}
+              onSelect={setLetterFilter}
+              items={companies.map(c => c.name)}
+            />
+          }
+        >
           <SearchInput
             value={search}
             onChange={setSearch}
             placeholder="Search companies..."
             className="w-64"
           />
-          <FilterCount count={filteredAndSortedCompanies.length} singular="company" plural="companies" />
           <SelectFilter
             label="Location"
             value={locationFilter}

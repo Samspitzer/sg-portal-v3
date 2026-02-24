@@ -243,7 +243,6 @@ function KanbanColumnComponent<T>({
         'flex flex-col w-72 flex-shrink-0',
         'bg-slate-50 dark:bg-slate-900/50 rounded-xl',
         'border border-slate-200 dark:border-slate-700',
-        'overflow-hidden',
         isDragOver && 'ring-2 ring-brand-500 ring-opacity-50'
       )}
       onDragOver={handleDragOver}
@@ -284,7 +283,8 @@ function KanbanColumnComponent<T>({
       {/* Cards Container */}
       <div
         className={clsx(
-          'flex-1 p-2 space-y-2 overflow-y-auto min-h-[200px] max-h-[calc(100vh-300px)]',
+          'flex-1 p-2 space-y-2 overflow-y-auto',
+          'min-h-[200px] max-h-[calc(100vh-260px)]',
           isDragOver && 'bg-brand-50/50 dark:bg-brand-900/10'
         )}
       >
@@ -334,7 +334,7 @@ export function KanbanBoard<T>({
   return (
     <div
       className={clsx(
-        'flex gap-4 overflow-x-auto pb-4',
+        'flex gap-4 overflow-x-auto pb-4 px-1 pt-1',
         'scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-600 scrollbar-track-transparent',
         className
       )}

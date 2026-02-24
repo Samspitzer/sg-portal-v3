@@ -7,8 +7,8 @@
 // - EditTaskForm: Side panel with calendar for editing tasks
 // ===========================================================================
 
-import { useDocumentTitle } from '@/hooks';
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useDocumentTitle, useTableSort, usePersistedViewMode } from '@/hooks';
+import { useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { clsx } from 'clsx';
 import { 
@@ -26,24 +26,12 @@ import {
 import { useFormStack } from '@/components/panels/add-forms';
 import { useUsersStore, useToast } from '@/contexts';
 import { 
-  useTaskStore, type Task, type TaskPriority, 
+  useTaskStore, type Task,
   type LinkedEntityType 
 } from '@/contexts/taskStore';
 import { useTaskTypesStore } from '@/contexts/taskTypesStore';
-import { parseLocalDate, formatDate } from '@/utils/dateUtils';
-
-// =============================================================================
-// Constants
-// =============================================================================
-
-const PRIORITIES: { value: TaskPriority; label: string; color: string }[] = [
-  { value: 'low', label: 'Low', color: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300' },
-  { value: 'medium', label: 'Medium', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' },
-  { value: 'high', label: 'High', color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' },
-  { value: 'urgent', label: 'Urgent', color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' },
-];
-
-type TimeFilter = 'all' | 'overdue' | 'today' | 'tomorrow' | 'this-week' | 'next-week';
+import { parseLocalDate, formatDate, taskMatchesTimeFilter } from '@/utils/dateUtils';
+import { TASK_PRIORITY_CONFIG, type TimeFilter } from '@/utils/taskConstants';
 
 // =============================================================================
 // Task Calendar Component
@@ -245,35 +233,17 @@ export function TasksPage() {
   const toast = useToast();
   const { openAddTask, openEditTask } = useFormStack();
   
-  // View state - persist viewMode to localStorage
-  const [viewMode, setViewMode] = useState<'list' | 'calendar'>(() => {
-    const saved = localStorage.getItem('tasks-view-mode');
-    return (saved === 'list' || saved === 'calendar') ? saved : 'list';
-  });
+  // View state - persisted to localStorage via hook
+  const [viewMode, setViewMode] = usePersistedViewMode('tasks-view-mode', 'list', ['list', 'calendar'] as const);
   const [search, setSearch] = useState('');
   const [selectedUser, setSelectedUser] = useState<string>('');
   const [selectedType, setSelectedType] = useState<string>('');
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('all');
+  const [showClosed, setShowClosed] = useState(false);
   const [currentDate, setCurrentDate] = useState(new Date());
-  
-  // Persist viewMode changes to localStorage
-  useEffect(() => {
-    localStorage.setItem('tasks-view-mode', viewMode);
-  }, [viewMode]);
-  
-  // Sort state
-  const [sortField, setSortField] = useState<string>('dueDate');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
-  // Sort handler
-  const handleSort = useCallback((field: string) => {
-    if (sortField === field) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortField(field);
-      setSortDirection('asc');
-    }
-  }, [sortField, sortDirection]);
+  // Sort state
+  const { sortField, sortDirection, handleSort } = useTableSort<string>('dueDate');
 
   // Navigate to linked entity
   const navigateToEntity = useCallback((type: LinkedEntityType, id: string) => {
@@ -289,61 +259,115 @@ export function TasksPage() {
     navigate(routes[type] || '/');
   }, [navigate]);
 
-  // Time filter logic
-  const matchesTime = useCallback((dueDate?: string): boolean => {
-    if (!dueDate || timeFilter === 'all') return true;
-    
-    const today = new Date(); 
-    today.setHours(0, 0, 0, 0);
-    const taskDate = parseLocalDate(dueDate); 
-    taskDate.setHours(0, 0, 0, 0);
-    
-    const tomorrow = new Date(today); 
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const endOfWeek = new Date(today); 
-    endOfWeek.setDate(endOfWeek.getDate() + (7 - today.getDay()));
-    const startNextWeek = new Date(endOfWeek); 
-    startNextWeek.setDate(startNextWeek.getDate() + 1);
-    const endNextWeek = new Date(startNextWeek); 
-    endNextWeek.setDate(endNextWeek.getDate() + 6);
-    
-    switch (timeFilter) {
-      case 'overdue': return taskDate < today;
-      case 'today': return taskDate.getTime() === today.getTime();
-      case 'tomorrow': return taskDate.getTime() === tomorrow.getTime();
-      case 'this-week': return taskDate >= today && taskDate <= endOfWeek;
-      case 'next-week': return taskDate >= startNextWeek && taskDate <= endNextWeek;
-      default: return true;
-    }
-  }, [timeFilter]);
-
   // Build filter options
+  // Cascading: taskTypeOptions depend on selectedUser + timeFilter (not itself)
   const taskTypeOptions = useMemo(() => {
     const activeTypes = getActiveTaskTypes();
-    return activeTypes.map(tt => ({
-      value: tt.value,
-      label: tt.label,
-    }));
-  }, [getActiveTaskTypes]);
+    const allTypeCounts = new Map<string, number>();
+    const filteredTypeCounts = new Map<string, number>();
 
-  const userOptions = useMemo(() => 
-    users.filter(u => u.isActive).map(u => ({ value: u.id, label: u.name })),
-    [users]
+    tasks.forEach(t => {
+      if (!t.type) return;
+      const isClosed = t.status === 'completed' || t.status === 'cancelled';
+      if (isClosed && !showClosed) return;
+
+      // Count all tasks by type (unfiltered baseline)
+      allTypeCounts.set(t.type, (allTypeCounts.get(t.type) || 0) + 1);
+
+      // Count tasks by type matching OTHER active filters (not type itself)
+      let matchesOtherFilters = true;
+      if (selectedUser) matchesOtherFilters = t.assignedUserId === selectedUser;
+      if (timeFilter !== 'all' && matchesOtherFilters) matchesOtherFilters = taskMatchesTimeFilter(t.dueDate, timeFilter);
+
+      if (matchesOtherFilters) {
+        filteredTypeCounts.set(t.type, (filteredTypeCounts.get(t.type) || 0) + 1);
+      }
+    });
+
+    const hasActiveFilter = !!(selectedUser || timeFilter !== 'all');
+
+    return activeTypes
+      .map(tt => ({
+        value: tt.value,
+        label: tt.label,
+        count: hasActiveFilter
+          ? (filteredTypeCounts.get(tt.value) || 0)
+          : (allTypeCounts.get(tt.value) || 0),
+        disabled: hasActiveFilter
+          ? (filteredTypeCounts.get(tt.value) || 0) === 0
+          : false,
+      }))
+      .filter(tt => (allTypeCounts.get(tt.value) || 0) > 0)
+      .sort((a, b) => {
+        if (a.disabled !== b.disabled) return a.disabled ? 1 : -1;
+        return a.label.localeCompare(b.label);
+      });
+  }, [tasks, selectedUser, timeFilter, getActiveTaskTypes, showClosed]);
+
+  const userOptions = useMemo(() => {
+    const allUserCounts = new Map<string, number>();
+    const filteredUserCounts = new Map<string, number>();
+
+    tasks.forEach(t => {
+      if (!t.assignedUserId) return;
+      const isClosed = t.status === 'completed' || t.status === 'cancelled';
+      if (isClosed && !showClosed) return;
+
+      allUserCounts.set(t.assignedUserId, (allUserCounts.get(t.assignedUserId) || 0) + 1);
+
+      let matchesOtherFilters = true;
+      if (selectedType) matchesOtherFilters = t.type === selectedType;
+      if (timeFilter !== 'all' && matchesOtherFilters) matchesOtherFilters = taskMatchesTimeFilter(t.dueDate, timeFilter);
+
+      if (matchesOtherFilters) {
+        filteredUserCounts.set(t.assignedUserId, (filteredUserCounts.get(t.assignedUserId) || 0) + 1);
+      }
+    });
+
+    const hasActiveFilter = !!(selectedType || timeFilter !== 'all');
+
+    return users
+      .filter(u => u.isActive && (allUserCounts.get(u.id) || 0) > 0)
+      .map(u => ({
+        value: u.id,
+        label: u.name,
+        count: hasActiveFilter ? (filteredUserCounts.get(u.id) || 0) : (allUserCounts.get(u.id) || 0),
+        disabled: hasActiveFilter ? (filteredUserCounts.get(u.id) || 0) === 0 : false,
+      }))
+      .sort((a, b) => {
+        if (a.disabled !== b.disabled) return a.disabled ? 1 : -1;
+        return a.label.localeCompare(b.label);
+      });
+  }, [tasks, users, selectedType, timeFilter, showClosed]);
+
+  // Overdue count for QuickFilters warning indicator
+  const overdueCount = useMemo(() =>
+    tasks.filter(t => {
+      if (!t.dueDate || t.status === 'completed' || t.status === 'cancelled') return false;
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const d = parseLocalDate(t.dueDate); d.setHours(0, 0, 0, 0);
+      return d < today;
+    }).length,
+    [tasks]
   );
 
   // Time filter quick options
   const timeFilterOptions: QuickFilterOption<TimeFilter>[] = useMemo(() => [
     { value: 'all', label: 'All' },
-    { value: 'overdue', label: 'Overdue' },
+    { value: 'overdue', label: 'Overdue', count: overdueCount, isWarning: true },
     { value: 'today', label: 'Today' },
     { value: 'tomorrow', label: 'Tomorrow' },
     { value: 'this-week', label: 'This Week' },
     { value: 'next-week', label: 'Next Week' },
-  ], []);
+  ], [overdueCount]);
 
   // Filter tasks
   const filteredTasks = useMemo(() => {
     return tasks.filter(task => {
+      // Hide closed (completed/cancelled) unless showClosed is enabled
+      const isClosed = task.status === 'completed' || task.status === 'cancelled';
+      if (isClosed && !showClosed) return false;
+
       // Search
       const searchLower = search.toLowerCase();
       const matchesSearch = !search || 
@@ -357,15 +381,12 @@ export function TasksPage() {
       // Type filter
       const matchesType = !selectedType || task.type === selectedType;
       
-      // Time filter
-      const matchesTimeFilter = matchesTime(task.dueDate);
+      // Time filter (skip for completed if showing closed)
+      const matchesTimeFilter = showClosed && isClosed ? true : taskMatchesTimeFilter(task.dueDate, timeFilter);
       
-      // Don't show deleted
-      const notDeleted = task.status !== 'cancelled';
-      
-      return matchesSearch && matchesUser && matchesType && matchesTimeFilter && notDeleted;
+      return matchesSearch && matchesUser && matchesType && matchesTimeFilter;
     });
-  }, [tasks, search, selectedUser, selectedType, matchesTime]);
+  }, [tasks, search, selectedUser, selectedType, timeFilter, showClosed]);
 
   // Sort tasks
   const sortedTasks = useMemo(() => {
@@ -548,7 +569,7 @@ export function TasksPage() {
       sortable: true,
       render: (task) => {
         if (!task.priority) return <span className="text-slate-400">—</span>;
-        const priority = PRIORITIES.find(p => p.value === task.priority);
+        const priority = TASK_PRIORITY_CONFIG.find(p => p.value === task.priority);
         return priority ? (
           <span className={clsx('px-2 py-0.5 rounded text-xs font-medium', priority.color)}>
             {priority.label}
@@ -585,7 +606,24 @@ export function TasksPage() {
       {/* Main Content Container */}
       <div className="flex flex-col h-full min-h-0">
         {/* Filter Bar */}
-        <FilterBar rightContent={<FilterCount count={filteredTasks.length} singular="task" />}>
+        <FilterBar rightContent={
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setShowClosed(v => !v)}
+              className={clsx(
+                'flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all border',
+                showClosed
+                  ? 'bg-slate-700 text-white border-slate-700 dark:bg-slate-200 dark:text-slate-900 dark:border-slate-200'
+                  : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
+              )}
+            >
+              <Check className="w-3 h-3" />
+              Show closed
+            </button>
+            <FilterCount count={filteredTasks.length} singular="task" />
+          </div>
+        }>
           {/* View Mode Toggle */}
           <FilterToggle
             options={[

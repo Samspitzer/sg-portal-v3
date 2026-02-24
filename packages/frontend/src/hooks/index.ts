@@ -3,6 +3,9 @@ export { useNavigationGuard } from './useNavigationGuard';
 export { useSafeNavigate } from './useSafeNavigate';
 export { useDropdownKeyboard } from './useDropdownKeyboard';
 export { useDocumentTitle } from './useDocumentTitle';
+export { useTableSort } from './useTableSort';
+export { usePersistedViewMode } from './usePersistedViewMode';
+export { useEntityFormFromUrlParams } from './useEntityFormFromUrlParams';
 export { 
   useUserDependencies, 
   useReassignUserItems, 

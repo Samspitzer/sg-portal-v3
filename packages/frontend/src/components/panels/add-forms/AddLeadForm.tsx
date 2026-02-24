@@ -122,7 +122,6 @@ export function AddLeadForm({
   // Initialize form when modal opens
   useEffect(() => {
     if (isOpen) {
-      const defaultOwner = users.find(u => u.isActive) || users[0];
       setFormData({
         ...initialFormData,
         name: defaultName || '',
@@ -130,12 +129,12 @@ export function AddLeadForm({
         companyName: defaultCompanyName || '',
         contactId: defaultContactId || '',
         contactName: defaultContactName || '',
-        stage: leadStages[0]?.name || '',
-        ownerId: defaultOwner?.id || '',
-        ownerName: defaultOwner?.name || '',
+        stage: '',
+        ownerId: '',
+        ownerName: '',
       });
     }
-  }, [isOpen, defaultName, defaultCompanyId, defaultCompanyName, defaultContactId, defaultContactName, leadStages, users]);
+  }, [isOpen, defaultName, defaultCompanyId, defaultCompanyName, defaultContactId, defaultContactName]);
 
   // Update field helper
   const updateField = useCallback(<K extends keyof AddLeadFormData>(field: K, value: AddLeadFormData[K]) => {
