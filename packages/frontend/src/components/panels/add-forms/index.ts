@@ -19,5 +19,9 @@ export { AddTaskForm, type AddTaskFormProps, type AddTaskFormData } from './AddT
 // Entity edit forms
 export { EditTaskForm, type EditTaskFormProps } from './EditTaskForm';
 
+// Estimating project forms
+export { AddDeliveryProjectForm, type AddDeliveryProjectFormProps, type AddDeliveryProjectFormData } from './AddDeliveryProjectForm';
+export { AddContractProjectForm, type AddContractProjectFormProps, type AddContractProjectFormData } from './AddContractProjectForm';
+
 // Form stack provider and hook
 export { FormStackProvider, useFormStack } from './FormStackProvider';

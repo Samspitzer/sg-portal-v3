@@ -1,11 +1,6 @@
 // ============================================================================
 // SalesDashboardPage – Customizable Sales Insights Dashboard
 // Location: src/components/panels/sales/SalesDashboardPage.tsx
-//
-// Pipedrive-inspired with full edit mode:
-//   - Drag & drop to reorder widgets
-//   - Add / remove widgets via "Add Report" panel
-//   - Layout persisted to localStorage
 // ============================================================================
 
 import { useState, useMemo, useCallback } from 'react';
@@ -260,7 +255,11 @@ function LegendDot({ color, label, square }: { color: string; label: string; squ
 
 function DCard({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={clsx('bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm', className)}>
+    <div className={clsx(
+      'bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm',
+      'flex flex-col h-full',
+      className
+    )}>
       {children}
     </div>
   );
@@ -268,7 +267,7 @@ function DCard({ children, className }: { children: React.ReactNode; className?:
 
 function DCardHead({ title, sub, action }: { title: string; sub?: string; action?: React.ReactNode }) {
   return (
-    <div className="flex items-start justify-between px-5 pt-4 pb-3">
+    <div className="flex items-start justify-between px-5 pt-4 pb-3 flex-shrink-0">
       <div>
         <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{title}</p>
         {sub && <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5 uppercase tracking-wide">{sub}</p>}
@@ -294,7 +293,7 @@ function KpiCard({ label, value, sub, Icon, iconCls, onClick, trend }: {
 }) {
   return (
     <button type="button" onClick={onClick}
-      className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4 shadow-sm text-left flex flex-col gap-3 hover:border-blue-300 dark:hover:border-blue-600 transition-all w-full">
+      className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4 shadow-sm text-left flex flex-col gap-3 hover:border-blue-300 dark:hover:border-blue-600 hover:shadow-md transition-all w-full h-full">
       <div className="flex items-start justify-between">
         <div className={clsx('w-9 h-9 rounded-lg flex items-center justify-center', iconCls)}>
           <Icon className="w-[18px] h-[18px]" />
@@ -312,12 +311,12 @@ function KpiCard({ label, value, sub, Icon, iconCls, onClick, trend }: {
   );
 }
 
-// ── Widget size CSS ───────────────────────────────────────────────────────────
+// ── Widget col-span classes (6-column grid) ───────────────────────────────────
 
-function sizeClass(size: WidgetSize): string {
-  if (size === 'full')  return 'w-full';
-  if (size === 'half')  return 'w-[calc(50%-8px)]';
-  return 'w-[calc(33.333%-11px)]';
+function colSpanClass(size: WidgetSize): string {
+  if (size === 'full')  return 'col-span-6';
+  if (size === 'half')  return 'col-span-3';
+  return 'col-span-2';
 }
 
 // ── Add Widget Panel ──────────────────────────────────────────────────────────
@@ -528,13 +527,12 @@ export function SalesDashboardPage() {
 
     const shell = (content: React.ReactNode, title: string, sub?: string, action?: React.ReactNode) => (
       <DCard className={clsx(
-        sizeClass(widget.size),
         isDragging && 'opacity-40',
         isHover && 'ring-2 ring-blue-400 dark:ring-blue-500',
         editMode && 'cursor-grab active:cursor-grabbing',
       )}>
         {editMode && (
-          <div className="flex items-center justify-between px-4 pt-3 pb-0">
+          <div className="flex items-center justify-between px-4 pt-3 pb-0 flex-shrink-0">
             <div className="flex items-center gap-1.5 text-slate-400 dark:text-slate-500">
               <GripVertical className="w-4 h-4" />
               <span className="text-[11px] font-medium uppercase tracking-wide">{title}</span>
@@ -546,7 +544,9 @@ export function SalesDashboardPage() {
           </div>
         )}
         {!editMode && <DCardHead title={title} sub={sub} action={action} />}
-        {content}
+        <div className="flex-1 min-h-0">
+          {content}
+        </div>
       </DCard>
     );
 
@@ -554,13 +554,12 @@ export function SalesDashboardPage() {
 
       case 'kpi-row':
         return (
-          <div key={widget.id}
-            className={clsx('w-full', isDragging && 'opacity-40', isHover && 'ring-2 ring-blue-400 rounded-xl', editMode && 'cursor-grab')}
-            draggable={editMode}
-            onDragStart={() => handleDragStart(index)}
-            onDragOver={e => handleDragOver(e, index)}
-            onDrop={e => handleDrop(e, index)}
-            onDragEnd={handleDragEnd}
+          <div
+            className={clsx(
+              isDragging && 'opacity-40',
+              isHover && 'ring-2 ring-blue-400 rounded-xl',
+              editMode && 'cursor-grab'
+            )}
           >
             {editMode && (
               <div className="flex items-center justify-between mb-2 px-1">
@@ -795,24 +794,54 @@ export function SalesDashboardPage() {
   ]);
 
   return (
-    <div className="min-h-full bg-slate-50 dark:bg-slate-950">
+    <div className="bg-slate-50 dark:bg-slate-950 min-h-full">
 
-      {/* Header */}
-      <div className="sticky top-0 z-10 bg-slate-50 dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800 px-6 pt-5 pb-4">
-        <div className="flex items-center justify-between gap-4 mb-4">
+      {/* ── Page Header ─────────────────────────────────────────── */}
+      <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-6 py-4">
+        <div className="flex items-center justify-between gap-4">
+          {/* Left: icon + title + subtitle */}
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-teal-500 to-teal-700 flex items-center justify-center shadow-sm">
-              <LayoutDashboard className="w-4 h-4 text-white" />
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-teal-500 to-teal-700 flex items-center justify-center shadow-sm flex-shrink-0">
+              <LayoutDashboard className="w-4.5 h-4.5 text-white" />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-slate-900 dark:text-white leading-none">Sales Dashboard</h1>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{PERIOD_LABEL[period]} · {repName}</p>
+              <h1 className="text-base font-bold text-slate-900 dark:text-white leading-tight">Sales Dashboard</h1>
+              <p className="text-xs text-slate-500 dark:text-slate-400">{PERIOD_LABEL[period]} · {repName}</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+
+          {/* Right: controls */}
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            {/* Period filter — hidden in edit mode */}
+            {!editMode && (
+              <div className="flex items-center bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-0.5 gap-0.5">
+                {(['week','month','quarter','year'] as Period[]).map(p => (
+                  <button key={p} type="button" onClick={() => setPeriod(p)}
+                    className={clsx('px-3 py-1.5 rounded-md text-xs font-medium transition-all',
+                      period === p ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                    )}>
+                    {PERIOD_LABEL[p]}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Rep filter — hidden in edit mode, only shown when >1 user */}
+            {!editMode && activeU.length > 1 && (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg">
+                <Users className="w-3.5 h-3.5 text-slate-400" />
+                <select value={repFilter} onChange={e => setRepFilter(e.target.value)}
+                  className="text-xs bg-transparent text-slate-700 dark:text-slate-300 focus:outline-none cursor-pointer">
+                  <option value="">All Reps</option>
+                  {activeU.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                </select>
+              </div>
+            )}
+
+            {/* Edit / Done buttons */}
             {!editMode ? (
               <button type="button" onClick={() => setEditMode(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-white dark:hover:bg-slate-800 border border-transparent hover:border-slate-200 dark:hover:border-slate-700 transition-all">
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-all">
                 <Pencil className="w-3.5 h-3.5" />
                 Edit Dashboard
               </button>
@@ -833,64 +862,38 @@ export function SalesDashboardPage() {
           </div>
         </div>
 
-        {/* Period + Rep filters — hidden in edit mode */}
-        {!editMode && (
-          <div className="flex items-center gap-3">
-            <div className="flex items-center bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-0.5 gap-0.5">
-              {(['week','month','quarter','year'] as Period[]).map(p => (
-                <button key={p} type="button" onClick={() => setPeriod(p)}
-                  className={clsx('px-3 py-1.5 rounded-md text-xs font-medium transition-all',
-                    period === p ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
-                  )}>
-                  {PERIOD_LABEL[p]}
-                </button>
-              ))}
-            </div>
-            {activeU.length > 1 && (
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg">
-                <Users className="w-3.5 h-3.5 text-slate-400" />
-                <select value={repFilter} onChange={e => setRepFilter(e.target.value)}
-                  className="text-xs bg-transparent text-slate-700 dark:text-slate-300 focus:outline-none cursor-pointer">
-                  <option value="">All Reps</option>
-                  {activeU.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-                </select>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Edit mode banner */}
+        {/* Edit mode hint banner */}
         {editMode && (
-          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-xs text-blue-700 dark:text-blue-300">
+          <div className="flex items-center gap-2 mt-3 px-3 py-2 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-xs text-blue-700 dark:text-blue-300">
             <GripVertical className="w-3.5 h-3.5 flex-shrink-0" />
             Drag reports to reorder · click <X className="w-3 h-3 inline mx-0.5" /> to remove · click <strong>Add Report</strong> to add new reports
           </div>
         )}
       </div>
 
-      {/* Widget grid */}
+      {/* ── Widget grid ─────────────────────────────────────────── */}
       <div className="px-6 py-5">
-        <div className="flex flex-wrap gap-4">
-          {layout.map((widget, index) => {
-            const isKpi = widget.type === 'kpi-row';
-            return (
-              <div
-                key={widget.id}
-                className={clsx(isKpi ? 'w-full' : sizeClass(widget.size))}
-                draggable={editMode}
-                onDragStart={() => handleDragStart(index)}
-                onDragOver={e => handleDragOver(e, index)}
-                onDrop={e => handleDrop(e, index)}
-                onDragEnd={handleDragEnd}
-              >
-                {renderWidget(widget, index)}
-              </div>
-            );
-          })}
+        <div className="grid grid-cols-6 gap-4 items-start">
+          {layout.map((widget, index) => (
+            <div
+              key={widget.id}
+              className={clsx(
+                colSpanClass(widget.size),
+                'min-h-0',
+              )}
+              draggable={editMode}
+              onDragStart={() => handleDragStart(index)}
+              onDragOver={e => handleDragOver(e, index)}
+              onDrop={e => handleDrop(e, index)}
+              onDragEnd={handleDragEnd}
+            >
+              {renderWidget(widget, index)}
+            </div>
+          ))}
 
           {/* Empty state in edit mode when all widgets removed */}
           {layout.length === 0 && editMode && (
-            <div className="w-full border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl p-12 text-center">
+            <div className="col-span-6 border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl p-12 text-center">
               <BarChart2 className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
               <p className="text-sm font-medium text-slate-500 dark:text-slate-400">No reports on dashboard</p>
               <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Click <strong>Add Report</strong> to add your first widget</p>

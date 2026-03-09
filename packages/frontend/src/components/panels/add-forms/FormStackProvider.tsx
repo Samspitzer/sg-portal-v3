@@ -13,7 +13,9 @@ import { AddLeadForm } from './AddLeadForm';
 import { AddDealForm } from './AddDealForm';
 import { AddTaskForm } from './AddTaskForm';
 import { EditTaskForm } from './EditTaskForm';
-import type { Company, Contact, Lead, Deal, Task } from '@/contexts';
+import { AddDeliveryProjectForm } from './AddDeliveryProjectForm';
+import { AddContractProjectForm } from './AddContractProjectForm';
+import type { Company, Contact, Lead, Deal, Task, DeliveryProject, ContractProject } from '@/contexts';
 
 // ============================================================================
 // Types
@@ -68,6 +70,32 @@ interface EditTaskFormOptions {
   onDeleted?: (taskId: string) => void;
 }
 
+interface DeliveryProjectFormOptions {
+  defaultName?: string;
+  defaultCompanyId?: string;
+  defaultCompanyName?: string;
+  defaultContactId?: string;
+  defaultContactName?: string;
+  defaultLinkedLeadId?: string;
+  defaultLinkedLeadName?: string;
+  defaultLinkedDealId?: string;
+  defaultLinkedDealName?: string;
+  onCreated?: (project: DeliveryProject) => void;
+}
+
+interface ContractProjectFormOptions {
+  defaultName?: string;
+  defaultCompanyId?: string;
+  defaultCompanyName?: string;
+  defaultContactId?: string;
+  defaultContactName?: string;
+  defaultLinkedLeadId?: string;
+  defaultLinkedLeadName?: string;
+  defaultLinkedDealId?: string;
+  defaultLinkedDealName?: string;
+  onCreated?: (project: ContractProject) => void;
+}
+
 interface FormStackContextValue {
   // Open form methods
   openAddCompany: (options?: CompanyFormOptions) => void;
@@ -76,16 +104,18 @@ interface FormStackContextValue {
   openAddDeal: (options?: DealFormOptions) => void;
   openAddTask: (options?: TaskFormOptions) => void;
   openEditTask: (options: EditTaskFormOptions) => void;
+  openAddDeliveryProject: (options?: DeliveryProjectFormOptions) => void;
+  openAddContractProject: (options?: ContractProjectFormOptions) => void;
   
   // Current stack info
   stackDepth: number;
 }
 
-type FormType = 'company' | 'contact' | 'lead' | 'deal' | 'task' | 'edit-task';
+type FormType = 'company' | 'contact' | 'lead' | 'deal' | 'task' | 'edit-task' | 'delivery-project' | 'contract-project';
 
 interface FormStackItem {
   type: FormType;
-  options: CompanyFormOptions | ContactFormOptions | LeadFormOptions | DealFormOptions | TaskFormOptions | EditTaskFormOptions;
+  options: CompanyFormOptions | ContactFormOptions | LeadFormOptions | DealFormOptions | TaskFormOptions | EditTaskFormOptions | DeliveryProjectFormOptions | ContractProjectFormOptions;
 }
 
 // ============================================================================
@@ -149,6 +179,14 @@ export function FormStackProvider({ children }: FormStackProviderProps) {
     pushForm('edit-task', options);
   }, [pushForm]);
 
+  const openAddDeliveryProject = useCallback((options: DeliveryProjectFormOptions = {}) => {
+    pushForm('delivery-project', options);
+  }, [pushForm]);
+
+  const openAddContractProject = useCallback((options: ContractProjectFormOptions = {}) => {
+    pushForm('contract-project', options);
+  }, [pushForm]);
+
   // Context value
   const contextValue: FormStackContextValue = {
     openAddCompany,
@@ -157,6 +195,8 @@ export function FormStackProvider({ children }: FormStackProviderProps) {
     openAddDeal,
     openAddTask,
     openEditTask,
+    openAddDeliveryProject,
+    openAddContractProject,
     stackDepth: formStack.length,
   };
 
@@ -367,6 +407,60 @@ export function FormStackProvider({ children }: FormStackProviderProps) {
               }}
               onDeleted={(taskId) => {
                 opts.onDeleted?.(taskId);
+                popForm();
+              }}
+            />
+          );
+        }
+
+        case 'delivery-project': {
+          const opts = item.options as DeliveryProjectFormOptions;
+          return (
+            <AddDeliveryProjectForm
+              key={`delivery-project-${index}`}
+              isOpen={isOpen}
+              onClose={handleClose}
+              defaultName={opts.defaultName}
+              defaultCompanyId={opts.defaultCompanyId}
+              defaultCompanyName={opts.defaultCompanyName}
+              defaultContactId={opts.defaultContactId}
+              defaultContactName={opts.defaultContactName}
+              defaultLinkedLeadId={opts.defaultLinkedLeadId}
+              defaultLinkedLeadName={opts.defaultLinkedLeadName}
+              defaultLinkedDealId={opts.defaultLinkedDealId}
+              defaultLinkedDealName={opts.defaultLinkedDealName}
+              stackLevel={stackLevel}
+              onAddCompany={handleAddCompanyFromChild}
+              onAddContact={handleAddContactFromChild}
+              onCreated={(project) => {
+                opts.onCreated?.(project);
+                popForm();
+              }}
+            />
+          );
+        }
+
+        case 'contract-project': {
+          const opts = item.options as ContractProjectFormOptions;
+          return (
+            <AddContractProjectForm
+              key={`contract-project-${index}`}
+              isOpen={isOpen}
+              onClose={handleClose}
+              defaultName={opts.defaultName}
+              defaultCompanyId={opts.defaultCompanyId}
+              defaultCompanyName={opts.defaultCompanyName}
+              defaultContactId={opts.defaultContactId}
+              defaultContactName={opts.defaultContactName}
+              defaultLinkedLeadId={opts.defaultLinkedLeadId}
+              defaultLinkedLeadName={opts.defaultLinkedLeadName}
+              defaultLinkedDealId={opts.defaultLinkedDealId}
+              defaultLinkedDealName={opts.defaultLinkedDealName}
+              stackLevel={stackLevel}
+              onAddCompany={handleAddCompanyFromChild}
+              onAddContact={handleAddContactFromChild}
+              onCreated={(project) => {
+                opts.onCreated?.(project);
                 popForm();
               }}
             />
