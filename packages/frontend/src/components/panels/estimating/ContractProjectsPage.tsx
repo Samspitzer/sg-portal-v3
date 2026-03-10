@@ -11,17 +11,9 @@ import {
   FilterBar, FilterCount, SearchInput, SelectFilter,
   DataTable, type DataTableColumn, EmptyTableState, Button,
 } from '@/components/common';
-import { useEstimatingStore, useUsersStore, type ContractProject, type ContractStatus } from '@/contexts';
+import { useEstimatingStore, useUsersStore, useFieldsStore, type ContractProject } from '@/contexts';
 import { useFormStack } from '@/components/panels/add-forms';
-
-const STATUS_OPTIONS = [
-  { value: 'draft', label: 'Draft' },
-  { value: 'pending_signature', label: 'Pending Signature' },
-  { value: 'signed', label: 'Signed' },
-  { value: 'active', label: 'Active' },
-  { value: 'completed', label: 'Completed' },
-  { value: 'cancelled', label: 'Cancelled' },
-];
+import { formatDate } from '@/utils/dateUtils';
 
 const CONTRACT_TYPE_OPTIONS = [
   { value: 'fixed_price', label: 'Fixed Price' },
@@ -30,25 +22,22 @@ const CONTRACT_TYPE_OPTIONS = [
   { value: 'retainer', label: 'Retainer' },
 ];
 
-const STATUS_COLORS: Record<ContractStatus, string> = {
-  draft: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300',
-  pending_signature: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
-  signed: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-  active: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
-  completed: 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400',
-  cancelled: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
-};
-
 export function ContractProjectsPage() {
   const navigate = useNavigate();
   const { contractProjects } = useEstimatingStore();
   const { users } = useUsersStore();
+  const { estimateStatuses } = useFieldsStore();
   const { openAddContractProject } = useFormStack();
 
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [ownerFilter, setOwnerFilter] = useState('');
+
+  const statusOptions = useMemo(() =>
+    [...estimateStatuses].sort((a, b) => a.order - b.order).map(s => ({ value: s.id, label: s.name })),
+    [estimateStatuses]
+  );
 
   const ownerOptions = useMemo(() => {
     const ownerIds = new Set(contractProjects.map((p: ContractProject) => p.ownerId).filter(Boolean));
@@ -68,6 +57,12 @@ export function ContractProjectsPage() {
   }, [contractProjects, search, typeFilter, statusFilter, ownerFilter]);
 
   const hasFilters = !!(search || typeFilter || statusFilter || ownerFilter);
+
+  const getStatusDisplay = (statusId: string) => {
+    const s = estimateStatuses.find(x => x.id === statusId);
+    if (!s) return { name: statusId, color: '#64748b' };
+    return s;
+  };
 
   const columns: DataTableColumn<ContractProject>[] = [
     {
@@ -101,12 +96,18 @@ export function ContractProjectsPage() {
     {
       key: 'status',
       header: 'Status',
-      width: 150,
-      render: (p: ContractProject) => (
-        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[p.status]}`}>
-          {STATUS_OPTIONS.find(s => s.value === p.status)?.label ?? p.status}
-        </span>
-      ),
+      width: 140,
+      render: (p: ContractProject) => {
+        const s = getStatusDisplay(p.status);
+        return (
+          <span
+            className="px-2 py-0.5 rounded-full text-xs font-medium"
+            style={{ backgroundColor: s.color + '20', color: s.color, border: `1px solid ${s.color}40` }}
+          >
+            {s.name}
+          </span>
+        );
+      },
     },
     {
       key: 'contractValue',
@@ -119,12 +120,14 @@ export function ContractProjectsPage() {
       ),
     },
     {
-      key: 'period',
+      key: 'startDate',
       header: 'Period',
       width: 160,
       render: (p: ContractProject) => (
         <span className="text-xs text-slate-500 dark:text-slate-400">
-          {p.startDate || '—'} → {p.endDate || '—'}
+          {p.startDate ? formatDate(p.startDate, 'short') : '—'}
+          {' → '}
+          {p.endDate ? formatDate(p.endDate, 'short') : '—'}
         </span>
       ),
     },
@@ -165,17 +168,10 @@ export function ContractProjectsPage() {
       }
     >
       <div className="flex flex-col h-full min-h-0">
-        <FilterBar
-          rightContent={
-            <FilterCount count={filtered.length} singular="project" />
-          }
-        >
-          <SearchInput
-            value={search} onChange={setSearch} placeholder="Search projects…"
-            className="w-48 [&_input]:h-[34px] [&_input]:text-sm"
-          />
+        <FilterBar rightContent={<FilterCount count={filtered.length} singular="project" />}>
+          <SearchInput value={search} onChange={setSearch} placeholder="Search projects…" className="w-48 [&_input]:h-[34px] [&_input]:text-sm" />
           <SelectFilter label="Type" value={typeFilter} onChange={setTypeFilter} options={CONTRACT_TYPE_OPTIONS} className="w-36" />
-          <SelectFilter label="Status" value={statusFilter} onChange={setStatusFilter} options={STATUS_OPTIONS} className="w-36" />
+          <SelectFilter label="Status" value={statusFilter} onChange={setStatusFilter} options={statusOptions} className="w-36" />
           <SelectFilter label="Owner" value={ownerFilter} onChange={setOwnerFilter} options={ownerOptions} icon={User} className="w-36" />
         </FilterBar>
         <div className="flex-1 min-h-0">
@@ -185,13 +181,8 @@ export function ContractProjectsPage() {
             rowKey={(p: ContractProject) => p.id}
             onRowClick={(p: ContractProject) => navigate(`/estimates/contracts/${p.id}`)}
             emptyState={
-              <EmptyTableState
-                icon={FileSignature}
-                hasFilters={hasFilters}
-                entityName="contract project"
-                onAdd={() => openAddContractProject()}
-                addLabel="New Contract Project"
-              />
+              <EmptyTableState icon={FileSignature} hasFilters={hasFilters} entityName="contract project"
+                onAdd={() => openAddContractProject()} addLabel="New Contract Project" />
             }
           />
         </div>

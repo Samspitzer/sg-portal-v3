@@ -20,6 +20,7 @@ import {
   useClientsStore,
   useSalesStore,
   useToast,
+  useFieldsStore,
   type ContractProject,
 } from '@/contexts';
 
@@ -50,22 +51,13 @@ export interface AddContractProjectFormData {
 
 const INITIAL: AddContractProjectFormData = {
   name: '', companyId: '', companyName: '', contactId: '', contactName: '',
-  contractType: 'fixed_price', status: 'draft',
+  contractType: 'fixed_price', status: '',
   contractValue: '', startDate: '', endDate: '',
   ownerId: '', ownerName: '',
   linkedLeadId: '', linkedLeadName: '', linkedDealId: '', linkedDealName: '',
   jobsiteStreet: '', jobsiteSuite: '', jobsiteCity: '', jobsiteState: '', jobsiteZip: '',
   notes: '',
 };
-
-const STATUS_OPTIONS = [
-  { value: 'draft', label: 'Draft' },
-  { value: 'pending_signature', label: 'Pending Signature' },
-  { value: 'signed', label: 'Signed' },
-  { value: 'active', label: 'Active' },
-  { value: 'completed', label: 'Completed' },
-  { value: 'cancelled', label: 'Cancelled' },
-];
 
 const CONTRACT_TYPE_OPTIONS = [
   { value: 'fixed_price', label: 'Fixed Price' },
@@ -105,6 +97,7 @@ export function AddContractProjectForm({
   const { companies, contacts } = useClientsStore();
   const { leads, deals } = useSalesStore();
   const toast = useToast();
+  const { estimateStatuses } = useFieldsStore();
 
   const [form, setForm] = useState<AddContractProjectFormData>(INITIAL);
   const [isSaving, setIsSaving] = useState(false);
@@ -256,7 +249,7 @@ export function AddContractProjectForm({
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Status</label>
             <SelectFilter label="Select status" value={form.status} onChange={v => update('status', v)}
-              options={STATUS_OPTIONS} showAllOption={false} className="w-full" />
+              options={[...estimateStatuses].sort((a, b) => a.order - b.order).map(s => ({ value: s.id, label: s.name }))} showAllOption={false} className="w-full" />
           </div>
         </div>
 

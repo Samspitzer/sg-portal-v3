@@ -1,4 +1,4 @@
-import { Calculator, Truck, FileSignature } from 'lucide-react';
+import { Calculator, Truck, FileSignature, CheckSquare } from 'lucide-react';
 import type { PanelTile } from './accounting';
 
 export const ESTIMATING_PANEL = {
@@ -20,6 +20,13 @@ export const ESTIMATING_PANEL = {
       path: '/estimates/contracts',
       icon: FileSignature,
       description: 'Fixed-price, T&M and retainer contracts',
+    },
+    {
+      id: 'tasks',
+      name: 'Tasks',
+      path: '/estimates/tasks',
+      icon: CheckSquare,
+      description: 'All tasks linked to estimating projects',
     },
   ] as PanelTile[],
 };

@@ -12,247 +12,99 @@ import { useState, useCallback, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Truck, ArrowLeft, Building2, User, MapPin, Trash2,
-  DollarSign, Calendar, Target, TrendingUp, FileText,
-  Info, Plus, Pencil, X, Check, GripVertical, Calculator,
+  DollarSign, Calendar as CalendarIcon, TrendingUp, FileText,
+  Info, Clock,
 } from 'lucide-react';
 import { Page } from '@/components/layout';
 import {
   Button, ConfirmModal, SectionHeader,
   InlineEditField, InlineSelectField, CollapsibleSection,
-  AddressInput, Textarea,
+  AddressInput, Textarea, EntityTasksSection,
+  QuickViewModal, TaskTypeIcon,
+  type QuickViewField,
 } from '@/components/common';
+import { PricingStepsPanel, type StepFormState } from './PricingSteps';
 import {
   useEstimatingStore,
   useUsersStore,
   useClientsStore,
   useSalesStore,
   useToast,
+  useFieldsStore,
+  useAuthStore,
   type PricingStep,
   type DeliveryProject,
-  type DeliveryStatus,
 } from '@/contexts';
+import { useTaskStore, type Task } from '@/contexts/taskStore';
+import { useTaskTypesStore } from '@/contexts/taskTypesStore';
+import { useFormStack } from '@/components/panels/add-forms';
 import { useDocumentTitle } from '@/hooks';
 import { formatDate } from '@/utils/dateUtils';
 
-// ── Constants ─────────────────────────────────────────────────────────────────
+// ── Task Quick View ────────────────────────────────────────────────────────────
 
-const STATUS_OPTIONS = [
-  { value: 'draft', label: 'Draft' },
-  { value: 'sent', label: 'Sent' },
-  { value: 'approved', label: 'Approved' },
-  { value: 'in_progress', label: 'In Progress' },
-  { value: 'completed', label: 'Completed' },
-  { value: 'cancelled', label: 'Cancelled' },
+const TASK_PRIORITIES = [
+  { value: 'low',    label: 'Low',    color: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300' },
+  { value: 'medium', label: 'Medium', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' },
+  { value: 'high',   label: 'High',   color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' },
+  { value: 'urgent', label: 'Urgent', color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' },
 ];
 
-const STATUS_COLORS: Record<DeliveryStatus, string> = {
-  draft: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300',
-  sent: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-  approved: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
-  in_progress: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
-  completed: 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400',
-  cancelled: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
-};
-
-// ── Pricing Step Form ─────────────────────────────────────────────────────────
-
-interface StepFormState {
-  title: string;
-  description: string;
-  laborHours: string;
-  laborRate: string;
-  materialsCost: string;
-  otherCost: string;
-}
-
-const EMPTY_STEP: StepFormState = {
-  title: '', description: '', laborHours: '', laborRate: '',
-  materialsCost: '', otherCost: '',
-};
-
-function calcPreview(f: StepFormState): number {
-  const labor = (parseFloat(f.laborHours) || 0) * (parseFloat(f.laborRate) || 0);
-  const mat = parseFloat(f.materialsCost) || 0;
-  const other = parseFloat(f.otherCost) || 0;
-  return labor + mat + other;
-}
-
-interface PricingStepRowProps {
-  step: PricingStep;
-  isEditing: boolean;
-  onEdit: () => void;
-  onSave: (updates: Partial<Omit<PricingStep, 'id' | 'createdAt'>>) => void;
-  onCancel: () => void;
+function TaskQuickViewComponent({
+  task, isOpen, taskTypes, users, onClose, onMarkDone, onDelete,
+}: {
+  task: Task | null;
+  isOpen: boolean;
+  taskTypes: import('@/contexts/taskTypesStore').TaskTypeConfig[];
+  users: { id: string; name: string }[];
+  onClose: () => void;
+  onMarkDone: () => void;
   onDelete: () => void;
-}
+}) {
+  if (!task) return null;
+  const taskType = taskTypes.find(t => t.value === task.type);
+  const assignedUser = users.find(u => u.id === task.assignedUserId);
+  const priority = TASK_PRIORITIES.find(p => p.value === task.priority);
 
-function PricingStepRow({ step, isEditing, onEdit, onSave, onCancel, onDelete }: PricingStepRowProps) {
-  const [form, setForm] = useState<StepFormState>({
-    title: step.title,
-    description: step.description || '',
-    laborHours: step.laborHours?.toString() || '',
-    laborRate: step.laborRate?.toString() || '',
-    materialsCost: step.materialsCost?.toString() || '',
-    otherCost: step.otherCost?.toString() || '',
-  });
+  const badges = [
+    {
+      label: task.status === 'completed' ? 'Completed' : task.status === 'in_progress' ? 'In Progress' : 'Pending',
+      className: task.status === 'completed'
+        ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+        : task.status === 'in_progress'
+          ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+          : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300',
+    },
+    ...(priority ? [{ label: priority.label, className: priority.color }] : []),
+  ];
 
-  const update = (k: keyof StepFormState, v: string) => setForm(p => ({ ...p, [k]: v }));
-
-  const handleSave = () => {
-    if (!form.title.trim()) return;
-    onSave({
-      title: form.title.trim(),
-      description: form.description || undefined,
-      laborHours: parseFloat(form.laborHours) || undefined,
-      laborRate: parseFloat(form.laborRate) || undefined,
-      materialsCost: parseFloat(form.materialsCost) || undefined,
-      otherCost: parseFloat(form.otherCost) || undefined,
-      sortOrder: step.sortOrder,
-    });
-  };
-
-  if (isEditing) {
-    return (
-      <div className="border border-accent-500/30 rounded-lg p-4 bg-teal-50/50 dark:bg-teal-900/10 space-y-3">
-        <input
-          className="w-full text-sm font-medium border-b border-slate-200 dark:border-slate-700 bg-transparent pb-1 focus:outline-none focus:border-accent-500 text-slate-900 dark:text-white"
-          placeholder="Step title *"
-          value={form.title}
-          onChange={e => update('title', e.target.value)}
-        />
-        <textarea
-          className="w-full text-sm text-slate-600 dark:text-slate-300 bg-transparent border border-slate-200 dark:border-slate-700 rounded px-2 py-1.5 resize-none focus:outline-none focus:border-accent-500"
-          placeholder="Description (optional)"
-          rows={2}
-          value={form.description}
-          onChange={e => update('description', e.target.value)}
-        />
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          {[
-            { key: 'laborHours' as const, label: 'Labour Hrs', placeholder: '0' },
-            { key: 'laborRate' as const, label: 'Rate ($/hr)', placeholder: '0.00' },
-            { key: 'materialsCost' as const, label: 'Materials $', placeholder: '0.00' },
-            { key: 'otherCost' as const, label: 'Other $', placeholder: '0.00' },
-          ].map(({ key, label, placeholder }) => (
-            <div key={key}>
-              <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">{label}</label>
-              <input
-                type="number"
-                className="w-full text-sm border border-slate-200 dark:border-slate-700 rounded px-2 py-1.5 bg-white dark:bg-slate-800 focus:outline-none focus:border-accent-500 text-slate-900 dark:text-white"
-                placeholder={placeholder}
-                value={form[key]}
-                onChange={e => update(key, e.target.value)}
-              />
-            </div>
-          ))}
-        </div>
-        <div className="flex items-center justify-between pt-1">
-          <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-            Subtotal: <span className="text-accent-600 dark:text-accent-400">${calcPreview(form).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-          </span>
-          <div className="flex gap-2">
-            <Button variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>
-            <Button size="sm" onClick={handleSave} disabled={!form.title.trim()}>Save Step</Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const fields: QuickViewField[] = [];
+  if (taskType) fields.push({ label: 'Type', value: <span className="flex items-center gap-1.5"><TaskTypeIcon icon={taskType.icon} className="w-4 h-4" />{taskType.label}</span> });
+  if (assignedUser) fields.push({ label: 'Assigned To', value: assignedUser.name, icon: <User className="w-4 h-4 text-slate-400" /> });
+  if (task.description) fields.push({ label: 'Description', value: task.description });
 
   return (
-    <div className="group flex items-start gap-3 py-3 px-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/50 border border-transparent hover:border-slate-200 dark:hover:border-slate-700 transition-colors">
-      <GripVertical className="w-4 h-4 text-slate-300 dark:text-slate-600 mt-1 flex-shrink-0 cursor-grab" />
-      <div className="flex-1 min-w-0">
-        <div className="font-medium text-sm text-slate-900 dark:text-white">{step.title}</div>
-        {step.description && (
-          <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{step.description}</div>
-        )}
-        <div className="flex flex-wrap gap-3 mt-1.5">
-          {(step.laborHours || step.laborRate) && (
-            <span className="text-xs text-slate-500 dark:text-slate-400">
-              Labour: {step.laborHours ?? 0} hrs @ ${step.laborRate ?? 0}/hr
-            </span>
-          )}
-          {step.materialsCost != null && step.materialsCost > 0 && (
-            <span className="text-xs text-slate-500 dark:text-slate-400">Materials: ${step.materialsCost.toLocaleString()}</span>
-          )}
-          {step.otherCost != null && step.otherCost > 0 && (
-            <span className="text-xs text-slate-500 dark:text-slate-400">Other: ${step.otherCost.toLocaleString()}</span>
-          )}
-        </div>
-      </div>
-      <div className="flex items-center gap-2 flex-shrink-0">
-        <span className="text-sm font-semibold text-slate-900 dark:text-white">
-          ${step.total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-        </span>
-        <button onClick={onEdit}
-          className="opacity-0 group-hover:opacity-100 p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-all">
-          <Pencil className="w-3.5 h-3.5" />
-        </button>
-        <button onClick={onDelete}
-          className="opacity-0 group-hover:opacity-100 p-1 rounded text-slate-400 hover:text-red-500 transition-all">
-          <X className="w-3.5 h-3.5" />
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ── Add Step Form ─────────────────────────────────────────────────────────────
-
-function AddStepForm({ onAdd, onCancel }: { onAdd: (step: StepFormState) => void; onCancel: () => void }) {
-  const [form, setForm] = useState<StepFormState>(EMPTY_STEP);
-  const update = (k: keyof StepFormState, v: string) => setForm(p => ({ ...p, [k]: v }));
-
-  return (
-    <div className="border-2 border-dashed border-accent-300 dark:border-accent-700 rounded-lg p-4 space-y-3 bg-teal-50/30 dark:bg-teal-900/10">
-      <input
-        autoFocus
-        className="w-full text-sm font-medium border-b border-slate-200 dark:border-slate-700 bg-transparent pb-1 focus:outline-none focus:border-accent-500 text-slate-900 dark:text-white"
-        placeholder="Step title *"
-        value={form.title}
-        onChange={e => update('title', e.target.value)}
-        onKeyDown={e => { if (e.key === 'Enter' && form.title.trim()) onAdd(form); if (e.key === 'Escape') onCancel(); }}
-      />
-      <textarea
-        className="w-full text-sm text-slate-600 dark:text-slate-300 bg-transparent border border-slate-200 dark:border-slate-700 rounded px-2 py-1.5 resize-none focus:outline-none focus:border-accent-500"
-        placeholder="Description (optional)"
-        rows={2}
-        value={form.description}
-        onChange={e => update('description', e.target.value)}
-      />
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-        {[
-          { key: 'laborHours' as const, label: 'Labour Hrs', placeholder: '0' },
-          { key: 'laborRate' as const, label: 'Rate ($/hr)', placeholder: '0.00' },
-          { key: 'materialsCost' as const, label: 'Materials $', placeholder: '0.00' },
-          { key: 'otherCost' as const, label: 'Other $', placeholder: '0.00' },
-        ].map(({ key, label, placeholder }) => (
-          <div key={key}>
-            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">{label}</label>
-            <input
-              type="number"
-              className="w-full text-sm border border-slate-200 dark:border-slate-700 rounded px-2 py-1.5 bg-white dark:bg-slate-800 focus:outline-none focus:border-accent-500 text-slate-900 dark:text-white"
-              placeholder={placeholder}
-              value={form[key]}
-              onChange={e => update(key, e.target.value)}
-            />
-          </div>
-        ))}
-      </div>
-      <div className="flex items-center justify-between pt-1">
-        <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-          Preview: <span className="text-accent-600 dark:text-accent-400">${calcPreview(form).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-        </span>
-        <div className="flex gap-2">
-          <Button variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>
-          <Button size="sm" onClick={() => form.title.trim() && onAdd(form)} disabled={!form.title.trim()}>
-            <Check className="w-3.5 h-3.5 mr-1" />
-            Add Step
-          </Button>
-        </div>
-      </div>
-    </div>
+    <QuickViewModal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={task.title}
+      subtitle={
+        <>
+          {task.dueDate && <span className="flex items-center gap-1"><CalendarIcon className="w-3.5 h-3.5" />{formatDate(task.dueDate, 'long')}</span>}
+          {task.dueTime && <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" />{task.dueTime}</span>}
+        </>
+      }
+      icon={taskType ? <TaskTypeIcon icon={taskType.icon} className="w-5 h-5 text-teal-600 dark:text-teal-400" /> : <Clock className="w-5 h-5 text-teal-600 dark:text-teal-400" />}
+      badges={badges}
+      fields={fields}
+      notes={task.notes}
+      footerMeta={<>Created {new Date(task.createdAt).toLocaleString()}</>}
+      leftActions={[{ label: 'Delete', variant: 'danger' as const, onClick: onDelete }]}
+      rightActions={[
+        { label: 'Close', variant: 'secondary' as const, onClick: onClose },
+        ...(task.status !== 'completed' ? [{ label: 'Mark Done', variant: 'primary' as const, onClick: onMarkDone }] : []),
+      ]}
+    />
   );
 }
 
@@ -262,11 +114,17 @@ export function DeliveryProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const toast = useToast();
+  const { user: currentUser } = useAuthStore();
 
   const { deliveryProjects, updateDeliveryProject, deleteDeliveryProject, addPricingStep, updatePricingStep, deletePricingStep } = useEstimatingStore();
   const { users } = useUsersStore();
   const { companies, contacts } = useClientsStore();
-  const { leads, deals } = useSalesStore();
+  const { deals } = useSalesStore();
+  const { estimateStatuses } = useFieldsStore();
+  const { tasks, completeTask, deleteTask, createTask, updateTask } = useTaskStore();
+  const { taskTypes } = useTaskTypesStore();
+  const { openAddTask } = useFormStack();
+  const [quickViewTask, setQuickViewTask] = useState<Task | null>(null);
 
   const project = useMemo(() => {
     if (!id) return undefined;
@@ -283,7 +141,6 @@ export function DeliveryProjectDetailPage() {
   const company = useMemo(() => project?.companyId ? companies.find(c => c.id === project.companyId) : null, [project, companies]);
   const contact = useMemo(() => project?.contactId ? contacts.find(c => c.id === project.contactId) : null, [project, contacts]);
   const owner = useMemo(() => project?.ownerId ? users.find(u => u.id === project.ownerId) : null, [project, users]);
-  const linkedLead = useMemo(() => project?.linkedLeadId ? leads.find(l => l.id === project.linkedLeadId) : null, [project, leads]);
   const linkedDeal = useMemo(() => project?.linkedDealId ? deals.find(d => d.id === project.linkedDealId) : null, [project, deals]);
 
   const sortedSteps = useMemo(() =>
@@ -292,12 +149,75 @@ export function DeliveryProjectDetailPage() {
 
   const totalEstimate = useMemo(() => sortedSteps.reduce((sum, s) => sum + s.total, 0), [sortedSteps]);
 
-  const handleFieldSave = useCallback((field: string, value: string) => {
+  const handleFieldSave = useCallback(async (field: string, value: string) => {
     if (!project) return;
     const updateValue = field === 'value' ? (parseFloat(value) || undefined) : value;
     updateDeliveryProject(project.id, { [field]: updateValue });
     toast.success('Updated', 'Project saved');
-  }, [project, updateDeliveryProject, toast]);
+
+    // When due date changes, sync the linked due-date task
+    if (field === 'deliveryDate') {
+      const linkedDueTask = tasks.find(
+        t => t.linkedItem?.type === 'estimate' &&
+             t.linkedItem?.id === project.id &&
+             t.title.startsWith('Estimate Due:')
+      );
+
+      if (linkedDueTask) {
+        // Update existing task's due date
+        try {
+          await updateTask(linkedDueTask.id, { dueDate: value || undefined });
+        } catch {
+          // Non-fatal
+        }
+      } else if (value) {
+        // No task yet — create one now that a date has been set
+        const assigneeId = project.ownerId || currentUser?.id || '';
+        const assigneeName = project.ownerName || currentUser?.name || '';
+        if (assigneeId) {
+          try {
+            await createTask({
+              title: `Estimate Due: ${project.name}`,
+              dueDate: value,
+              assignedUserId: assigneeId,
+              assignedUserName: assigneeName,
+              linkedItem: { type: 'estimate', id: project.id, name: project.name },
+            });
+          } catch {
+            // Non-fatal
+          }
+        }
+      }
+    }
+  }, [project, updateDeliveryProject, toast, tasks, updateTask, createTask]);
+
+  const handleAddTask = useCallback(() => {
+    if (!project) return;
+    openAddTask({
+      defaultLinkedItemType: 'estimate',
+      defaultLinkedItemId: project.id,
+      defaultLinkedItemName: project.name,
+      defaultCompanyId: project.companyId,
+      defaultCompanyName: project.companyName,
+      defaultContactId: project.contactId,
+      defaultContactName: project.contactName,
+      defaultDueDate: project.deliveryDate,
+    });
+  }, [project, openAddTask]);
+
+  const handleMarkTaskDone = useCallback(async () => {
+    if (!quickViewTask) return;
+    await completeTask(quickViewTask.id);
+    toast.success('Task Completed', 'Task has been marked as done');
+    setQuickViewTask(null);
+  }, [quickViewTask, completeTask, toast]);
+
+  const handleDeleteTask = useCallback(async () => {
+    if (!quickViewTask) return;
+    await deleteTask(quickViewTask.id);
+    toast.success('Task Deleted', 'Task has been removed');
+    setQuickViewTask(null);
+  }, [quickViewTask, deleteTask, toast]);
 
   const handleDelete = useCallback(async () => {
     if (!project) return;
@@ -351,7 +271,9 @@ export function DeliveryProjectDetailPage() {
     );
   }
 
-  const statusColor = STATUS_COLORS[project.status] || STATUS_COLORS.draft;
+  const currentStatus = estimateStatuses.find(s => s.id === project.status);
+  const statusColor = currentStatus?.color ?? '#64748b';
+  const statusName = currentStatus?.name ?? project.status;
 
   return (
     <Page
@@ -359,8 +281,11 @@ export function DeliveryProjectDetailPage() {
       description={project.projectNumber}
       actions={
         <div className="flex items-center gap-2">
-          <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${statusColor}`}>
-            {STATUS_OPTIONS.find(s => s.value === project.status)?.label ?? project.status}
+          <span
+            className="px-2.5 py-1 rounded-full text-xs font-medium"
+            style={{ backgroundColor: statusColor + '20', color: statusColor, border: `1px solid ${statusColor}40` }}
+          >
+            {statusName}
           </span>
           <Button variant="secondary" size="sm" onClick={() => navigate('/estimates/delivery')}>
             <ArrowLeft className="w-4 h-4 mr-1" />Back
@@ -385,7 +310,7 @@ export function DeliveryProjectDetailPage() {
                 <InlineEditField label="Project Name" value={project.name}
                   onSave={v => handleFieldSave('name', v)} placeholder="Project name" />
                 <InlineSelectField label="Status" value={project.status}
-                  options={STATUS_OPTIONS} onSave={v => handleFieldSave('status', v)} icon={Info} />
+                  options={[...estimateStatuses].sort((a, b) => a.order - b.order).map(s => ({ value: s.id, label: s.name }))} onSave={v => handleFieldSave('status', v)} icon={Info} />
                 <InlineSelectField label="Owner" value={project.ownerId || ''}
                   options={ownerOptions} onSave={v => {
                     const u = users.find(u => u.id === v);
@@ -394,8 +319,8 @@ export function DeliveryProjectDetailPage() {
                   }} placeholder="Select owner" icon={User} />
                 <InlineEditField label="Estimate Value ($)" value={project.value?.toString() || ''}
                   onSave={v => handleFieldSave('value', v)} placeholder="Enter value" icon={DollarSign} />
-                <InlineEditField label="Delivery Date" value={project.deliveryDate || ''}
-                  onSave={v => handleFieldSave('deliveryDate', v)} placeholder="YYYY-MM-DD" icon={Calendar} />
+                <InlineEditField label="Due Date" value={project.deliveryDate || ''}
+                  onSave={v => handleFieldSave('deliveryDate', v)} placeholder="YYYY-MM-DD" icon={CalendarIcon} />
 
                 {/* Company link */}
                 <div data-inline-field="true" className="group">
@@ -437,94 +362,40 @@ export function DeliveryProjectDetailPage() {
           </div>
 
           {/* Sales Links */}
-          {(linkedLead || linkedDeal) && (
+          {linkedDeal && (
             <div className="border border-slate-200 dark:border-slate-700 rounded-lg">
               <div className="flex items-center gap-2 px-4 py-3 bg-slate-50 dark:bg-slate-800/50 rounded-t-lg">
                 <TrendingUp className="w-4 h-4 text-slate-500" />
-                <span className="text-sm font-semibold text-slate-900 dark:text-white">Sales Links</span>
+                <span className="text-sm font-semibold text-slate-900 dark:text-white">Sales Link</span>
               </div>
-              <div className="p-4 bg-white dark:bg-slate-900 rounded-b-lg grid grid-cols-2 gap-3">
-                {linkedLead && (
-                  <div data-inline-field="true">
-                    <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Linked Lead</div>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <Target className="w-3.5 h-3.5 text-slate-400" />
-                      <button onClick={() => navigate(`/sales/leads/${linkedLead.slug || linkedLead.id}`)}
-                        className="text-sm text-brand-600 dark:text-brand-400 hover:underline">{linkedLead.name}</button>
-                    </div>
+              <div className="p-4 bg-white dark:bg-slate-900">
+                <div data-inline-field="true">
+                  <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Linked Deal</div>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <TrendingUp className="w-3.5 h-3.5 text-slate-400" />
+                    <button onClick={() => navigate(`/sales/deals/${linkedDeal.slug || linkedDeal.id}`)}
+                      className="text-sm text-brand-600 dark:text-brand-400 hover:underline">{linkedDeal.name}</button>
                   </div>
-                )}
-                {linkedDeal && (
-                  <div data-inline-field="true">
-                    <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Linked Deal</div>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <TrendingUp className="w-3.5 h-3.5 text-slate-400" />
-                      <button onClick={() => navigate(`/sales/deals/${linkedDeal.slug || linkedDeal.id}`)}
-                        className="text-sm text-brand-600 dark:text-brand-400 hover:underline">{linkedDeal.name}</button>
-                    </div>
-                  </div>
-                )}
+                </div>
               </div>
             </div>
           )}
 
           {/* Pricing Steps */}
-          <div className="border border-slate-200 dark:border-slate-700 rounded-lg">
-            <div className="flex items-center justify-between px-4 py-3 bg-slate-50 dark:bg-slate-800/50 rounded-t-lg">
-              <div className="flex items-center gap-2">
-                <Calculator className="w-4 h-4 text-slate-500" />
-                <span className="text-sm font-semibold text-slate-900 dark:text-white">Pricing Steps</span>
-                {sortedSteps.length > 0 && (
-                  <span className="text-xs text-slate-400 bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded-full">
-                    {sortedSteps.length}
-                  </span>
-                )}
-              </div>
-              {!showAddStep && (
-                <Button variant="ghost" size="sm" onClick={() => setShowAddStep(true)}>
-                  <Plus className="w-4 h-4 mr-1" />Add Step
-                </Button>
-              )}
-            </div>
-            <div className="p-4 bg-white dark:bg-slate-900 rounded-b-lg space-y-1">
-              {sortedSteps.length === 0 && !showAddStep && (
-                <div className="text-center py-8">
-                  <Calculator className="w-8 h-8 mx-auto text-slate-300 dark:text-slate-600" />
-                  <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">No pricing steps yet</p>
-                  <Button variant="secondary" size="sm" className="mt-3" onClick={() => setShowAddStep(true)}>
-                    <Plus className="w-4 h-4 mr-1" />Add First Step
-                  </Button>
-                </div>
-              )}
-
-              {sortedSteps.map(step => (
-                <PricingStepRow
-                  key={step.id}
-                  step={step}
-                  isEditing={editingStepId === step.id}
-                  onEdit={() => setEditingStepId(step.id)}
-                  onSave={updates => handleUpdateStep(step.id, updates)}
-                  onCancel={() => setEditingStepId(null)}
-                  onDelete={() => setDeleteStepId(step.id)}
-                />
-              ))}
-
-              {showAddStep && (
-                <AddStepForm onAdd={handleAddStep} onCancel={() => setShowAddStep(false)} />
-              )}
-
-              {sortedSteps.length > 0 && (
-                <div className="flex justify-end pt-3 mt-2 border-t border-slate-100 dark:border-slate-800">
-                  <div className="text-right">
-                    <div className="text-xs text-slate-500 dark:text-slate-400">Total Estimate</div>
-                    <div className="text-xl font-bold text-slate-900 dark:text-white">
-                      ${totalEstimate.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
+          <PricingStepsPanel
+            steps={sortedSteps}
+            totalEstimate={totalEstimate}
+            contractValue={project.value}
+            showAddStep={showAddStep}
+            editingStepId={editingStepId}
+            onShowAdd={() => setShowAddStep(true)}
+            onHideAdd={() => setShowAddStep(false)}
+            onAdd={handleAddStep}
+            onEdit={id => setEditingStepId(id)}
+            onSave={(id, updates) => handleUpdateStep(id, updates)}
+            onCancelEdit={() => setEditingStepId(null)}
+            onDelete={id => setDeleteStepId(id)}
+          />
 
           {/* Jobsite Address */}
           <CollapsibleSection title="Jobsite Address" icon={MapPin} defaultOpen={!!project.jobsiteAddress?.street}>
@@ -595,7 +466,7 @@ export function DeliveryProjectDetailPage() {
                 <span className="font-medium text-slate-900 dark:text-white">{owner?.name || '—'}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-slate-500">Delivery Date</span>
+                <span className="text-slate-500">Due Date</span>
                 <span className="font-medium text-slate-900 dark:text-white">
                   {project.deliveryDate ? formatDate(project.deliveryDate, 'short') : '—'}
                 </span>
@@ -610,6 +481,16 @@ export function DeliveryProjectDetailPage() {
               </div>
             </div>
           </div>
+
+          {/* Tasks */}
+          <EntityTasksSection
+            entityType="estimate"
+            entityId={project.id}
+            entityName={project.name}
+            onAddTask={handleAddTask}
+            onTaskClick={setQuickViewTask}
+            defaultCollapsed={false}
+          />
         </div>
       </div>
 
@@ -627,6 +508,15 @@ export function DeliveryProjectDetailPage() {
         title="Remove Step"
         message="Are you sure you want to remove this pricing step?"
         confirmText="Remove" variant="danger"
+      />
+      <TaskQuickViewComponent
+        task={quickViewTask}
+        isOpen={!!quickViewTask}
+        taskTypes={taskTypes}
+        users={users}
+        onClose={() => setQuickViewTask(null)}
+        onMarkDone={handleMarkTaskDone}
+        onDelete={handleDeleteTask}
       />
     </Page>
   );
