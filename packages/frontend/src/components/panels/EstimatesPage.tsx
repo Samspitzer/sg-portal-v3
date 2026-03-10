@@ -12,6 +12,7 @@ import {
   ContractProjectsPage,
   DeliveryProjectDetailPage,
   ContractProjectDetailPage,
+  EstimatingTasksPage,
 } from './estimating';
 
 function EstimatingLandingPage() {
@@ -41,6 +42,7 @@ export function EstimatesPage() {
       <Route path="delivery/:id" element={<DeliveryProjectDetailPage />} />
       <Route path="contracts" element={<ContractProjectsPage />} />
       <Route path="contracts/:id" element={<ContractProjectDetailPage />} />
+      <Route path="tasks" element={<EstimatingTasksPage />} />
     </Routes>
   );
 }

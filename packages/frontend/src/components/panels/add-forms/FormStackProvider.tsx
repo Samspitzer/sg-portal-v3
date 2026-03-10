@@ -57,7 +57,7 @@ interface TaskFormOptions {
   defaultCompanyName?: string;
   defaultContactId?: string;
   defaultContactName?: string;
-  defaultLinkedItemType?: 'lead' | 'deal';
+  defaultLinkedItemType?: 'lead' | 'deal' | 'estimate';
   defaultLinkedItemId?: string;
   defaultLinkedItemName?: string;
   defaultDueDate?: string;
@@ -425,8 +425,6 @@ export function FormStackProvider({ children }: FormStackProviderProps) {
               defaultCompanyName={opts.defaultCompanyName}
               defaultContactId={opts.defaultContactId}
               defaultContactName={opts.defaultContactName}
-              defaultLinkedLeadId={opts.defaultLinkedLeadId}
-              defaultLinkedLeadName={opts.defaultLinkedLeadName}
               defaultLinkedDealId={opts.defaultLinkedDealId}
               defaultLinkedDealName={opts.defaultLinkedDealName}
               stackLevel={stackLevel}
@@ -452,8 +450,6 @@ export function FormStackProvider({ children }: FormStackProviderProps) {
               defaultCompanyName={opts.defaultCompanyName}
               defaultContactId={opts.defaultContactId}
               defaultContactName={opts.defaultContactName}
-              defaultLinkedLeadId={opts.defaultLinkedLeadId}
-              defaultLinkedLeadName={opts.defaultLinkedLeadName}
               defaultLinkedDealId={opts.defaultLinkedDealId}
               defaultLinkedDealName={opts.defaultLinkedDealName}
               stackLevel={stackLevel}

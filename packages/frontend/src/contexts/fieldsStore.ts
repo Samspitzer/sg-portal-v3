@@ -24,6 +24,19 @@ export interface Department {
 }
 
 // ============================================================================
+// Estimating Field Types
+// ============================================================================
+
+export interface EstimateStatus {
+  id: string;
+  name: string;
+  color: string; // hex color
+  order: number;
+  /** workflow = regular; approved = "won" equivalent; cancelled = "lost" equivalent */
+  type: 'workflow' | 'approved' | 'cancelled';
+}
+
+// ============================================================================
 // Sales Field Types
 // ============================================================================
 
@@ -59,6 +72,8 @@ interface FieldsState {
   dealStages: SalesStage[];
   leadLabels: SalesLabel[];
   leadSources: SalesSource[];
+  // Estimating fields
+  estimateStatuses: EstimateStatus[];
 }
 
 // ============================================================================
@@ -106,6 +121,12 @@ interface FieldsStore extends FieldsState {
   updateLeadSource: (id: string, name: string) => void;
   deleteLeadSource: (id: string) => void;
   reorderLeadSources: (sourceIds: string[]) => void;
+
+  // Estimate status actions
+  addEstimateStatus: (name: string, color?: string) => void;
+  updateEstimateStatus: (id: string, data: Partial<Pick<EstimateStatus, 'name' | 'color'>>) => void;
+  deleteEstimateStatus: (id: string) => void;
+  reorderEstimateStatuses: (statusIds: string[]) => void;
   
   // Helper functions
   getPositionsByDepartment: (departmentId: string) => Position[];
@@ -184,6 +205,15 @@ const defaultLeadSources: SalesSource[] = [
   { id: 'source-5', name: 'Social Media', order: 4 },
   { id: 'source-6', name: 'Email Campaign', order: 5 },
   { id: 'source-7', name: 'Other', order: 6 },
+];
+
+// Default estimate statuses
+const defaultEstimateStatuses: EstimateStatus[] = [
+  { id: 'est-status-draft',       name: 'Draft',       color: '#64748b', type: 'workflow',  order: 0 },
+  { id: 'est-status-inprogress',  name: 'In Progress', color: '#f59e0b', type: 'workflow',  order: 1 },
+  { id: 'est-status-completed',   name: 'Completed',   color: '#8b5cf6', type: 'workflow',  order: 2 },
+  { id: 'est-status-approved',    name: 'Approved',    color: '#10b981', type: 'approved',  order: 3 },
+  { id: 'est-status-cancelled',   name: 'Cancelled',   color: '#ef4444', type: 'cancelled', order: 4 },
 ];
 
 // Default departments with direct reporting structure
@@ -281,6 +311,7 @@ export const useFieldsStore = create<FieldsStore>()(
       dealStages: defaultDealStages,
       leadLabels: defaultLeadLabels,
       leadSources: defaultLeadSources,
+      estimateStatuses: defaultEstimateStatuses,
 
       // ============ DEPARTMENT ACTIONS ============
       
@@ -664,6 +695,49 @@ export const useFieldsStore = create<FieldsStore>()(
         }));
       },
 
+      // ============ ESTIMATE STATUS ACTIONS ============
+
+      addEstimateStatus: (name, color = '#64748b') => {
+        const trimmedName = name.trim();
+        if (!trimmedName) return;
+        set((state) => {
+          const maxOrder = Math.max(...state.estimateStatuses.map(s => s.order), -1);
+          const newStatus: EstimateStatus = {
+            id: `est-status-${generateId()}`,
+            name: trimmedName,
+            color,
+            order: maxOrder + 1,
+            type: 'workflow',
+          };
+          return { estimateStatuses: [...state.estimateStatuses, newStatus] };
+        });
+      },
+
+      updateEstimateStatus: (id, data) => {
+        set((state) => ({
+          estimateStatuses: state.estimateStatuses.map((s) =>
+            s.id === id ? { ...s, ...data } : s
+          ),
+        }));
+      },
+
+      deleteEstimateStatus: (id) => {
+        set((state) => ({
+          // Only allow deleting workflow statuses, not approved/cancelled
+          estimateStatuses: state.estimateStatuses.filter(
+            (s) => s.id !== id || s.type !== 'workflow'
+          ),
+        }));
+      },
+
+      reorderEstimateStatuses: (statusIds) => {
+        set((state) => ({
+          estimateStatuses: state.estimateStatuses
+            .map((s) => ({ ...s, order: statusIds.indexOf(s.id) }))
+            .sort((a, b) => a.order - b.order),
+        }));
+      },
+
       // ============ HELPER FUNCTIONS ============
       
       getPositionsByDepartment: (departmentId) => {
@@ -741,12 +815,13 @@ export const useFieldsStore = create<FieldsStore>()(
           dealStages: defaultDealStages,
           leadLabels: defaultLeadLabels,
           leadSources: defaultLeadSources,
+          estimateStatuses: defaultEstimateStatuses,
         });
       },
     }),
     {
       name: 'sg-portal-fields',
-      version: 3, // Bumped version for sales fields migration
+      version: 4,
       migrate: (persistedState: unknown, version: number) => {
         const state = persistedState as FieldsState & { departments?: Department[]; contactRoles?: string[] };
         
@@ -794,6 +869,13 @@ export const useFieldsStore = create<FieldsStore>()(
           }
         }
         
+        // Migration from version 3 to 4: add estimateStatuses
+        if (version < 4) {
+          if (!state.estimateStatuses) {
+            state.estimateStatuses = defaultEstimateStatuses;
+          }
+        }
+
         if (!state.contactRoles) {
           state.contactRoles = defaultContactRoles;
         }

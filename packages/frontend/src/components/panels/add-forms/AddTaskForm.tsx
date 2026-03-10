@@ -7,7 +7,7 @@
 // ============================================================================
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Clock, Building2, User, Target, TrendingUp, FileText, ChevronDown } from 'lucide-react';
+import { Clock, Building2, User, Target, TrendingUp, FileText, ChevronDown, Truck } from 'lucide-react';
 import { clsx } from 'clsx';
 import {
   Input,
@@ -498,6 +498,7 @@ export function AddTaskForm({
     switch (type) {
       case 'lead': return Target;
       case 'deal': return TrendingUp;
+      case 'estimate': return Truck;
       default: return FileText;
     }
   };

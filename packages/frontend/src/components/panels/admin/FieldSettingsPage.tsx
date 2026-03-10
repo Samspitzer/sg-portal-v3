@@ -17,10 +17,12 @@ import {
   TrendingUp,
   Tag,
   Megaphone,
+  Calculator,
+  Lock,
 } from 'lucide-react';
 import { Page } from '@/components/layout';
 import { Button, Input, Modal, Select, Toggle, TaskTypeIcon, CollapsibleSection } from '@/components/common';
-import { useFieldsStore, useUsersStore, useToast, type Department, type Position, type SalesStage, type SalesLabel, type SalesSource } from '@/contexts';
+import { useFieldsStore, useUsersStore, useToast, type Department, type Position, type SalesStage, type SalesLabel, type SalesSource, type EstimateStatus } from '@/contexts';
 import { useTaskTypesStore, TASK_TYPE_ICONS, type TaskTypeConfig, type TaskTypeIconName } from '@/contexts/taskTypesStore';
 import { useDocumentTitle } from '@/hooks';
 
@@ -411,6 +413,7 @@ export function FieldSettingsPage() {
     departments,
     contactRoles,
     leadStages, dealStages, leadLabels, leadSources,
+    estimateStatuses,
     addDepartment, updateDepartment, deleteDepartment,
     addPosition, updatePosition, deletePosition,
     addContactRole, updateContactRole, deleteContactRole,
@@ -419,6 +422,7 @@ export function FieldSettingsPage() {
     addDealStage, updateDealStage, deleteDealStage,
     addLeadLabel, updateLeadLabel, deleteLeadLabel,
     addLeadSource, updateLeadSource, deleteLeadSource,
+    addEstimateStatus, updateEstimateStatus, deleteEstimateStatus,
   } = useFieldsStore();
   const { users } = useUsersStore();
   const { taskTypes, createTaskType, updateTaskType, deleteTaskType } = useTaskTypesStore();
@@ -454,10 +458,16 @@ export function FieldSettingsPage() {
 
   // Delete confirmation
   const [deleteTarget, setDeleteTarget] = useState<{
-    type: 'department' | 'position' | 'role' | 'taskType' | 'leadStage' | 'dealStage' | 'label' | 'source';
+    type: 'department' | 'position' | 'role' | 'taskType' | 'leadStage' | 'dealStage' | 'label' | 'source' | 'estimateStatus';
     id: string;
     name: string;
   } | null>(null);
+
+  // Estimate status modal state
+  const [showEstimateStatusModal, setShowEstimateStatusModal] = useState(false);
+  const [editingEstimateStatus, setEditingEstimateStatus] = useState<EstimateStatus | null>(null);
+  const [estimateStatusName, setEstimateStatusName] = useState('');
+  const [estimateStatusColor, setEstimateStatusColor] = useState(STAGE_COLOR_OPTIONS[0]!.hex);
 
   // Lead stage modal state
   const [showLeadStageModal, setShowLeadStageModal] = useState(false);
@@ -917,6 +927,34 @@ export function FieldSettingsPage() {
     setShowSourceModal(false);
   };
 
+  // ============ ESTIMATE STATUS HANDLERS ============
+
+  const openAddEstimateStatusModal = () => {
+    setEditingEstimateStatus(null);
+    setEstimateStatusName('');
+    setEstimateStatusColor(STAGE_COLOR_OPTIONS[0]!.hex);
+    setShowEstimateStatusModal(true);
+  };
+
+  const openEditEstimateStatusModal = (status: EstimateStatus) => {
+    setEditingEstimateStatus(status);
+    setEstimateStatusName(status.name);
+    setEstimateStatusColor(status.color);
+    setShowEstimateStatusModal(true);
+  };
+
+  const handleSaveEstimateStatus = () => {
+    if (!estimateStatusName.trim()) { toast.error('Error', 'Status name is required'); return; }
+    if (editingEstimateStatus) {
+      updateEstimateStatus(editingEstimateStatus.id, { name: estimateStatusName.trim(), color: estimateStatusColor });
+      toast.success('Updated', 'Status updated');
+    } else {
+      addEstimateStatus(estimateStatusName.trim(), estimateStatusColor);
+      toast.success('Added', 'Status created');
+    }
+    setShowEstimateStatusModal(false);
+  };
+
   // ============ DELETE HANDLER ============
 
   const handleConfirmDelete = (options?: { newDeptHeadId?: string; inheritExecSupervisor?: boolean }) => {
@@ -961,6 +999,9 @@ export function FieldSettingsPage() {
       toast.success('Deleted', `${deleteTarget.name} removed`);
     } else if (deleteTarget.type === 'source') {
       deleteLeadSource(deleteTarget.id);
+      toast.success('Deleted', `${deleteTarget.name} removed`);
+    } else if (deleteTarget.type === 'estimateStatus') {
+      deleteEstimateStatus(deleteTarget.id);
       toast.success('Deleted', `${deleteTarget.name} removed`);
     }
     
@@ -1382,6 +1423,68 @@ export function FieldSettingsPage() {
             </div>
           </CollapsibleSection>
         </PanelSectionHeader>
+
+        {/* ============ ESTIMATING PANEL SECTION ============ */}
+        <PanelSectionHeader
+          title="Estimating Panel"
+          icon={<Calculator className="w-5 h-5" />}
+          description="Project status options for delivery and contract estimates"
+          gradient="from-teal-500 to-teal-600"
+        >
+          <CollapsibleSection
+            title="Estimate Statuses"
+            icon={<Calculator className="w-4 h-4 text-teal-500" />}
+            badge={estimateStatuses.length > 0 ? `${estimateStatuses.length}` : undefined}
+            defaultOpen={false}
+            action={
+              <Button size="sm" variant="secondary" onClick={(e) => { e.stopPropagation(); openAddEstimateStatusModal(); }}>
+                <Plus className="w-4 h-4 mr-1" />
+                Add Status
+              </Button>
+            }
+          >
+            <div className="p-3">
+              <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
+                <span className="inline-flex items-center gap-1"><Lock className="w-3 h-3" /> Approved</span> and{' '}
+                <span className="inline-flex items-center gap-1"><Lock className="w-3 h-3" /> Cancelled</span> are fixed terminal statuses matching Deal won/lost and cannot be deleted.
+              </p>
+              {estimateStatuses.length === 0 ? (
+                <div className="text-center py-4">
+                  <Calculator className="w-8 h-8 mx-auto text-slate-300 dark:text-slate-600" />
+                  <p className="mt-2 text-sm text-slate-500">No statuses configured</p>
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {[...estimateStatuses].sort((a, b) => a.order - b.order).map(status => (
+                    <div
+                      key={status.id}
+                      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full group transition-colors"
+                      style={{ backgroundColor: status.color + '15', border: `1px solid ${status.color}40` }}
+                    >
+                      <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: status.color }} />
+                      <span className="text-sm font-medium" style={{ color: status.color }}>{status.name}</span>
+                      {status.type !== 'workflow' && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-white/50 dark:bg-black/20 font-medium" style={{ color: status.color }}>
+                          {status.type === 'approved' ? 'Won ↔' : 'Lost ↔'}
+                        </span>
+                      )}
+                      <button onClick={() => openEditEstimateStatusModal(status)} className="p-0.5 opacity-0 group-hover:opacity-100 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-all">
+                        <Edit2 className="w-3 h-3 text-slate-500" />
+                      </button>
+                      {status.type === 'workflow' ? (
+                        <button onClick={() => setDeleteTarget({ type: 'estimateStatus', id: status.id, name: status.name })} className="p-0.5 opacity-0 group-hover:opacity-100 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-all">
+                          <Trash2 className="w-3 h-3 text-slate-500 hover:text-danger-500" />
+                        </button>
+                      ) : (
+                        <Lock className="w-3 h-3 opacity-30 flex-shrink-0" style={{ color: status.color }} />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </CollapsibleSection>
+        </PanelSectionHeader>
       </div>
 
       {/* ============ DEPARTMENT MODAL ============ */}
@@ -1736,6 +1839,43 @@ export function FieldSettingsPage() {
         />
       </Modal>
 
+      {/* ============ ESTIMATE STATUS MODAL ============ */}
+      <Modal
+        isOpen={showEstimateStatusModal}
+        onClose={() => setShowEstimateStatusModal(false)}
+        title={editingEstimateStatus ? 'Edit Estimate Status' : 'Add Estimate Status'}
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setShowEstimateStatusModal(false)}>Cancel</Button>
+            <Button variant="primary" onClick={handleSaveEstimateStatus}>{editingEstimateStatus ? 'Save' : 'Add'}</Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <Input
+            label="Status Name"
+            value={estimateStatusName}
+            onChange={(e) => setEstimateStatusName(e.target.value)}
+            placeholder="e.g., Under Review"
+            autoFocus
+          />
+          <StageColorPicker value={estimateStatusColor} onChange={setEstimateStatusColor} />
+          <div className="p-3 rounded-full inline-flex items-center gap-2" style={{ backgroundColor: estimateStatusColor + '20', border: `1px solid ${estimateStatusColor}40` }}>
+            <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: estimateStatusColor }} />
+            <span className="text-sm font-medium" style={{ color: estimateStatusColor }}>
+              {estimateStatusName || 'Preview'}
+            </span>
+          </div>
+          {editingEstimateStatus?.type !== 'workflow' && (
+            <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
+              <Lock className="w-3 h-3" />
+              This is a fixed terminal status. Only the name and color can be changed.
+            </p>
+          )}
+        </div>
+      </Modal>
+
       {/* ============ DELETE CONFIRMATION ============ */}
       {deleteTarget && (deleteTarget.type === 'department' || deleteTarget.type === 'position' || deleteTarget.type === 'role') && (
         <DeleteConfirmationModal
@@ -1752,7 +1892,7 @@ export function FieldSettingsPage() {
         <Modal
           isOpen={true}
           onClose={() => setDeleteTarget(null)}
-          title={`Delete ${deleteTarget.type === 'taskType' ? 'Task Type' : deleteTarget.type === 'leadStage' ? 'Lead Stage' : deleteTarget.type === 'dealStage' ? 'Deal Stage' : deleteTarget.type === 'label' ? 'Label' : 'Source'}`}
+          title={`Delete ${deleteTarget.type === 'taskType' ? 'Task Type' : deleteTarget.type === 'leadStage' ? 'Lead Stage' : deleteTarget.type === 'dealStage' ? 'Deal Stage' : deleteTarget.type === 'label' ? 'Label' : deleteTarget.type === 'estimateStatus' ? 'Estimate Status' : 'Source'}`}
           size="sm"
           footer={
             <>
@@ -1762,8 +1902,9 @@ export function FieldSettingsPage() {
           }
         >
           <p className="text-slate-600 dark:text-slate-400">
-            Delete "{deleteTarget.name}"? This action cannot be undone.
+            Delete &quot;{deleteTarget.name}&quot;? This action cannot be undone.
             {deleteTarget.type === 'taskType' && ' Tasks with this type will keep their type but it won\'t be selectable for new tasks.'}
+            {deleteTarget.type === 'estimateStatus' && ' Existing projects with this status will keep it, but it won\'t be selectable for new projects.'}
           </p>
         </Modal>
       )}
@@ -1779,7 +1920,7 @@ function DeleteConfirmationModal({
   getPositionDependencies,
   getDepartmentDependencies,
 }: {
-  target: { type: 'department' | 'position' | 'role' | 'taskType' | 'leadStage' | 'dealStage' | 'label' | 'source'; id: string; name: string };
+  target: { type: 'department' | 'position' | 'role' | 'taskType' | 'leadStage' | 'dealStage' | 'label' | 'source' | 'estimateStatus'; id: string; name: string };
   onClose: () => void;
   onConfirm: (options?: { newDeptHeadId?: string; inheritExecSupervisor?: boolean }) => void;
   getPositionDependencies: (id: string) => {

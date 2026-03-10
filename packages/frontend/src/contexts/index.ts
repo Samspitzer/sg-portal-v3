@@ -13,6 +13,7 @@ export {
   type SalesStage,
   type SalesLabel,
   type SalesSource,
+  type EstimateStatus,
 } from './fieldsStore';
 export { useRolesStore, type Role, type Permission } from './rolesStore';
 export { useNavigationGuardStore } from './navigationGuardStore';

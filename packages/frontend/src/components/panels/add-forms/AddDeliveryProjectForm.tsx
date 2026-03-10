@@ -8,7 +8,7 @@
 // ============================================================================
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Truck, Building2, User, DollarSign, MapPin, Calendar, Target, TrendingUp } from 'lucide-react';
+import { Truck, Building2, User, DollarSign, MapPin, Calendar, TrendingUp } from 'lucide-react';
 import {
   Input,
   Textarea,
@@ -24,8 +24,10 @@ import {
   useClientsStore,
   useSalesStore,
   useToast,
+  useFieldsStore,
   type DeliveryProject,
 } from '@/contexts';
+import { useTaskStore } from '@/contexts/taskStore';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -40,8 +42,6 @@ export interface AddDeliveryProjectFormData {
   deliveryDate: string;
   ownerId: string;
   ownerName: string;
-  linkedLeadId: string;
-  linkedLeadName: string;
   linkedDealId: string;
   linkedDealName: string;
   jobsiteStreet: string;
@@ -54,21 +54,12 @@ export interface AddDeliveryProjectFormData {
 
 const INITIAL: AddDeliveryProjectFormData = {
   name: '', companyId: '', companyName: '', contactId: '', contactName: '',
-  status: 'draft', value: '', deliveryDate: '',
+  status: '', value: '', deliveryDate: '',
   ownerId: '', ownerName: '',
-  linkedLeadId: '', linkedLeadName: '', linkedDealId: '', linkedDealName: '',
+  linkedDealId: '', linkedDealName: '',
   jobsiteStreet: '', jobsiteSuite: '', jobsiteCity: '', jobsiteState: '', jobsiteZip: '',
   notes: '',
 };
-
-const STATUS_OPTIONS = [
-  { value: 'draft', label: 'Draft' },
-  { value: 'sent', label: 'Sent' },
-  { value: 'approved', label: 'Approved' },
-  { value: 'in_progress', label: 'In Progress' },
-  { value: 'completed', label: 'Completed' },
-  { value: 'cancelled', label: 'Cancelled' },
-];
 
 export interface AddDeliveryProjectFormProps {
   isOpen: boolean;
@@ -80,8 +71,6 @@ export interface AddDeliveryProjectFormProps {
   defaultCompanyName?: string;
   defaultContactId?: string;
   defaultContactName?: string;
-  defaultLinkedLeadId?: string;
-  defaultLinkedLeadName?: string;
   defaultLinkedDealId?: string;
   defaultLinkedDealName?: string;
   stackLevel?: number;
@@ -95,14 +84,15 @@ export function AddDeliveryProjectForm({
   isOpen, onClose, onCreated,
   defaultName, defaultCompanyId, defaultCompanyName,
   defaultContactId, defaultContactName,
-  defaultLinkedLeadId, defaultLinkedLeadName,
   defaultLinkedDealId, defaultLinkedDealName,
   stackLevel = 0, onAddCompany, onAddContact,
 }: AddDeliveryProjectFormProps) {
   const { createDeliveryProject } = useEstimatingStore();
   const { users } = useUsersStore();
   const { companies, contacts } = useClientsStore();
-  const { leads, deals } = useSalesStore();
+  const { deals } = useSalesStore();
+  const { estimateStatuses } = useFieldsStore();
+  const { createTask } = useTaskStore();
   const toast = useToast();
 
   const [form, setForm] = useState<AddDeliveryProjectFormData>(INITIAL);
@@ -117,13 +107,11 @@ export function AddDeliveryProjectForm({
         companyName: defaultCompanyName || '',
         contactId: defaultContactId || '',
         contactName: defaultContactName || '',
-        linkedLeadId: defaultLinkedLeadId || '',
-        linkedLeadName: defaultLinkedLeadName || '',
         linkedDealId: defaultLinkedDealId || '',
         linkedDealName: defaultLinkedDealName || '',
       });
     }
-  }, [isOpen, defaultName, defaultCompanyId, defaultCompanyName, defaultContactId, defaultContactName, defaultLinkedLeadId, defaultLinkedLeadName, defaultLinkedDealId, defaultLinkedDealName]);
+  }, [isOpen, defaultName, defaultCompanyId, defaultCompanyName, defaultContactId, defaultContactName, defaultLinkedDealId, defaultLinkedDealName]);
 
   const update = useCallback(<K extends keyof AddDeliveryProjectFormData>(k: K, v: AddDeliveryProjectFormData[K]) => {
     setForm(prev => ({ ...prev, [k]: v }));
@@ -141,11 +129,6 @@ export function AddDeliveryProjectForm({
       subtitle: !form.companyId ? companies.find(co => co.id === c.companyId)?.name : undefined,
     }));
   }, [contacts, companies, form.companyId]);
-
-  const leadItems: EntitySearchItem[] = useMemo(() =>
-    leads.filter(l => !l.convertedToDealId).map(l => ({
-      id: l.id, name: l.name, subtitle: l.companyName || 'Lead',
-    })), [leads]);
 
   const dealItems: EntitySearchItem[] = useMemo(() =>
     deals.filter(d => !d.deletedAt && d.status === 'active').map(d => ({
@@ -168,15 +151,6 @@ export function AddDeliveryProjectForm({
         const company = companies.find(c => c.id === contact.companyId);
         if (company) setForm(prev => ({ ...prev, companyId: company.id, companyName: company.name }));
       }
-    }
-  };
-
-  const handleLeadChange = (item: EntitySearchItem | null) => {
-    setForm(prev => ({ ...prev, linkedLeadId: item?.id || '', linkedLeadName: item?.name || '' }));
-    // Pre-fill company/contact from lead if not already set
-    if (item && !form.companyId) {
-      const lead = leads.find(l => l.id === item.id);
-      if (lead?.companyId) setForm(prev => ({ ...prev, companyId: lead.companyId!, companyName: lead.companyName || '' }));
     }
   };
 
@@ -205,13 +179,11 @@ export function AddDeliveryProjectForm({
         companyName: form.companyName || undefined,
         contactId: form.contactId || undefined,
         contactName: form.contactName || undefined,
-        status: form.status as never,
+        status: (form.status as never) || undefined,
         value: form.value ? parseFloat(form.value) : undefined,
         deliveryDate: form.deliveryDate || undefined,
         ownerId: form.ownerId || undefined,
         ownerName: form.ownerName || undefined,
-        linkedLeadId: form.linkedLeadId || undefined,
-        linkedLeadName: form.linkedLeadName || undefined,
         linkedDealId: form.linkedDealId || undefined,
         linkedDealName: form.linkedDealName || undefined,
         jobsiteAddress: (form.jobsiteStreet || form.jobsiteCity) ? {
@@ -224,6 +196,22 @@ export function AddDeliveryProjectForm({
         notes: form.notes || undefined,
       });
       toast.success('Project Created', `"${project.name}" has been added`);
+
+      // Auto-create a due-date task if a date was set
+      if (form.deliveryDate && form.ownerId) {
+        try {
+          await createTask({
+            title: `Estimate Due: ${project.name}`,
+            dueDate: form.deliveryDate,
+            assignedUserId: form.ownerId,
+            assignedUserName: form.ownerName || '',
+            linkedItem: { type: 'estimate', id: project.id, name: project.name },
+          });
+        } catch {
+          // Non-fatal — project was still created
+        }
+      }
+
       onCreated?.(project);
       onClose();
     } catch {
@@ -260,7 +248,7 @@ export function AddDeliveryProjectForm({
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Status</label>
             <SelectFilter label="Select status" value={form.status} onChange={v => update('status', v)}
-              options={STATUS_OPTIONS} showAllOption={false} className="w-full" />
+              options={[...estimateStatuses].sort((a, b) => a.order - b.order).map(s => ({ value: s.id, label: s.name }))} showAllOption={false} className="w-full" />
           </div>
           <Input label="Estimate Value" type="number" value={form.value}
             onChange={e => update('value', e.target.value)} placeholder="0"
@@ -297,31 +285,18 @@ export function AddDeliveryProjectForm({
             <SelectFilter label="Select owner" value={form.ownerId} onChange={handleOwnerChange}
               options={userOptions} showAllOption={false} icon={User} className="w-full" />
           </div>
-          <Input label="Delivery Date" type="date" value={form.deliveryDate}
+          <Input label="Due Date" type="date" value={form.deliveryDate}
             onChange={e => update('deliveryDate', e.target.value)}
             leftIcon={<Calendar className="w-4 h-4" />} />
         </div>
 
         {/* Sales Links */}
-        <div>
-          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-            Link to Sales Pipeline
-          </label>
-          <div className="grid grid-cols-2 gap-3">
-            <EntitySearchDropdown
-              label="Linked Lead" icon={Target}
-              value={form.linkedLeadId ? { id: form.linkedLeadId, name: form.linkedLeadName } : null}
-              onChange={handleLeadChange} items={leadItems}
-              placeholder="Search leads…"
-            />
-            <EntitySearchDropdown
-              label="Linked Deal" icon={TrendingUp}
-              value={form.linkedDealId ? { id: form.linkedDealId, name: form.linkedDealName } : null}
-              onChange={handleDealChange} items={dealItems}
-              placeholder="Search deals…"
-            />
-          </div>
-        </div>
+        <EntitySearchDropdown
+          label="Linked Deal" icon={TrendingUp}
+          value={form.linkedDealId ? { id: form.linkedDealId, name: form.linkedDealName } : null}
+          onChange={handleDealChange} items={dealItems}
+          placeholder="Search deals…"
+        />
 
         {/* Jobsite Address */}
         <div>

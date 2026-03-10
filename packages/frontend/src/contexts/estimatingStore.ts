@@ -12,11 +12,9 @@ import { devtools, persist } from 'zustand/middleware';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export type DeliveryStatus =
-  | 'draft' | 'sent' | 'approved' | 'in_progress' | 'completed' | 'cancelled';
-
-export type ContractStatus =
-  | 'draft' | 'pending_signature' | 'signed' | 'active' | 'completed' | 'cancelled';
+/** Status ID referencing an EstimateStatus in fieldsStore */
+export type DeliveryStatus = string;
+export type ContractStatus = string;
 
 export type ContractType =
   | 'fixed_price' | 'time_materials' | 'cost_plus' | 'retainer';
